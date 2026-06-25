@@ -20,9 +20,9 @@ species backed by evidence — not just a name on a spreadsheet.
 - **Watch** live checklists for new field records over time, with reviewer-confirmed updates
 - **Publish** a Darwin Core Archive, ready for an IPT installation
 
-See [`USER_GUIDE.md`](USER_GUIDE.md) for the step-by-step workflow and
+See [`USER_GUIDE.md`](USER_GUIDE.md) for the step-by-step workflow,
 [`checklistHub_architecture.md`](checklistHub_architecture.md) for the full
-architecture spec.
+architecture spec, and [`SETUP.md`](SETUP.md) to run this locally.
 
 ## Architecture
 

@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html class="light" lang="en" style="width: 1279px; height: 6312px; overflow: hidden; position: relative;"><head></head><body class="text-on-background min-h-screen flex flex-col">
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Publication Summary | Birds of Darjeeling</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Geist:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary": "#ffffff",
+                        "inverse-primary": "#ffb3ae",
+                        "on-secondary-container": "#636262",
+                        "on-secondary": "#ffffff",
+                        "on-background": "#1b1c1c",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "background": "#fbf9f8",
+                        "surface": "#fbf9f8",
+                        "secondary-container": "#e2dfde",
+                        "surface-container": "#efeded",
+                        "primary-container": "#c63939",
+                        "on-error-container": "#93000a",
+                        "surface-variant": "#e4e2e2",
+                        "surface-container-high": "#e9e8e7",
+                        "inverse-on-surface": "#f2f0f0",
+                        "secondary": "#5f5e5e",
+                        "on-tertiary-container": "#f0f0f0",
+                        "on-surface-variant": "#59413f",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "outline-variant": "#e1bebc",
+                        "surface-dim": "#dbdad9",
+                        "inverse-surface": "#303031",
+                        "on-error": "#ffffff",
+                        "outline": "#8d706e",
+                        "on-primary-container": "#ffecea",
+                        "error-container": "#ffdad6",
+                        "on-primary": "#ffffff",
+                        "secondary-fixed": "#e5e2e1",
+                        "on-secondary-fixed-variant": "#474746",
+                        "primary-fixed-dim": "#ffb3ae",
+                        "surface-container-highest": "#e4e2e2",
+                        "surface-container-lowest": "#ffffff",
+                        "error": "#ba1a1a",
+                        "tertiary": "#535555",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "on-surface": "#1b1c1c",
+                        "surface-tint": "#b22a2c",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "tertiary-container": "#6c6d6d",
+                        "primary-fixed": "#ffdad7",
+                        "on-primary-fixed": "#410004",
+                        "tertiary-fixed": "#e2e2e2",
+                        "on-primary-fixed-variant": "#8f0d18",
+                        "primary": "#a41f24",
+                        "brand": "#c63939",
+                        "surface-container-low": "#f5f3f3",
+                        "surface-bright": "#fbf9f8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "container-max": "1280px",
+                        "base": "4px",
+                        "xl": "40px",
+                        "md": "16px",
+                        "lg": "24px",
+                        "gutter": "24px",
+                        "xs": "4px"
+                    },
+                    "fontFamily": {
+                        "code-md": ["JetBrains Mono"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-md": ["JetBrains Mono"],
+                        "body-lg": ["Geist"],
+                        "headline-lg": ["JetBrains Mono"],
+                        "body-sm": ["Geist"],
+                        "mono": ["JetBrains Mono", "monospace"],
+                        "sans": ["Geist", "sans-serif"]
+                    },
+                    "fontSize": {
+                        "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+                    },
+                    "boxShadow": {
+                        "hard": "2px 2px 0px 0px rgba(198, 57, 57, 1)",
+                        "hard-button": "2px 2px 0px 0px #1B1C1C"
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        html { scroll-behavior: smooth; }
+        body {
+            background-color: #fbf9f8;
+            font-family: 'Geist', sans-serif;
+            color: #1b1c1c;
+        }
+        .technical-border {
+            border: 1px solid #dbdad9;
+        }
+        .scientific-card {
+            background: white;
+            border: 1px solid #dbdad9;
+        }
+        .mono-text { font-family: 'JetBrains Mono', monospace; }
+        .sidebar-link {
+            transition: all 0.2s ease;
+            border-left: 2px solid transparent;
+        }
+        .sidebar-link:hover {
+            color: #c63939;
+            padding-left: 4px;
+        }
+        .sidebar-link.active {
+            border-left-color: #c63939;
+            color: #c63939;
+            padding-left: 4px;
+        }
+        .line-item {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid #f2f0f0;
+        }
+        .line-item:last-child {
+            border-bottom: none;
+        }
+        .tree-node { position: relative; padding-left: 20px; }
+        .tree-node::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: #dbdad9;
+        }
+        .tree-node:last-child::before {
+            height: 14px;
+        }
+        .tree-node::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 14px;
+            width: 12px;
+            height: 1px;
+            background: #dbdad9;
+        }
+        .tree-content {
+            transition: all 0.3s ease-in-out;
+            max-height: 500px;
+            overflow: hidden;
+            opacity: 1;
+        }
+        .tree-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .chevron-icon {
+            transition: transform 0.3s ease;
+        }
+        .chevron-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+        .tree-row {
+            transition: background-color 0.15s ease;
+        }
+        .tree-row:hover {
+            background-color: #f5f3f3;
+        }
+        [data-search-match="false"] {
+            display: none !important;
+        }
+
+        /* Input Styling for Technical Form */
+        .tech-input {
+            width: 100%;
+            background-color: #ffffff;
+            border: 1px solid #dbdad9;
+            padding: 6px 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: #1b1c1c;
+            border-radius: 0.125rem;
+        }
+        .tech-input:focus {
+            outline: none;
+            border-color: #c63939;
+            box-shadow: 0 0 0 1px #c63939;
+        }
+        .tech-label {
+            display: block;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #59413f;
+            letter-spacing: 0.05em;
+        }
+        .tech-readonly {
+            background-color: #f5f3f3;
+            color: #5f5e5e;
+            cursor: not-allowed;
+        }
+        .metadata-row {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            align-items: center;
+            gap: 24px;
+            padding: 12px 0;
+            border-bottom: 1px solid #f2f0f0;
+        }
+        .metadata-row:last-child {
+            border-bottom: none;
+        }
+        @media (max-width: 768px) {
+            .metadata-row {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+        }
+    </style>
+<!-- Top Navigation -->
+<header class="h-14 border-b border-surface-dim bg-white flex items-center justify-between px-4 z-50 sticky top-0">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<img alt="Checklist Hub Logo" class="h-8 w-8 object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwMf_2w1Je5rT9FgZZdaEeZoTTsp_GU1bCHvx6XTgf1TypEmoyuRChSzNpnzEWl8p_Nr-2gAB05elQPH4VHz2hlGJHuj8UXRN1ZsZInCUzPJRO7zoB6ksGESr7lcujic0lJtiBCb9WHwvh6-j4d4HtiWHBKogeumy4i8756bYOd5pcX8jYUIoQOmk54uIbgB0g6cnRTVLCZDW7MCZ0y12kS9xTpqAvUZJbxzScejRd1uZgPK1HTJyzDatdkCB3tJTtdMRvCPrLfdfB">
+<span class="mono-text font-bold text-brand tracking-tight text-lg">Checklist Hub</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center -space-x-2 mr-2">
+<img alt="Collaborator" class="w-7 h-7 rounded-full border-2 border-white object-cover shadow-sm" src="https://lh3.googleusercontent.com/aida/AP1WRLvCIY-bea22WX2lmpsQ0cItNlzb_LtaRLTY-EZSZ8nrG5hECOx6LCPBvQIMXOrLnHvS1L-yVZ5q6-GDToyLEaDWliJGNlW61rc9fcDTQxHg57Y815-Lzj1NiCZMpd6YLNyvxDtJZxHpmpvIjuHPL50lMFrmltTD_FHwrETustpJzuBRthN35G08oAjhjp81Y_bsXeEtD-twsZV7d_AodTWXOwWWI2kLJ2tCN0KXawNHlwsiOkxA-c9urpg">
+<img alt="Collaborator" class="w-7 h-7 rounded-full border-2 border-white object-cover shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0P510Yy9rKzM8NN3LUUaL4lyl2QqAQu4o_YRlexctu7z2kRKsL7QCz_KjWl9FzobWiA-Q7On43jDIXAsinIHuMjrlKfwEkbnm9cqQZ3QPUGSoiZJ1ss1R2CbznVeP2rEVyT5KcZdExYNx4jd73i0XO-jLuoWW99_N0YXYpwZa4lKA9WFR-HfKfDMvbQPNJO1hxBA9wtnCOo4VypAbAFX3L9ecZ_gpJJYkus6KLJHWjzuCJm609R2GcPDyWUQWIuS__T1ECj74Wt1G">
+<div class="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[9px] font-bold text-slate-500 shadow-sm">+4</div>
+</div>
+<button class="bg-brand text-white px-3 py-1.5 rounded-sm text-xs mono-text font-medium flex items-center gap-2 shadow-[2px_2px_0px_0px_#8d706e] hover:translate-y-[-1px] transition-transform">
+<span class="material-symbols-outlined text-[16px]">save</span>
+            Save Draft
+        </button>
+<button class="text-slate-500 hover:text-brand transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<img alt="User" class="w-8 h-8 rounded-full border border-surface-dim" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC3A9OdrqrX-RaVVZ__BhZeOzWLCE-CQlxZVCL7RXv63AfY8j9B8cyZrENmP7V9Nnr6imtcRqNN_DIcabISIvMhuzQYdRh5uZ972JxZsiineCSQi_YqCczDCIZf2r84dwUPvDtXFXDCk_J7RBd4jlySI3jnMAURnTtDuDaGXY57jNQBGX4PLgyq0DwGh_C6eKG7CsOgRxqjVAu_Dw5Sn9XlOQAPvQUobr9hSFxdlitC1mfutxlmFXHi6hRHSF12kCCrMBjhkT_moH3a">
+</div>
+</header>
+<div class="flex flex-1 max-w-container-max mx-auto w-full">
+<!-- Fixed Sidebar Navigation -->
+<aside class="hidden lg:flex flex-col sticky h-[calc(100vh-3.5rem)] border-r border-surface-dim py-xl px-lg w-56 min-h-screen top-14 overflow-hidden">
+<nav class="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+<div>
+<div class="font-label-caps text-[12px] font-bold text-on-surface uppercase tracking-[0.1em] mb-2 px-1 mb-md text-secondary tracking-widest">checklist summary</div>
+<div class="flex flex-col gap-2">
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 active font-code-md py-1 hover:bg-brand/5 px-2 bg-brand/5" href="#dataset-summary"><span class="text-brand/40 font-mono">01</span> dataset summary</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#geography"><span class="text-brand/40 font-mono">02</span> geographic scope</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#history"><span class="text-brand/40 font-mono">03</span> historical comparison</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#sources"><span class="text-brand/40 font-mono">04</span> source summary</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#classification"><span class="text-brand/40 font-mono">05</span> classification breakdown</a>
+</div>
+</div>
+<div>
+<div class="font-label-caps text-[12px] font-bold text-on-surface uppercase tracking-[0.1em] mb-2 px-1 mb-md text-secondary tracking-widest">checklist metadata</div>
+<div class="flex flex-col gap-2">
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#metadata"><span class="text-brand/40 font-mono">01</span> dataset info</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#metadata"><span class="text-brand/40 font-mono">02</span> temporal coverage</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#metadata"><span class="text-brand/40 font-mono">03</span> geographic coverage</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#metadata"><span class="text-brand/40 font-mono">04</span> taxonomic coverage</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#metadata"><span class="text-brand/40 font-mono">05</span> methods</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#metadata"><span class="text-brand/40 font-mono">06</span> contributors</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#metadata"><span class="text-brand/40 font-mono">07</span> publishing org</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#metadata"><span class="text-brand/40 font-mono">08</span> license &amp; rights</a>
+<a class="sidebar-link mono-text text-[11px] font-bold uppercase tracking-wider text-on-surface flex items-center gap-3 font-code-md py-1 hover:bg-brand/5 px-2" href="#metadata"><span class="text-brand/40 font-mono">09</span> citation preview</a>
+</div>
+</div>
+</nav>
+<!-- VALIDATION & READY STICKY SIDEBAR FOOTER -->
+<div class="mt-auto pt-lg border-t border-surface-dim">
+<div class="mb-lg">
+<h3 class="font-label-caps text-[9px] text-secondary uppercase font-bold mb-3 tracking-widest">Checklist Completion</h3>
+<div class="space-y-1.5">
+<div class="flex items-center gap-2 font-code-md text-[9px] text-emerald-600">
+<span class="material-symbols-outlined text-[12px] font-bold">check_circle</span> Title Complete
+            </div>
+<div class="flex items-center gap-2 font-code-md text-[9px] text-emerald-600">
+<span class="material-symbols-outlined text-[12px] font-bold">check_circle</span> Abstract Provided
+            </div>
+<div class="flex items-center gap-2 font-code-md text-[9px] text-emerald-600">
+<span class="material-symbols-outlined text-[12px] font-bold">check_circle</span> Taxonomy Scope
+            </div>
+<div class="flex items-center gap-2 font-code-md text-[9px] text-emerald-600">
+<span class="material-symbols-outlined text-[12px] font-bold">check_circle</span> Geography Set
+            </div>
+<div class="flex items-center gap-2 font-code-md text-[9px] text-emerald-600">
+<span class="material-symbols-outlined text-[12px] font-bold">check_circle</span> Temporal Valid
+            </div>
+<div class="flex items-center gap-2 font-code-md text-[9px] text-emerald-600">
+<span class="material-symbols-outlined text-[12px] font-bold">check_circle</span> Authors Added
+            </div>
+</div>
+</div>
+<div class="bg-emerald-50 border border-emerald-600/20 p-2 mb-md flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+<span class="font-label-caps text-[8px] text-emerald-700 font-bold uppercase">Ready</span>
+</div>
+
+</div>
+
+</div>
+</aside>
+<main class="flex-grow px-lg py-xl">
+<div class="mb-xl">
+<h1 class="text-2xl text-on-surface mb-2 font-bold text-3xl">Checklist Summary</h1>
+<p class="font-body-lg text-secondary">Review the final composition of your checklist before publication.</p>
+</div>
+<div class="space-y-lg">
+<!-- SECTION 1: PUBLICATION DATASET SUMMARY -->
+<section class="scroll-mt-20" id="dataset">
+</section>
+<!-- SECTION 2: GEOGRAPHIC SCOPE -->
+<section class="scroll-mt-20" id="geography">
+</section>
+<!-- SECTION 3: HISTORICAL COMPARISON -->
+<section class="scroll-mt-20" id="dataset-summary"><div class="flex items-center gap-md mb-base mt-md pb-md"><h2 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold">SECTION 1: Dataset Summary</h2></div><div class="scientific-card p-lg border-t-2 border-t-secondary/30"><div class="grid grid-cols-2 md:grid-cols-4 gap-md">
+<div class="bg-surface-container-low p-md border border-surface-dim flex flex-col gap-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Species</span>
+<span class="font-code-md text-xl font-bold text-on-surface">742</span>
+</div>
+<div class="bg-surface-container-low p-md border border-surface-dim flex flex-col gap-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Families</span>
+<span class="font-code-md text-xl font-bold text-on-surface">82</span>
+</div>
+<div class="bg-surface-container-low p-md border border-surface-dim flex flex-col gap-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Orders</span>
+<span class="font-code-md text-xl font-bold text-on-surface">24</span>
+</div>
+<div class="bg-surface-container-low p-md border border-surface-dim flex flex-col gap-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Genera</span>
+<span class="font-code-md text-xl font-bold text-on-surface">342</span>
+</div>
+</div></div></section><section class="scroll-mt-20" id="history">
+<div class="flex items-center gap-md mb-base mt-md pb-md">
+<h2 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold">SECTION 3: Historical Comparison</h2>
+</div>
+<div class="scientific-card p-lg border-t-2 border-t-secondary/30">
+<div class="space-y-1">
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">Previous Record</span>
+<span class="font-code-md text-sm font-bold text-on-surface">2021 Checklist</span>
+</div>
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">Species Added</span>
+<span class="font-code-md text-sm font-bold text-emerald-600">+43</span>
+</div>
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">Removed</span>
+<span class="font-code-md text-sm font-bold text-error">-6</span>
+</div>
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">Taxonomic Updates</span>
+<span class="font-code-md text-sm font-bold text-on-surface">31</span>
+</div>
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">New Records</span>
+<span class="font-code-md text-sm font-bold text-brand">12</span>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 4: SOURCE SUMMARY -->
+<section class="scroll-mt-20" id="sources">
+<div class="flex items-center gap-md mb-base mt-md pb-md">
+<h2 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold">SECTION 4: Source Summary</h2>
+</div>
+<div class="scientific-card p-lg border-t-2 border-t-secondary/50">
+<div class="flex items-center gap-sm mb-lg border-b border-surface-container pb-sm">
+<span class="material-symbols-outlined text-secondary text-[20px]">database</span>
+<h3 class="font-label-caps text-[11px] text-secondary uppercase font-bold">Data Provenance Breakdown</h3>
+</div>
+<div class="space-y-1">
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">GBIF</span>
+<span class="font-code-md text-sm font-bold text-on-surface">421 Records</span>
+</div>
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">eBird</span>
+<span class="font-code-md text-sm font-bold text-on-surface">612 Records</span>
+</div>
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">iNaturalist</span>
+<span class="font-code-md text-sm font-bold text-on-surface">154 Records</span>
+</div>
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">Literature</span>
+<span class="font-code-md text-sm font-bold text-on-surface">83 Records</span>
+</div>
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">Museum Collections</span>
+<span class="font-code-md text-sm font-bold text-on-surface">22 Records</span>
+</div>
+<div class="line-item">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase w-40 flex-shrink-0">Regional Checklists</span>
+<span class="font-code-md text-sm font-bold text-on-surface">18 Records</span>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 5: CLASSIFICATION BREAKDOWN -->
+<section class="scroll-mt-20" id="classification">
+<div class="flex items-center gap-md mb-base mt-md pb-md">
+<h2 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold">SECTION 5: Classification Breakdown</h2>
+</div>
+<div class="scientific-card p-lg border-t-2 border-t-secondary/50">
+<div class="flex items-center justify-between mb-lg border-b border-surface-container pb-sm">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-secondary text-[20px]">account_tree</span>
+<h3 class="font-label-caps text-[11px] text-secondary uppercase font-bold">Taxonomic Hierarchy</h3>
+</div>
+<div class="flex items-center gap-md">
+<button class="expand-all font-code-md text-[10px] text-brand uppercase hover:underline">Expand All</button>
+<span class="text-surface-dim">|</span>
+<button class="collapse-all font-code-md text-[10px] text-secondary uppercase hover:underline">Collapse All</button>
+</div>
+</div>
+<div class="mb-md">
+<div class="relative">
+<input class="tree-search w-full bg-surface-container-low border border-surface-dim rounded-sm px-lg py-2 font-body-sm text-xs focus:ring-1 focus:ring-brand focus:border-brand pl-10" placeholder="Search taxonomic hierarchy..." type="text">
+<span class="material-symbols-outlined absolute left-3 top-2 text-[18px] text-secondary">search</span>
+</div>
+</div>
+<div class="taxonomic-tree font-code-md text-xs text-on-surface space-y-base overflow-y-auto max-h-[400px] pr-2">
+<!-- Kingdom -->
+<div class="tree-item" data-taxon="Kingdom: Animalia">
+<div class="tree-row flex items-center gap-sm cursor-pointer group py-1 rounded-sm px-1">
+<span class="material-symbols-outlined text-sm text-secondary group-hover:text-brand chevron-icon">expand_more</span>
+<span class="font-bold text-brand">Kingdom: Animalia</span>
+</div>
+<div class="tree-content tree-node ml-4">
+<!-- Phylum -->
+<div class="tree-item" data-taxon="Phylum: Chordata">
+<div class="tree-row flex items-center gap-sm cursor-pointer group py-1 rounded-sm px-1">
+<span class="material-symbols-outlined text-sm text-secondary group-hover:text-brand chevron-icon">expand_more</span>
+<span class="font-bold">Phylum: Chordata</span>
+</div>
+<div class="tree-content tree-node ml-4">
+<!-- Class -->
+<div class="tree-item" data-taxon="Class: Aves">
+<div class="tree-row flex items-center gap-sm cursor-pointer group py-1 rounded-sm px-1">
+<span class="material-symbols-outlined text-sm text-secondary group-hover:text-brand chevron-icon">expand_more</span>
+<span class="font-bold">Class: Aves</span>
+</div>
+<div class="tree-content tree-node ml-4">
+<!-- Orders -->
+<div class="tree-item" data-taxon="Order: Accipitriformes">
+<div class="tree-row flex items-center gap-sm group py-1 rounded-sm px-1">
+<span class="w-5 flex-shrink-0"></span>
+<span class="">Order: Accipitriformes</span>
+<span class="text-[10px] text-secondary ml-auto">42 Species</span>
+</div>
+</div>
+<div class="tree-item" data-taxon="Order: Anseriformes">
+<div class="tree-row flex items-center gap-sm group py-1 rounded-sm px-1">
+<span class="w-5 flex-shrink-0"></span>
+<span class="">Order: Anseriformes</span>
+<span class="text-[10px] text-secondary ml-auto">18 Species</span>
+</div>
+</div>
+<div class="tree-item" data-taxon="Order: Passeriformes">
+<div class="tree-row flex items-center gap-sm group py-1 rounded-sm px-1">
+<span class="w-5 flex-shrink-0"></span>
+<span class="">Order: Passeriformes</span>
+<span class="text-[10px] text-secondary ml-auto">382 Species</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 6: CHECKLIST METADATA (MAIN ANCHOR) -->
+<section class="scroll-mt-20" id="metadata">
+<div class="flex items-center gap-md mb-xl mt-md">
+<div class="flex flex-col gap-1">
+<h2 class="font-headline-md text-on-surface uppercase tracking-widest font-bold">Checklist Metadata</h2>
+<p class="font-body-sm text-secondary">Complete the publication metadata required for Darwin Core and GBIF/IPT publication.</p>
+</div>
+</div>
+<div class="space-y-lg">
+<!-- Metadata Sub-Section 1: Dataset Information -->
+<div class="scientific-card border-t-2 border-t-brand p-lg">
+<h3 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold mb-md pb-md border-b border-surface-container">SECTION 1 — DATASET INFORMATION</h3>
+<div class="space-y-0">
+<div class="metadata-row">
+<label class="tech-label">Dataset Title</label>
+<input class="tech-input" type="text" value="Birds of Darjeeling">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Keywords</label>
+<div class="flex flex-wrap gap-2 p-1.5 border border-surface-dim bg-white items-center">
+<span class="bg-brand/10 text-brand text-[10px] px-2 py-0.5 font-bold border border-brand/20">AVES</span>
+<span class="bg-brand/10 text-brand text-[10px] px-2 py-0.5 font-bold border border-brand/20">HIMALAYAS</span>
+<span class="bg-brand/10 text-brand text-[10px] px-2 py-0.5 font-bold border border-brand/20">DARJEELING</span>
+<input class="tech-input border-none p-0 ml-2 !ring-0 text-[10px] w-20" placeholder="+ Add...">
+</div>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Language</label>
+<input class="tech-input" type="text" value="English">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Short Description</label>
+<textarea class="tech-input h-16"></textarea>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Purpose</label>
+<textarea class="tech-input h-16"></textarea>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Abstract</label>
+<div class="border border-surface-dim p-md min-h-[120px] font-body-sm text-sm">
+<div class="flex gap-md border-b border-surface-dim mb-md pb-sm opacity-50">
+<span class="material-symbols-outlined text-[18px]">format_bold</span>
+<span class="material-symbols-outlined text-[18px]">format_italic</span>
+<span class="material-symbols-outlined text-[18px]">list</span>
+<span class="material-symbols-outlined text-[18px]">link</span>
+</div>
+<p class="text-secondary italic">Enter full dataset abstract here...</p>
+</div>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Dataset Type</label>
+<input class="tech-input tech-readonly" readonly="" type="text" value="Species Checklist">
+</div>
+</div>
+</div>
+<!-- Metadata Sub-Section 2: Temporal Coverage -->
+<div class="scientific-card border-t-2 border-t-secondary/30 p-lg">
+<h3 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold mb-md pb-md border-b border-surface-container">SECTION 2 — TEMPORAL COVERAGE</h3>
+<div class="space-y-0">
+<div class="metadata-row">
+<label class="tech-label">Earliest Record Year</label>
+<input class="tech-input" type="number" value="1840">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Latest Record Year</label>
+<input class="tech-input" type="number" value="2024">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Coverage Description</label>
+<textarea class="tech-input h-16"></textarea>
+</div>
+</div>
+</div>
+<!-- Metadata Sub-Section 3: Geographic Coverage -->
+<div class="scientific-card border-t-2 border-t-secondary/30 p-lg">
+<h3 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold mb-md pb-md border-b border-surface-container">SECTION 3 — GEOGRAPHIC COVERAGE</h3>
+<div class="space-y-0">
+<div class="metadata-row">
+<label class="tech-label">Country</label>
+<input class="tech-input" type="text" value="India">
+</div>
+<div class="metadata-row">
+<label class="tech-label">State / Province</label>
+<input class="tech-input" type="text" value="West Bengal">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Region Name</label>
+<input class="tech-input" type="text" value="Darjeeling District">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Bounding Box (W, S, E, N)</label>
+<input class="tech-input" type="text" value="87.9, 26.5, 88.6, 27.2">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Elevation Range (m)</label>
+<input class="tech-input" type="text" value="120 – 3,636">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Geographic Description</label>
+<textarea class="tech-input h-16"></textarea>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Checklist Type</label>
+<select class="tech-input h-[34px]">
+<option>Regional</option>
+<option>Protected Area</option>
+<option>National</option>
+<option>Taxonomic Group</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Metadata Sub-Section 4: Taxonomic Coverage -->
+<div class="scientific-card border-t-2 border-t-secondary/30 p-lg">
+<h3 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold mb-md pb-md border-b border-surface-container">SECTION 4 — TAXONOMIC COVERAGE</h3>
+<div class="space-y-0">
+<div class="metadata-row">
+<label class="tech-label">Core Taxonomy</label>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-md">
+<div class="bg-surface-container p-sm border border-surface-dim">
+<div class="tech-label !mb-0 text-[8px]">Kingdom</div>
+<div class="font-code-md text-[11px] font-bold">Animalia</div>
+</div>
+<div class="bg-surface-container p-sm border border-surface-dim">
+<div class="tech-label !mb-0 text-[8px]">Phylum</div>
+<div class="font-code-md text-[11px] font-bold">Chordata</div>
+</div>
+<div class="bg-surface-container p-sm border border-surface-dim">
+<div class="tech-label !mb-0 text-[8px]">Class</div>
+<div class="font-code-md text-[11px] font-bold">Aves</div>
+</div>
+<div class="bg-surface-container p-sm border border-surface-dim border-l-4 border-l-brand">
+<div class="tech-label !mb-0 text-[8px]">Taxa Counts</div>
+<div class="font-code-md text-[10px]">82 Fam / 742 Spp</div>
+</div>
+</div>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Scope Description</label>
+<textarea class="tech-input h-20">Comprehensive list of all bird species (Aves) documented within the Darjeeling district boundaries, following the Clements Checklist v2023 taxonomy.</textarea>
+</div>
+</div>
+</div>
+<!-- Metadata Sub-Section 5: Methods -->
+<div class="scientific-card border-t-2 border-t-secondary/30 p-lg">
+<h3 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold mb-md pb-md border-b border-surface-container">SECTION 5 — METHODS</h3>
+<div class="space-y-0">
+<div class="metadata-row">
+<label class="tech-label">Data Sources</label>
+<div class="grid grid-cols-2 md:grid-cols-3 gap-y-2 gap-x-4 p-md border border-surface-dim bg-white">
+<label class="flex items-center gap-2 font-code-md text-[11px]">
+<input checked="" class="text-brand focus:ring-brand rounded-none border-surface-dim h-4 w-4" type="checkbox"> GBIF
+                                </label>
+<label class="flex items-center gap-2 font-code-md text-[11px]">
+<input checked="" class="text-brand focus:ring-brand rounded-none border-surface-dim h-4 w-4" type="checkbox"> eBird
+                                </label>
+<label class="flex items-center gap-2 font-code-md text-[11px]">
+<input checked="" class="text-brand focus:ring-brand rounded-none border-surface-dim h-4 w-4" type="checkbox"> iNaturalist
+                                </label>
+<label class="flex items-center gap-2 font-code-md text-[11px]">
+<input checked="" class="text-brand focus:ring-brand rounded-none border-surface-dim h-4 w-4" type="checkbox"> Literature
+                                </label>
+<label class="flex items-center gap-2 font-code-md text-[11px]">
+<input checked="" class="text-brand focus:ring-brand rounded-none border-surface-dim h-4 w-4" type="checkbox"> Museum Coll.
+                                </label>
+<label class="flex items-center gap-2 font-code-md text-[11px]">
+<input class="text-brand focus:ring-brand rounded-none border-surface-dim h-4 w-4" type="checkbox"> Institutional
+                                </label>
+</div>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Methodology</label>
+<textarea class="tech-input h-16"></textarea>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Taxonomic Validation</label>
+<textarea class="tech-input h-16"></textarea>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Evidence Evaluation</label>
+<textarea class="tech-input h-16"></textarea>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Criteria</label>
+<textarea class="tech-input h-16"></textarea>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Reviewer Notes</label>
+<textarea class="tech-input h-16"></textarea>
+</div>
+</div>
+</div>
+<!-- Metadata Sub-Section 6: Contributors -->
+<div class="scientific-card border-t-2 border-t-secondary/30 p-lg">
+<h3 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold mb-md pb-md border-b border-surface-container">SECTION 6 — CONTRIBUTORS</h3>
+<div class="overflow-x-auto mb-md">
+<table class="w-full border-collapse technical-border">
+<thead>
+<tr class="bg-surface-container font-label-caps text-[9px] text-on-surface-variant uppercase text-left">
+<th class="p-2 border border-surface-dim">Name</th>
+<th class="p-2 border border-surface-dim w-32">Role</th>
+<th class="p-2 border border-surface-dim">Institution</th>
+<th class="p-2 border border-surface-dim">ORCID</th>
+<th class="p-2 border border-surface-dim">Email</th>
+<th class="p-2 border border-surface-dim w-10"></th>
+</tr>
+</thead>
+<tbody class="font-code-md text-[11px]">
+<tr>
+<td class="p-2 border border-surface-dim"><input class="w-full border-none p-0 focus:ring-0 text-[11px]" type="text" value="Dr. Arnab Sen"></td>
+<td class="p-2 border border-surface-dim">
+<select class="w-full border-none p-0 focus:ring-0 text-[11px] bg-transparent">
+<option selected="">Creator</option>
+<option>Curator</option>
+<option>Reviewer</option>
+<option>Author</option>
+</select>
+</td>
+<td class="p-2 border border-surface-dim"><input class="w-full border-none p-0 focus:ring-0 text-[11px]" type="text" value="North Bengal University"></td>
+<td class="p-2 border border-surface-dim"><input class="w-full border-none p-0 focus:ring-0 text-[11px]" type="text" value="0000-0002-1234-5678"></td>
+<td class="p-2 border border-surface-dim"><input class="w-full border-none p-0 focus:ring-0 text-[11px]" type="text" value="asen@nbu.ac.in"></td>
+<td class="p-2 border border-surface-dim text-center"><button class="material-symbols-outlined text-sm text-secondary hover:text-error">delete</button></td>
+</tr>
+</tbody>
+</table>
+</div>
+<button class="font-code-md text-[10px] text-brand border border-brand/50 px-3 py-1 flex items-center gap-1 hover:bg-brand/5 transition-colors uppercase font-bold">
+<span class="material-symbols-outlined text-[14px]">add</span> ADD CONTRIBUTOR
+                </button>
+</div>
+<!-- Metadata Sub-Section 7: Publishing Organization -->
+<div class="scientific-card border-t-2 border-t-secondary/30 p-lg">
+<h3 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold mb-md pb-md border-b border-surface-container">SECTION 7 — PUBLISHING ORGANIZATION</h3>
+<div class="space-y-0">
+<div class="metadata-row">
+<label class="tech-label">Organization Name</label>
+<input class="tech-input" type="text" value="Biodiversity Informatics Group">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Organization Website</label>
+<input class="tech-input" type="text" value="https://big-informatics.org">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Institution Code</label>
+<input class="tech-input" type="text" value="BIG-REF-IN">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Publishing Contact</label>
+<input class="tech-input" type="text" value="A. Sen">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Resource Contact</label>
+<input class="tech-input" type="text" value="Data Admin">
+</div>
+</div>
+</div>
+<!-- Metadata Sub-Section 8: License & Rights -->
+<div class="scientific-card border-t-2 border-t-secondary/30 p-lg">
+<h3 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold mb-md pb-md border-b border-surface-container">SECTION 8 — LICENSE &amp; RIGHTS</h3>
+<div class="space-y-0">
+<div class="metadata-row">
+<label class="tech-label">License Selection</label>
+<div class="space-y-2">
+<label class="flex items-center gap-2 font-code-md text-[11px] cursor-pointer">
+<input class="text-brand focus:ring-brand rounded-full border-surface-dim h-4 w-4" name="license" type="radio"> CC0 1.0 (Public Domain)
+                                    </label>
+<label class="flex items-center gap-2 font-code-md text-[11px] cursor-pointer">
+<input checked="" class="text-brand focus:ring-brand rounded-full border-surface-dim h-4 w-4" name="license" type="radio"> CC-BY 4.0 (Attribution)
+                                    </label>
+<label class="flex items-center gap-2 font-code-md text-[11px] cursor-pointer">
+<input class="text-brand focus:ring-brand rounded-full border-surface-dim h-4 w-4" name="license" type="radio"> CC-BY-NC 4.0 (Non-Commercial)
+                                    </label>
+</div>
+</div>
+<div class="metadata-row">
+<label class="tech-label">Rights Statement</label>
+<input class="tech-input" type="text" value="Open access for academic and conservation use.">
+</div>
+<div class="metadata-row">
+<label class="tech-label">Usage Notes</label>
+<input class="tech-input" placeholder="Special attribution requirements..." type="text">
+</div>
+</div>
+</div>
+<!-- Metadata Sub-Section 9: Citation Preview -->
+<div class="scientific-card border-t-2 border-t-secondary/30 p-lg">
+<h3 class="font-label-caps text-xs text-secondary uppercase tracking-widest font-bold mb-md pb-md border-b border-surface-container">SECTION 9 — CITATION PREVIEW</h3>
+<div class="bg-surface-container-high p-lg border border-surface-dim relative group">
+<div class="font-code-md text-xs leading-relaxed text-on-surface">
+                            Sen, A. (2026). Birds of Darjeeling: A Comprehensive Taxonomic Checklist. Biodiversity Informatics Group. Dataset published via Checklist Hub. Version 1.0. http://doi.org/10.xxxx/checklist.darjeeling.2026
+                        </div>
+<button class="absolute top-2 right-2 bg-white border border-surface-dim px-2 py-1 flex items-center gap-1 font-label-caps text-[9px] hover:bg-white/80 transition-colors shadow-sm uppercase font-bold">
+<span class="material-symbols-outlined text-[14px]">content_copy</span> COPY
+                        </button>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- PUBLICATION READINESS STATUS BAR -->
+<section class="mt-xl">
+<div class="bg-brand text-on-primary p-lg border border-on-background shadow-[4px_4px_0px_0px_#1b1c1c] flex flex-col md:flex-row items-center justify-between gap-md relative overflow-hidden">
+<div class="flex items-center gap-xl z-10">
+<div class="flex items-center gap-sm">
+<div class="w-1.5 h-8 bg-white"></div>
+<div class="flex flex-col">
+<h3 class="font-label-caps text-base uppercase tracking-[0.2em] font-bold leading-none mb-1">PUBLICATION READY</h3>
+<div class="flex gap-md font-code-md text-[10px] opacity-90 uppercase tracking-wider">
+<span class="">742 Accepted Species</span>
+<span class="opacity-40">•</span>
+<span class="">82 Families</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col items-end gap-2 z-10">
+    <button class="bg-white text-brand px-xl py-lg font-headline-md text-sm font-bold uppercase tracking-widest hover:bg-surface-container-high transition-all active:translate-y-0.5 whitespace-nowrap border border-on-background shadow-[2px_2px_0px_0px_#1b1c1c] flex items-center gap-md">
+        Generate Publication Package
+        <span class="material-symbols-outlined">arrow_forward</span>
+    </button>
+    <span class="font-code-md text-[10px] text-white opacity-90 uppercase tracking-wider text-right">
+        Taxon Core, Vernacular Names, Descriptions, Distribution, Resource Relationship Metadata (EML)
+    </span>
+</div>
+<!-- Background Texture -->
+<div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: radial-gradient(circle at 1px 1px, white 1px, transparent 0); background-size: 16px 16px;"></div>
+</div>
+</section>
+</main>
+</div>
+<!-- Footer -->
+<footer class="w-full mt-auto bg-white border-t border-surface-dim">
+<div class="flex flex-col md:flex-row justify-between items-center px-lg py-md max-w-container-max mx-auto gap-md">
+<div class="flex items-center gap-lg">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">© 2024 Biodiversity Informatics Group</span>
+<span class="font-code-md text-[10px] text-secondary hidden md:block">STANDARD_REF_1102-B</span>
+</div>
+<div class="flex gap-xl">
+<a class="font-label-caps text-[10px] text-secondary hover:text-brand uppercase tracking-widest transition-all" href="#">Documentation</a>
+<a class="font-label-caps text-[10px] text-secondary hover:text-brand uppercase tracking-widest transition-all" href="#">Methods</a>
+<a class="font-label-caps text-[10px] text-secondary hover:text-brand uppercase tracking-widest transition-all" href="#">API Status</a>
+</div>
+</div>
+</footer>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Sidebar scroll active state ---
+        window.addEventListener('scroll', () => {
+            const sections = document.querySelectorAll('section[id]');
+            const navLinks = document.querySelectorAll('.sidebar-link');
+            
+            let current = "";
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (window.pageYOffset >= sectionTop - 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href').includes(current)) {
+                    link.classList.add('active');
+                }
+            });
+        });
+
+        // --- Classification Breakdown Interactivity ---
+        const treeContainer = document.querySelector('.taxonomic-tree');
+        const searchInput = document.querySelector('.tree-search');
+        const expandAllBtn = document.querySelector('.expand-all');
+        const collapseAllBtn = document.querySelector('.collapse-all');
+
+        if (treeContainer) {
+            treeContainer.addEventListener('click', (e) => {
+                const row = e.target.closest('.tree-row');
+                if (!row) return;
+                const treeItem = row.closest('.tree-item');
+                const content = treeItem.querySelector('.tree-content');
+                const icon = row.querySelector('.chevron-icon');
+                if (content && icon) {
+                    const isCollapsed = content.classList.toggle('collapsed');
+                    icon.classList.toggle('collapsed', isCollapsed);
+                }
+            });
+        }
+
+        if (expandAllBtn) {
+            expandAllBtn.addEventListener('click', () => {
+                const contents = treeContainer.querySelectorAll('.tree-content');
+                const icons = treeContainer.querySelectorAll('.chevron-icon');
+                contents.forEach(c => c.classList.remove('collapsed'));
+                icons.forEach(i => i.classList.remove('collapsed'));
+            });
+        }
+
+        if (collapseAllBtn) {
+            collapseAllBtn.addEventListener('click', () => {
+                const contents = treeContainer.querySelectorAll('.tree-content');
+                const icons = treeContainer.querySelectorAll('.chevron-icon');
+                contents.forEach(c => c.classList.add('collapsed'));
+                icons.forEach(i => i.classList.add('collapsed'));
+            });
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase().trim();
+                const allItems = treeContainer.querySelectorAll('.tree-item');
+                if (!query) {
+                    allItems.forEach(item => item.setAttribute('data-</script>
+
+</body>
+</html>

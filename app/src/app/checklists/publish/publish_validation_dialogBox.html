@@ -1,0 +1,204 @@
+<!DOCTYPE html><html lang="en" style=""><head>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Checklist Hub - Workbench</title>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: JetBrains Mono & Geist -->
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;family=Geist:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-container-low": "#f5f3f3",
+            "on-primary-fixed-variant": "#8f0d18",
+            "surface-tint": "#b22a2c",
+            "tertiary-fixed-dim": "#c6c6c7",
+            "on-primary-fixed": "#410004",
+            "on-error-container": "#93000a",
+            "outline": "#8d706e",
+            "on-secondary-fixed-variant": "#474746",
+            "on-secondary-container": "#636262",
+            "surface-dim": "#dbdad9",
+            "on-tertiary": "#ffffff",
+            "primary": "#a41f24",
+            "brand": "#c63939",
+            "surface-bright": "#fbf9f8",
+            "on-primary-container": "#ffecea",
+            "on-background": "#1b1c1c",
+            "error": "#ba1a1a",
+            "inverse-on-surface": "#f2f0f0",
+            "tertiary-fixed": "#e2e2e2",
+            "outline-variant": "#e1bebc",
+            "surface-container-lowest": "#ffffff",
+            "on-secondary": "#ffffff",
+            "secondary-fixed-dim": "#c8c6c5",
+            "primary-fixed-dim": "#ffb3ae",
+            "on-tertiary-container": "#f0f0f0",
+            "tertiary": "#535555",
+            "background": "#fbf9f8",
+            "inverse-surface": "#303031",
+            "surface-variant": "#e4e2e2",
+            "primary-fixed": "#ffdad7",
+            "on-surface-variant": "#59413f",
+            "surface-container": "#efeded",
+            "on-primary": "#ffffff",
+            "on-error": "#ffffff",
+            "error-container": "#ffdad6",
+            "primary-container": "#c63939",
+            "secondary-container": "#e2dfde",
+            "surface-container-high": "#e9e8e7",
+            "secondary": "#5f5e5e",
+            "on-surface": "#1b1c1c",
+            "surface-container-highest": "#e4e2e2",
+            "surface": "#fbf9f8",
+            "secondary-fixed": "#e5e2e1",
+            "on-tertiary-fixed": "#1a1c1c"
+          },
+          borderRadius: {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          fontFamily: {
+            "body-lg": ["Geist"],
+            "headline-lg": ["JetBrains Mono"],
+            "label-caps": ["JetBrains Mono"],
+            "headline-md": ["JetBrains Mono"],
+            "code-md": ["JetBrains Mono"],
+            "body-sm": ["Geist"],
+            "mono": ["JetBrains Mono", "monospace"],
+            "sans": ["Geist", "sans-serif"]
+          },
+          boxShadow: {
+            hard: "2px 2px 0px 0px rgba(198, 57, 57, 1)",
+            "hard-neutral": "2px 2px 0px 0px rgba(0, 0, 0, 0.1)"
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    body { background-color: #FBF9F8; color: #1B1C1C; font-family: 'Geist', sans-serif; }
+    .mono-text { font-family: 'JetBrains Mono', monospace; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #DBDAD9; }
+    ::-webkit-scrollbar-thumb:hover { background: #c63939; }
+    .table-container { border: 1px solid #DBDAD9; }
+    .status-pill { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; }
+  </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+<!-- Top Navigation -->
+<header class="h-14 border-b border-surface-dim bg-white flex items-center justify-between px-4 z-50"><div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<img alt="Checklist Hub Logo" class="h-8 w-8 object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwMf_2w1Je5rT9FgZZdaEeZoTTsp_GU1bCHvx6XTgf1TypEmoyuRChSzNpnzEWl8p_Nr-2gAB05elQPH4VHz2hlGJHuj8UXRN1ZsZInCUzPJRO7zoB6ksGESr7lcujic0lJtiBCb9WHwvh6-j4d4HtiWHBKogeumy4i8756bYOd5pcX8jYUIoQOmk54uIbgB0g6cnRTVLCZDW7MCZ0y12kS9xTpqAvUZJbxzScejRd1uZgPK1HTJyzDatdkCB3tJTtdMRvCPrLfdfB">
+<span class="mono-text font-bold text-brand tracking-tight text-lg">Checklist Hub</span>
+</div>
+<button class="bg-brand text-white px-3 py-1.5 rounded-sm text-xs mono-text font-medium flex items-center gap-2 shadow-hard hover:translate-y-[-1px] transition-transform">
+        New Checklist <span class="text-lg leading-none">+</span>
+</button>
+<div class="flex items-center gap-3 ml-2">
+<div class="flex items-center px-2 py-1">
+<span class="mono-text text-sm font-bold text-slate-700 uppercase tracking-tight">Birds of Darjeeling</span>
+</div>
+<div class="flex items-center gap-1.5 text-slate-500">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+<span class="mono-text text-[10px] uppercase tracking-wider">Darjeeling, India</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-brand text-white px-4 py-1.5 rounded-sm text-[10px] mono-text font-bold flex items-center gap-2 shadow-[2px_2px_0px_0px_#1B1C1C] hover:translate-y-[-1px] transition-transform mr-4 uppercase">
+<span class="material-symbols-outlined text-[16px]">publish</span>
+  PUBLISH
+</button><div class="flex items-center -space-x-2 mr-2">
+<img alt="Collaborator" class="w-7 h-7 rounded-full border-2 border-white object-cover shadow-sm" src="https://lh3.googleusercontent.com/aida/AP1WRLvCIY-bea22WX2lmpsQ0cItNlzb_LtaRLTY-EZSZ8nrG5hECOx6LCPBvQIMXOrLnHvS1L-yVZ5q6-GDToyLEaDWliJGNlW61rc9fcDTQxHg57Y815-Lzj1NiCZMpd6YLNyvxDtJZxHpmpvIjuHPL50lMFrmltTD_FHwrETustpJzuBRthN35G08oAjhjp81Y_bsXeEtD-twsZV7d_AodTWXOwWWI2kLJ2tCN0KXawNHlwsiOkxA-c9urpg">
+<img alt="Collaborator" class="w-7 h-7 rounded-full border-2 border-white object-cover shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0P510Yy9rKzM8NN3LUUaL4lyl2QqAQu4o_YRlexctu7z2kRKsL7QCz_KjWl9FzobWiA-Q7On43jDIXAsinIHuMjrlKfwEkbnm9cqQZ3QPUGSoiZJ1ss1R2CbznVeP2rEVyT5KcZdExYNx4jd73i0XO-jLuoWW99_N0YXYpwZa4lKA9WFR-HfKfDMvbQPNJO1hxBA9wtnCOo4VypAbAFX3L9ecZ_gpJJYkus6KLJHWjzuCJm609R2GcPDyWUQWIuS__T1ECj74Wt1G">
+<div class="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[9px] font-bold text-slate-500 shadow-sm">+4</div>
+</div><button class="mono-text text-xs border border-surface-dim px-3 py-1.5 rounded-sm flex items-center gap-2 hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[16px]">share</span>
+        Share
+      </button>
+<button class="text-slate-500 hover:text-brand transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<img alt="User" class="w-8 h-8 rounded-full border border-surface-dim" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC3A9OdrqrX-RaVVZ__BhZeOzWLCE-CQlxZVCL7RXv63AfY8j9B8cyZrENmP7V9Nnr6imtcRqNN_DIcabISIvMhuzQYdRh5uZ972JxZsiineCSQi_YqCczDCIZf2r84dwUPvDtXFXDCk_J7RBd4jlySI3jnMAURnTtDuDaGXY57jNQBGX4PLgyq0DwGh_C6eKG7CsOgRxqjVAu_Dw5Sn9XlOQAPvQUobr9hSFxdlitC1mfutxlmFXHi6hRHSF12kCCrMBjhkT_moH3a">
+</div></header>
+<div class="flex flex-1 overflow-hidden">
+<!-- Left Navigation Sidebar -->
+<aside class="bg-surface border-r border-surface-dim flex flex-col overflow-y-auto w-44">
+<div class="p-3 space-y-6">
+<section>
+<h3 class="font-label-caps text-[10px] font-bold text-slate-400 tracking-widest mb-3 px-2 uppercase">Workspace</h3>
+<ul class="space-y-1"><li class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low hover:text-brand rounded transition-colors cursor-pointer"><span class="material-symbols-outlined text-[18px]">home</span><span class="">Home</span></li><li class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low hover:text-brand rounded transition-colors cursor-pointer"><span class="material-symbols-outlined text-[18px]">list_alt</span><span class="">Checklists</span></li><li class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low hover:text-brand rounded transition-colors cursor-pointer"><span class="material-symbols-outlined text-[18px]">group</span><span class="">Team</span></li><li class="flex items-center gap-2 px-2 py-1.5 text-xs text-brand bg-white border border-surface-dim rounded shadow-sm font-bold cursor-pointer"><span class="material-symbols-outlined text-[18px]">publish</span><span class="">Publish</span></li></ul>
+</section>
+<section>
+<div class="flex items-center justify-between mb-3 px-2">
+<h3 class="font-label-caps text-[10px] font-bold text-slate-400 tracking-widest uppercase">Views</h3>
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer">add</span>
+</div>
+<ul class="space-y-1">
+<li class="flex items-center justify-between px-2 py-1.5 text-xs text-brand bg-white border border-surface-dim rounded shadow-sm font-bold">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">grid_view</span>
+<span class="">All Species</span>
+</div>
+<span class="mono-text text-[9px]">742</span>
+</li>
+<li class="flex items-center justify-between px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low rounded cursor-pointer transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">assignment</span>
+<span class="">Needs Review</span>
+</div>
+<span class="mono-text text-[9px] bg-red-50 text-red-600 px-1.5 rounded-full">23</span>
+</li>
+<li class="pt-4 pb-2 px-2">
+<h3 class="font-label-caps text-[10px] font-bold text-slate-400 tracking-widest uppercase">Taxonomy Issues</h3>
+</li>
+<li class="flex items-center justify-between px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low rounded cursor-pointer transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">warning</span>
+<span class="">Conflicts</span>
+</div>
+<span class="mono-text text-[9px]">8</span>
+</li>
+<li class="flex items-center justify-between px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low rounded cursor-pointer transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">link</span>
+<span class="">Synonyms</span>
+</div>
+<span class="mono-text text-[9px]">17</span>
+</li>
+<li class="pt-2">
+</li><li class="flex items-center justify-between px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low rounded cursor-pointer transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+<span class="">Accepted</span>
+</div>
+<span class="mono-text text-[9px]">680</span>
+</li>
+<li class="flex items-center justify-between px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low rounded cursor-pointer transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">cancel</span>
+<span class="">Rejected</span>
+</div>
+<span class="mono-text text-[9px]">12</span>
+</li>
+</ul>
+</section>
+<section class=""><h3 class="font-label-caps text-[10px] font-bold text-slate-400 tracking-widest mb-3 px-2 uppercase">Activity</h3><ul class="space-y-1"><li class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low hover:text-brand rounded transition-colors cursor-pointer"><span class="material-symbols-outlined text-[18px]">update</span><span class="">Recent Changes</span></li><li class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low hover:text-brand rounded transition-colors cursor-pointer"><span class="material-symbols-outlined text-[18px]">forum</span><span class="">Recent Comments</span></li><li class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-600 hover:bg-surface-container-low hover:text-brand rounded transition-colors cursor-pointer"><span class="material-symbols-outlined text-[18px]">history</span><span class="">History Timeline</span></li></ul></section></div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 bg-white flex flex-col min-w-0"><div class="flex-1 flex flex-col items-center justify-center p-8 bg-surface-container-low/30"><div class="w-full max-w-2xl bg-white border border-surface-dim shadow-hard p-8 space-y-8"><div class="text-center space-y-2"><h2 class="headline-lg text-brand uppercase tracking-tight">Ready for Publication</h2><p class="body-lg text-slate-500">The 'Birds of Darjeeling' checklist has passed all validation checks.</p></div><div class="space-y-4 border-y border-surface-dim py-8"><div class="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-sm"><div class="flex items-center gap-3"><span class="material-symbols-outlined text-green-600">check_circle</span><span class="mono-text text-sm font-bold">All species reviewed</span></div><span class="mono-text text-sm text-green-700">742 / 742</span></div><div class="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-sm"><div class="flex items-center gap-3"><span class="material-symbols-outlined text-green-600">check_circle</span><span class="mono-text text-sm font-bold">Taxonomic conflicts resolved</span></div><span class="mono-text text-sm text-green-700">0 ISSUES</span></div></div><div class="flex flex-col items-center gap-4"><button class="w-full bg-brand text-white py-4 rounded-sm headline-md shadow-hard hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all uppercase tracking-widest">CONTINUE TO CHECKLIST Summary</button><button class="text-slate-400 mono-text text-[10px] uppercase font-bold hover:text-brand transition-colors">Back to Species List</button></div></div></div></main>
+<!-- Right Sidebar (Information Panel) -->
+</div>
+
+
+
+</body></html>

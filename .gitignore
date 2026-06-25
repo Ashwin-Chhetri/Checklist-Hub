@@ -3,7 +3,16 @@
 **/dist/
 *.tsbuildinfo
 
+# large reference-data downloads / generated lookup DBs — see SETUP.md
+**/*.sqlite
+**/*.sqlite3
+**/public/data/*.zip
+**/public/data/**/*.zip
+
 .claude/
 ClaudeCodeChat/
 graphify-out/
 .vscode/
+
+# local Supabase CLI link state (machine-specific, not a secret)
+supabase/.temp/

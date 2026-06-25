@@ -1,0 +1,36 @@
+{
+  "name": "checklisthub-research-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "research": "tsx src/cli.ts",
+    "build:gbif-backbone": "node scripts/build-gbif-backbone.mjs",
+    "build:ecoregions": "node scripts/build-ecoregions.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@citation-js/core": "^0.7.21",
+    "@citation-js/plugin-csl": "^0.7.22",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@turf/turf": "^7.3.5",
+    "better-sqlite3": "^12.11.1",
+    "commander": "^14.0.3",
+    "dotenv": "^17.4.2",
+    "pdf-parse": "^2.4.5",
+    "scholar-mcp": "^1.0.7",
+    "shapefile": "^0.6.6",
+    "unzipper": "^0.12.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^26.0.0",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/unzipper": "^0.10.11",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}
