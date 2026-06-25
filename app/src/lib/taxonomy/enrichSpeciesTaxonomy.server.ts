@@ -59,10 +59,10 @@ function isEmptyClassification(c?: RankValues | null): boolean {
  * fetcher is meant to run ONCE per gap and have its result written back, not
  * be re-run on every render.
  */
-export function enrichSpeciesTaxonomy(
+export async function enrichSpeciesTaxonomy(
   species: EnrichableSpecies,
   kingdomHint?: string,
-): { taxonomy: NonNullable<EnrichableSpecies["taxonomy"]>; changed: boolean } {
+): Promise<{ taxonomy: NonNullable<EnrichableSpecies["taxonomy"]>; changed: boolean }> {
   const taxonomy = { ...(species.taxonomy ?? {}) } as NonNullable<EnrichableSpecies["taxonomy"]>;
   let changed = false;
 
@@ -86,7 +86,7 @@ export function enrichSpeciesTaxonomy(
       species.identity?.imported_scientific_name,
       ...(taxonomy.synonyms ?? []).map((s) => s.name),
     ];
-    const found = lookupBackboneExhaustive({
+    const found = await lookupBackboneExhaustive({
       gbifKey: species.gbif_taxon_key ?? undefined,
       names,
       commonNames,
@@ -108,9 +108,9 @@ export function enrichSpeciesTaxonomy(
     }
   }
 
-  const enrichEntries = (entries: SynonymOrConflictEntry[] | undefined, nameField: "name" | "suggested_name") => {
+  const enrichEntries = async (entries: SynonymOrConflictEntry[] | undefined, nameField: "name" | "suggested_name") => {
     if (!entries?.length) return entries;
-    return entries.map((entry) => {
+    return Promise.all(entries.map(async (entry) => {
       const complete = !isEmptyClassification(entry.classification) && entry.year != null;
       if (complete) return entry;
 
@@ -120,7 +120,7 @@ export function enrichSpeciesTaxonomy(
       // resolve via the same weak convergence that flagged the conflict in
       // the first place — risking attributing a DIFFERENT option's taxon to
       // this one.
-      const found = lookupBackboneExhaustive({
+      const found = await lookupBackboneExhaustive({
         gbifKey: entry.taxon_id ?? undefined,
         names: [entry[nameField]],
         commonNames: nameField === "name" ? commonNames : undefined,
@@ -158,11 +158,11 @@ export function enrichSpeciesTaxonomy(
         }
       }
       return next;
-    });
+    }));
   };
 
-  taxonomy.synonyms = enrichEntries(taxonomy.synonyms, "name");
-  taxonomy.authority_conflicts = enrichEntries(taxonomy.authority_conflicts, "suggested_name");
+  taxonomy.synonyms = await enrichEntries(taxonomy.synonyms, "name");
+  taxonomy.authority_conflicts = await enrichEntries(taxonomy.authority_conflicts, "suggested_name");
 
   return { taxonomy, changed };
 }

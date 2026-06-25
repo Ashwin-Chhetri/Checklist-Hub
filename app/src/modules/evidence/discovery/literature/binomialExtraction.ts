@@ -46,11 +46,11 @@ function extractCandidateNames(text: string): string[] {
  * resolve to real accepted/synonym species in the local GBIF backbone (scoped
  * to the taxon group's class where possible). No external API keys required.
  */
-export function extractSpeciesFromCandidates(
+export async function extractSpeciesFromCandidates(
   candidates: LiteratureDocument[],
   taxonHint?: string,
   maxDocuments = candidates.length,
-): LiteratureSpeciesCandidate[] {
+): Promise<LiteratureSpeciesCandidate[]> {
   const docsToScan = candidates.slice(0, maxDocuments);
 
   const allNames = new Set<string>();
@@ -62,7 +62,7 @@ export function extractSpeciesFromCandidates(
     names.forEach((n) => allNames.add(n));
   }
 
-  const matched = matchCanonicalSpecies([...allNames], taxonHint);
+  const matched = await matchCanonicalSpecies([...allNames], taxonHint);
   if (matched.size === 0) return [];
 
   const seen = new Set<string>();

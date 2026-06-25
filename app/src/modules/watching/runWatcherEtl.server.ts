@@ -168,12 +168,35 @@ export async function runWatcherEtl(
   if (checklistErr || !checklist) throw new Error(`checklist ${watcherRow.checklist_id} not found`);
   const checklistRow = checklist as ChecklistRow;
 
+  // Guard against an overlapping run for the same watcher (e.g. a manual
+  // "Update Observations" click landing while the daily cron tick is still
+  // processing this watcher, or a previous run's function having timed out
+  // without ever reaching its `watcher_runs` status update). Without this,
+  // two concurrent runs can both stage the same candidate species.
+  const { data: activeRun } = await supabase
+    .from("watcher_runs")
+    .select("id")
+    .eq("watcher_id", watcherRow.id)
+    .eq("status", "running")
+    .limit(1)
+    .maybeSingle();
+  if (activeRun) throw new Error(`watcher ${watcherRow.id} already has a run in progress`);
+
   const { data: runRow, error: runInsertErr } = await supabase
     .from("watcher_runs")
     .insert({ watcher_id: watcherRow.id, checklist_id: checklistRow.id, status: "running" })
     .select("id")
     .single();
-  if (runInsertErr || !runRow) throw new Error("failed to create watcher_run row");
+  if (runInsertErr) {
+    // Postgres unique_violation on watcher_runs_one_running_idx — another
+    // run for this watcher won the race between the check above and this
+    // insert. Treat it the same as the check having caught it.
+    if (runInsertErr.code === "23505") {
+      throw new Error(`watcher ${watcherRow.id} already has a run in progress`);
+    }
+    throw new Error(`failed to create watcher_run row: ${runInsertErr.message}`);
+  }
+  if (!runRow) throw new Error("failed to create watcher_run row");
   const runId = runRow.id as string;
 
   try {
@@ -234,7 +257,7 @@ export async function runWatcherEtl(
     const taxonomicScope = checklistRow.taxonomic_scope ?? {};
     const deepest = deepestTaxon(taxonomicScope);
     const deepestTaxonKey = deepest.name
-      ? lookupBackbone({ name: deepest.name }, taxonomicScope.kingdom).taxonKey
+      ? (await lookupBackbone({ name: deepest.name }, taxonomicScope.kingdom)).taxonKey
       : null;
 
     const region: RegionValue = {
@@ -249,6 +272,24 @@ export async function runWatcherEtl(
 
     const ctx = buildDiscoveryContext(taxonomicScope, deepestTaxonKey, region);
     const inventory = await discoverSpeciesInventory(ctx);
+
+    // Candidates already staged as `pending` from a prior run (e.g. one that
+    // crashed after inserting but before advancing `next_run_at`, so this
+    // tick reprocesses the same source data) must not be re-staged — the
+    // DB-level unique indexes on watcher_candidate_species back this up, but
+    // checking here avoids relying on a caught constraint violation as the
+    // primary mechanism.
+    const { data: pendingCandidates } = await supabase
+      .from("watcher_candidate_species")
+      .select("gbif_taxon_key, scientific_name")
+      .eq("checklist_id", checklistRow.id)
+      .eq("status", "pending");
+    const pendingTaxonKeys = new Set<number>();
+    const pendingNames = new Set<string>();
+    for (const row of pendingCandidates ?? []) {
+      if (typeof row.gbif_taxon_key === "number") pendingTaxonKeys.add(row.gbif_taxon_key);
+      else pendingNames.add((row.scientific_name as string).trim().toLowerCase());
+    }
 
     let newSpeciesCount = 0;
     let updatedSpeciesCount = 0;
@@ -278,8 +319,11 @@ export async function runWatcherEtl(
         (matchesByCommonNameOnly && commonNameKey ? activeByCommonName.get(commonNameKey) ?? undefined : undefined);
 
       if (!alreadyKnown && !existingId) {
-        newSpeciesCount += 1;
-        await supabase.from("watcher_candidate_species").insert({
+        const alreadyPending =
+          (item.taxonKey !== null && pendingTaxonKeys.has(item.taxonKey)) || pendingNames.has(nameKey);
+        if (alreadyPending) continue;
+
+        const { error: candidateInsertErr } = await supabase.from("watcher_candidate_species").insert({
           watcher_run_id: runId,
           checklist_id: checklistRow.id,
           scientific_name: item.acceptedName,
@@ -291,6 +335,10 @@ export async function runWatcherEtl(
           occurrence_counts: item.occurrenceCounts,
           total_occurrences: item.totalOccurrences,
         });
+        // 23505 = unique_violation on the pending-candidate indexes — another
+        // concurrent run already staged this exact taxon; not a real error.
+        if (candidateInsertErr && candidateInsertErr.code !== "23505") throw candidateInsertErr;
+        if (!candidateInsertErr) newSpeciesCount += 1;
         continue;
       }
 

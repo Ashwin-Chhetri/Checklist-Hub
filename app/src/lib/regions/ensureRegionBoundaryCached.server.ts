@@ -1,6 +1,5 @@
-import path from "node:path";
-import Database from "better-sqlite3";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { callDataService } from "@/lib/dataService.server";
 
 // Shared by /api/regions/gadm-geometry and /api/regions/osm-boundary (serve
 // the Evidence panel's map) and the checklist-creation route (warms the
@@ -21,26 +20,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 //    region whose lookup landed above district level, e.g. Sikkim).
 // On a miss, the result is cached into Supabase so every later request for
 // that region skips the local file / external fetch entirely.
-const DB_PATH = path.join(process.cwd(), "data", "gadm.sqlite");
-
-let db: Database.Database | null = null;
-
-function getDb(): Database.Database | null {
-  if (db) return db;
-  try {
-    db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
-    return db;
-  } catch (err) {
-    console.error("[ensureRegionBoundaryCached] Could not open gadm.sqlite — has `npm run build:gadm` been run?", err);
-    return null;
-  }
-}
-
-interface LocalRow {
-  boundary_geojson: string | null;
-  name: string;
-}
-
 export interface RegionBoundaryResult {
   geometry: unknown | null;
   name: string | null;
@@ -48,24 +27,14 @@ export interface RegionBoundaryResult {
 
 export type BoundarySource = "gadm" | "osm";
 
-function readGadmRow(gid: string): RegionBoundaryResult {
-  const database = getDb();
-  if (!database) return { geometry: null, name: null };
-
-  const row = database
-    .prepare(`SELECT boundary_geojson, name FROM gadm_regions WHERE gid = ?`)
-    .get(gid) as LocalRow | undefined;
-
-  if (!row?.boundary_geojson) {
-    console.warn(`[ensureRegionBoundaryCached] No GADM boundary stored for gid=${gid} (only level-2/district GIDs have one).`);
-    return { geometry: null, name: row?.name ?? null };
-  }
-
+// GADM mirror lives on the standalone reference-data-service
+// (DigitalOcean) — see reference-data-service/src/gadm.js's readGadmRow().
+async function readGadmRow(gid: string): Promise<RegionBoundaryResult> {
   try {
-    return { geometry: JSON.parse(row.boundary_geojson), name: row.name };
+    return await callDataService<RegionBoundaryResult>(`/gadm/boundary?gid=${encodeURIComponent(gid)}`);
   } catch (err) {
-    console.error(`[ensureRegionBoundaryCached] Failed to parse stored GADM geometry for gid=${gid}`, err);
-    return { geometry: null, name: row.name };
+    console.error(`[ensureRegionBoundaryCached] reference-data-service call failed for gid=${gid}`, err);
+    return { geometry: null, name: null };
   }
 }
 
@@ -96,7 +65,7 @@ export async function ensureRegionBoundaryCached(
     return { geometry: cached.geometry, name: cached.name };
   }
 
-  const result = source === "gadm" ? readGadmRow(key) : await resolveMiss?.() ?? { geometry: null, name: null };
+  const result = source === "gadm" ? await readGadmRow(key) : (await resolveMiss?.()) ?? { geometry: null, name: null };
   if (!result.geometry) return result;
 
   // Best-effort cache write — a transient failure here shouldn't surface as

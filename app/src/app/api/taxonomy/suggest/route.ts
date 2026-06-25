@@ -9,6 +9,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ suggestions: [] });
   }
 
-  const suggestions = searchBackbone(q, 8);
+  const suggestions = await searchBackbone(q, 8);
   return NextResponse.json({ suggestions });
 }

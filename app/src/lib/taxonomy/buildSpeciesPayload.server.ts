@@ -50,7 +50,7 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
   // Never rewrites scientific_name — original name is preserved in identity + taxonomy JSONB.
   const needsNorm = rawSpecies.filter((s) => !s.gbif_taxon_key);
   if (needsNorm.length > 0) {
-    const normResults = lookupBackboneBatch(
+    const normResults = await lookupBackboneBatch(
       needsNorm.map((s) => ({ id: s.scientific_name, name: s.scientific_name })),
       kingdomHint,
     );
@@ -158,7 +158,7 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
     (s) => s.gbif_taxon_key && !(s.taxonomy_synonyms?.length),
   );
   if (hasKeyNeedsCheck.length > 0) {
-    const keyResults = lookupBackboneBatch(
+    const keyResults = await lookupBackboneBatch(
       hasKeyNeedsCheck.map((s) => ({ id: String(s.gbif_taxon_key), gbifKey: s.gbif_taxon_key! })),
       kingdomHint,
     );
@@ -271,7 +271,7 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
       // accepted name often DOES exist locally under its own (accepted) row —
       // double-check the local backbone by name so hierarchy isn't left empty
       // just because the original spelling wasn't found locally.
-      const localForLive = live.canonicalName ? lookupBackbone({ name: live.canonicalName }) : null;
+      const localForLive = live.canonicalName ? await lookupBackbone({ name: live.canonicalName }) : null;
       const liveClassification =
         localForLive && !isEmptyClassification(localForLive.classification)
           ? localForLive.classification
@@ -329,7 +329,7 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
     (s) => !s.gbif_taxon_key && s.common_name?.trim(),
   );
   for (const s of unresolvedWithCommonName) {
-    const norm = lookupByVernacularName(s.common_name!);
+    const norm = await lookupByVernacularName(s.common_name!);
     if (!norm || norm.matchType === "none") continue;
 
     s.gbif_taxon_key = norm.taxonKey;
@@ -518,7 +518,7 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
       // `ss.synonymName` is a real scientific name reported by another source —
       // look it up directly so its own hierarchy/year isn't left empty just
       // because this pass never otherwise queries the backbone.
-      const synLookup = lookupBackbone({ name: ss.synonymName });
+      const synLookup = await lookupBackbone({ name: ss.synonymName });
       const hasMatch = synLookup.matchType !== "none";
       s.taxonomy_synonyms = [
         ...(s.taxonomy_synonyms ?? []),
@@ -565,7 +565,7 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
         s.scientific_name,
         ...(s.taxonomy_synonyms ?? []).map((syn) => syn.name),
       ];
-      const found = lookupBackboneExhaustive({
+      const found = await lookupBackboneExhaustive({
         gbifKey: s.gbif_taxon_key ?? undefined,
         names: rowNames,
         commonNames: rowCommonNames,
@@ -586,7 +586,7 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
 
     for (const syn of s.taxonomy_synonyms ?? []) {
       if (!isEmptyClassification(syn.classification) && syn.authority && syn.year != null) continue;
-      const found = lookupBackboneExhaustive({
+      const found = await lookupBackboneExhaustive({
         gbifKey: syn.taxon_id ?? undefined,
         names: [syn.name],
         commonNames: rowCommonNames,
@@ -614,7 +614,7 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
       // name would resolve via the same weak convergence Pass 5 already used
       // to flag the conflict, risking giving this option whichever taxon a
       // DIFFERENT option already legitimately owns.
-      const found = lookupBackboneExhaustive({
+      const found = await lookupBackboneExhaustive({
         gbifKey: conflict.taxon_id ?? undefined,
         names: [conflict.suggested_name],
         kingdomHint,

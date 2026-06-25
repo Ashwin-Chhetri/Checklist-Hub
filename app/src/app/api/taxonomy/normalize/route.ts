@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ results: [] });
   }
 
-  const resultMap = lookupBackboneBatch(
+  const resultMap = await lookupBackboneBatch(
     items.map((it) => ({ id: it.id, gbifKey: it.gbifKey, name: it.name, commonName: it.commonName })),
     kingdomHint,
   );

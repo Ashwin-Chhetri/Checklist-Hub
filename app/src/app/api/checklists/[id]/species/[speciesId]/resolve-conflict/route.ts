@@ -214,7 +214,7 @@ export async function POST(
   const needsBackfill =
     chosenConflict && (!chosenConflict.authorship || !chosenConflict.taxon_id || !chosenConflict.classification);
   const backfill = needsBackfill
-    ? lookupBackbone({ gbifKey: chosenConflict.taxon_id ?? undefined, name: chosenConflict.taxon_id ? undefined : suggested_name })
+    ? await lookupBackbone({ gbifKey: chosenConflict.taxon_id ?? undefined, name: chosenConflict.taxon_id ? undefined : suggested_name })
     : null;
   const enrichedConflict: AuthorityConflict | undefined = chosenConflict && {
     ...chosenConflict,

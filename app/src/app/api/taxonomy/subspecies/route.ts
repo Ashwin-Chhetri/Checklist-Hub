@@ -9,6 +9,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ subspecies: [] });
   }
 
-  const subspecies = getSubspecies(Number(taxonKey));
+  const subspecies = await getSubspecies(Number(taxonKey));
   return NextResponse.json({ subspecies });
 }

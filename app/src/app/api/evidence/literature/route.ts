@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   // filter, so restricting extraction to the top 50 starved this fallback
   // when more than 50 documents were found.
   if (species.length === 0 && documents.length > 0) {
-    species = extractSpeciesFromCandidates(documents, taxonGroup);
+    species = await extractSpeciesFromCandidates(documents, taxonGroup);
     if (species.length > 0) {
       message = `Found ${species.length} species mentioned across ${documents.length} candidate checklist/survey documents.`;
     }

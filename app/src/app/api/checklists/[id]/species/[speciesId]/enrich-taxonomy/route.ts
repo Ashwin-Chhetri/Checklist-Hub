@@ -47,7 +47,7 @@ export async function POST(
     .eq("id", checklistId)
     .single();
 
-  const { taxonomy, changed } = enrichSpeciesTaxonomy(
+  const { taxonomy, changed } = await enrichSpeciesTaxonomy(
     species,
     (checklist?.taxonomic_scope as { kingdom?: string } | null)?.kingdom,
   );
