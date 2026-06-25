@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   title: "Checklist Hub - Build Trusted Species Checklists",
   description:
     "Standardize biodiversity data with the industry's most rigorous taxonomy validation engine.",
+  verification: {
+    google: "siNCXP3nTWA3s8f2IdvJ_yw3jngRTrZF74ve_VqDR74",
+  },
 };
 
 export default function RootLayout({
