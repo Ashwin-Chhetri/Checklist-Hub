@@ -1,35 +1,17 @@
-import { spawn } from "node:child_process";
-import path from "node:path";
-import fs from "node:fs";
+import fs from "node:fs/promises";
+import { callDataService } from "@/lib/dataService.server";
 
-// Spawns the standalone research-pipeline CLI (../research-pipeline, sibling
-// to this Next.js app — see ../../../../checklistHub_architecture.md and
-// research-pipeline/README.md for why it's a physically separate project)
-// as a detached child process and returns immediately with a runId. This is
-// the one place app/ touches research-pipeline at all: no shared imports, no
-// Supabase writes — the dialog polls research-pipeline's own
-// raw/runs/<runId>.json status file via the GET route instead of holding
-// this request open.
-//
-// `detached: true` + `child.unref()` so the run survives independent of
-// this request's lifecycle (and of `next dev` hot-reloads) — status is
-// tracked entirely via the on-disk status file, not in-memory state here.
-
-function researchPipelineDir(): string {
-  return process.env.RESEARCH_PIPELINE_DIR
-    ? path.resolve(process.env.RESEARCH_PIPELINE_DIR)
-    : path.resolve(process.cwd(), "..", "research-pipeline");
-}
+// Thin HTTP client for the standalone research-pipeline service, which runs
+// on the same DigitalOcean droplet as the GBIF/GADM reference-data-service —
+// Vercel's serverless functions can't spawn long-lived detached child
+// processes or hold a persistent on-disk corpus, so this calls the service
+// over HTTP instead of `spawn`-ing research-pipeline/src/cli.ts as a local
+// sibling process (which only ever worked in local dev). See
+// research-pipeline/src/server.ts for the server side.
 
 export function isResearchPipelineAvailable(): { available: boolean; reason?: string } {
-  const dir = researchPipelineDir();
-  const cliPath = path.join(dir, "src", "cli.ts");
-  const tsxPackage = path.join(dir, "node_modules", "tsx", "package.json");
-  if (!fs.existsSync(cliPath)) {
-    return { available: false, reason: `research-pipeline CLI not found at ${cliPath}. Set RESEARCH_PIPELINE_DIR or check the sibling folder exists.` };
-  }
-  if (!fs.existsSync(tsxPackage)) {
-    return { available: false, reason: `research-pipeline dependencies not installed (missing ${tsxPackage}). Run "npm install" in research-pipeline/.` };
+  if (!process.env.DATA_SERVICE_URL || !process.env.DATA_SERVICE_SECRET) {
+    return { available: false, reason: "DATA_SERVICE_URL / DATA_SERVICE_SECRET are not configured." };
   }
   return { available: true };
 }
@@ -40,98 +22,15 @@ export function startResearchRun(params: {
   taxonGroup: string;
   resultsPerQuery?: number;
 }): void {
-  const dir = researchPipelineDir();
-  const cliPath = path.join(dir, "src", "cli.ts");
-
-  // stdio is redirected to a log file (not "ignore") so a crash mid-run is
-  // diagnosable instead of leaving raw/runs/<runId>.json silently frozen —
-  // the run-status file only records phase transitions, not why a run died
-  // between them.
-  const logDir = path.join(dir, "raw", "runs");
-  fs.mkdirSync(logDir, { recursive: true });
-  const logPath = path.join(logDir, `${params.runId}.log`);
-  const out = fs.openSync(logPath, "a");
-
-  // Invoking node directly with `--import=tsx` (Node's native ESM loader
-  // hook, supported since Node 18.19/20.6) instead of spawning
-  // node_modules/tsx/dist/cli.mjs as a wrapper — that wrapper internally
-  // re-spawns a second node process of its own (via cross-spawn, with no
-  // windowsHide), which on Windows opened a second visible console window
-  // on top of this spawn's own. `--import=tsx` runs the whole CLI in this
-  // one process instead, so windowsHide below is the only thing needed to
-  // keep this fully invisible.
-  const args = ["--import=tsx", cliPath, "run", "--region", params.region, "--taxon", params.taxonGroup, "--run-id", params.runId];
-  if (params.resultsPerQuery) args.push("--results-per-query", String(params.resultsPerQuery));
-
-  const child = spawn(process.execPath, args, { cwd: dir, detached: true, stdio: ["ignore", out, out], windowsHide: true });
-  child.unref();
-}
-
-/**
- * Resumes a run sitting at "awaiting_review" — Stage B (full text -> LLM
- * analysis -> catalog/wiki/outputs), for whichever candidates survived
- * review. Detached the same way as startResearchRun, for the same reason:
- * this can take minutes (full-text fetches + LLM calls across multiple
- * papers), so it's spawned and polled rather than awaited inline.
- */
-export function startResearchContinue(runId: string): void {
-  const dir = researchPipelineDir();
-  const cliPath = path.join(dir, "src", "cli.ts");
-
-  const logDir = path.join(dir, "raw", "runs");
-  fs.mkdirSync(logDir, { recursive: true });
-  const logPath = path.join(logDir, `${runId}.log`);
-  const out = fs.openSync(logPath, "a");
-
-  const args = ["--import=tsx", cliPath, "continue", "--run-id", runId];
-  const child = spawn(process.execPath, args, { cwd: dir, detached: true, stdio: ["ignore", out, out], windowsHide: true });
-  child.unref();
-}
-
-/** Extracts the `RESULT_JSON:{...}` line the CLI prints as its last line of output (see research-pipeline/src/cli.ts), for structured results instead of just an exit code. */
-function parseResultJson<T>(output: string): T | null {
-  const line = output.split("\n").reverse().find((l) => l.startsWith("RESULT_JSON:"));
-  if (!line) return null;
-  try {
-    return JSON.parse(line.slice("RESULT_JSON:".length)) as T;
-  } catch {
-    return null;
-  }
-}
-
-function runCli<T>(args: string[]): Promise<{ ok: boolean; output: string; result: T | null }> {
-  const dir = researchPipelineDir();
-  const cliPath = path.join(dir, "src", "cli.ts");
-
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, ["--import=tsx", cliPath, ...args], { cwd: dir, windowsHide: true });
-    let output = "";
-    child.stdout.on("data", (chunk) => (output += chunk.toString()));
-    child.stderr.on("data", (chunk) => (output += chunk.toString()));
-    child.on("close", (code) => resolve({ ok: code === 0, output, result: parseResultJson<T>(output) }));
-    child.on("error", (err) => resolve({ ok: false, output: `${output}\n${err.message}`, result: null }));
+  callDataService("/research/run", { method: "POST", body: JSON.stringify(params) }).catch((err) => {
+    console.error(`[research] failed to start run ${params.runId}:`, err);
   });
 }
 
-/**
- * Runs `research contribute ...` synchronously and waits for it to finish —
- * unlike startResearchRun (a whole discovery run, can take minutes, so it's
- * detached+polled), ingesting a single user-supplied paper is fast enough
- * (one paper's enrichment/full-text/analysis) to just await directly in the
- * API route. Captures stdout/stderr so a failure is reportable to the user
- * instead of silently disappearing, and parses the structured catalog entry
- * the CLI prints on success.
- */
-export function runContribute(params: {
-  region: string;
-  taxonGroup: string;
-  url?: string;
-  pdfPath?: string;
-}): Promise<{ ok: boolean; output: string; entry: CatalogEntryResult | null }> {
-  const args = ["contribute", "--region", params.region, "--taxon", params.taxonGroup];
-  if (params.url) args.push("--url", params.url);
-  if (params.pdfPath) args.push("--pdf-path", params.pdfPath);
-  return runCli<CatalogEntryResult>(args).then(({ ok, output, result }) => ({ ok, output, entry: result }));
+export function startResearchContinue(runId: string): void {
+  callDataService(`/research/run/${runId}/continue`, { method: "POST", body: JSON.stringify({}) }).catch((err) => {
+    console.error(`[research] failed to continue run ${runId}:`, err);
+  });
 }
 
 export interface CatalogEntryResult {
@@ -147,49 +46,196 @@ export interface CatalogEntryResult {
   discoveredVia: string;
 }
 
-/** Withdraws a manually-contributed paper — see research-pipeline's discovery/manualContribution.ts removeManualContribution (refuses to touch discovered/non-manual documents). */
-export function runRemoveContribution(slug: string): Promise<{ ok: boolean; removed: boolean; reason?: string }> {
-  return runCli<{ removed: boolean; reason?: string }>(["remove-contribution", "--slug", slug]).then(({ ok, result }) => ({
-    ok,
-    removed: result?.removed ?? false,
-    reason: result?.reason,
-  }));
+/**
+ * Ingests a user-supplied paper (link or already-uploaded local PDF path)
+ * via the remote service — single-paper ingestion is fast enough to await
+ * directly in the API route, unlike startResearchRun.
+ */
+export async function runContribute(params: {
+  region: string;
+  taxonGroup: string;
+  url?: string;
+  pdfPath?: string;
+}): Promise<{ ok: boolean; output: string; entry: CatalogEntryResult | null }> {
+  const baseUrl = process.env.DATA_SERVICE_URL;
+  const secret = process.env.DATA_SERVICE_SECRET;
+  if (!baseUrl || !secret) {
+    return { ok: false, output: "DATA_SERVICE_URL / DATA_SERVICE_SECRET are not configured.", entry: null };
+  }
+
+  try {
+    const form = new FormData();
+    form.set("region", params.region);
+    form.set("taxonGroup", params.taxonGroup);
+    if (params.url) form.set("url", params.url);
+    if (params.pdfPath) {
+      const buffer = await fs.readFile(params.pdfPath);
+      form.set("file", new Blob([buffer]), "contribution.pdf");
+    }
+
+    const res = await fetch(`${baseUrl}/research/contribute`, {
+      method: "POST",
+      headers: { "x-internal-secret": secret },
+      body: form,
+    });
+    const text = await res.text();
+    if (!res.ok) return { ok: false, output: text, entry: null };
+    const parsed = JSON.parse(text) as { ok: boolean; entry: CatalogEntryResult };
+    return { ok: parsed.ok, output: text, entry: parsed.entry ?? null };
+  } catch (err) {
+    return { ok: false, output: String(err), entry: null };
+  }
 }
 
-/** Excludes (or restores) a candidate from a run's pre-fulltext review pool — see research-pipeline's corpus/reviewStore.ts. Distinct from runSetDocumentExcluded below: this is pre-fulltext (Stage A), scoped to one run, and never touches catalog/ since these candidates haven't been analyzed/cataloged yet. */
-export function runExcludeCandidate(runId: string, slug: string, excluded: boolean): Promise<{ ok: boolean; excluded?: boolean; reason?: string }> {
-  const args = ["exclude-candidate", "--run-id", runId, "--slug", slug];
-  if (!excluded) args.push("--restore");
-  return runCli<{ ok: boolean; excluded?: boolean; reason?: string }>(args).then(({ ok, result }) => ({
-    ok: ok && Boolean(result?.ok),
-    excluded: result?.excluded,
-    reason: result?.reason,
-  }));
+/** Withdraws a manually-contributed paper. */
+export async function runRemoveContribution(slug: string): Promise<{ ok: boolean; removed: boolean; reason?: string }> {
+  try {
+    const result = await callDataService<{ removed: boolean; reason?: string }>("/research/contribute", {
+      method: "DELETE",
+      body: JSON.stringify({ slug }),
+    });
+    return { ok: true, removed: result.removed, reason: result.reason };
+  } catch (err) {
+    return { ok: false, removed: false, reason: String(err) };
+  }
 }
 
-/** Soft-deletes (or restores) a *discovered* document from region+taxon listings — see research-pipeline's corpus/catalogBuilder.ts setCatalogEntryExcluded. Unlike runRemoveContribution, this never touches raw/ and works on any document, not just manual contributions. */
-export function runSetDocumentExcluded(slug: string, excluded: boolean): Promise<{ ok: boolean; excluded?: boolean; reason?: string }> {
-  const args = ["exclude-document", "--slug", slug];
-  if (!excluded) args.push("--restore");
-  return runCli<{ ok: boolean; excluded?: boolean; reason?: string }>(args).then(({ ok, result }) => ({
-    ok: ok && Boolean(result?.ok),
-    excluded: result?.excluded,
-    reason: result?.reason,
-  }));
+/** Excludes (or restores) a candidate from a run's pre-fulltext review pool. */
+export async function runExcludeCandidate(runId: string, slug: string, excluded: boolean): Promise<{ ok: boolean; excluded?: boolean; reason?: string }> {
+  try {
+    const result = await callDataService<{ ok: boolean; excluded?: boolean; reason?: string }>("/research/exclude-candidate", {
+      method: "POST",
+      body: JSON.stringify({ runId, slug, excluded }),
+    });
+    return result;
+  } catch (err) {
+    return { ok: false, reason: String(err) };
+  }
 }
 
-export function researchPipelineRawDir(): string {
-  return path.join(researchPipelineDir(), "raw");
+/** Soft-deletes (or restores) a *discovered* document from region+taxon listings. */
+export async function runSetDocumentExcluded(slug: string, excluded: boolean): Promise<{ ok: boolean; excluded?: boolean; reason?: string }> {
+  try {
+    const result = await callDataService<{ ok: boolean; excluded?: boolean; reason?: string }>("/research/exclude-document", {
+      method: "POST",
+      body: JSON.stringify({ slug, excluded }),
+    });
+    return result;
+  } catch (err) {
+    return { ok: false, reason: String(err) };
+  }
 }
 
-export function researchPipelineCatalogDir(): string {
-  return path.join(researchPipelineDir(), "catalog");
+export interface RunStatus {
+  runId: string;
+  region: string;
+  taxonGroup: string;
+  phase: string;
+  startedAt: string;
+  updatedAt: string;
+  counts: Record<string, number>;
+  error?: string;
+  llmEnabled?: boolean;
+  sourceOutcomes?: Array<{
+    source: "scholar" | "curated_web_search" | "crossref" | "openalex";
+    status: "ok" | "empty" | "error";
+    count: number;
+    message?: string;
+  }>;
 }
 
-export function researchPipelineWikiDir(): string {
-  return path.join(researchPipelineDir(), "wiki");
+export async function fetchRunStatus(runId: string): Promise<RunStatus | null> {
+  try {
+    return await callDataService<RunStatus>(`/research/run/${runId}/status`);
+  } catch {
+    return null;
+  }
 }
 
-export function researchPipelineOutputsDir(): string {
-  return path.join(researchPipelineDir(), "outputs");
+export interface ReviewCandidateMetadata {
+  slug: string;
+  title: string;
+  doi?: string;
+  url?: string;
+  authors?: string;
+  year?: number;
+}
+
+export interface ReviewCandidateRecord {
+  metadata: ReviewCandidateMetadata;
+  score: number;
+  regionScore: number;
+  taxonScore: number;
+  documentType: "checklist" | "scientific_paper" | "other";
+  citable: boolean;
+  greySignalCredible?: boolean;
+  speciesRecordScore: number;
+  accessibilityScore: number;
+  excluded: boolean;
+}
+
+export async function fetchReviewCandidates(runId: string): Promise<ReviewCandidateRecord[] | null> {
+  try {
+    return await callDataService<ReviewCandidateRecord[] | null>(`/research/run/${runId}/candidates`);
+  } catch {
+    return null;
+  }
+}
+
+export interface CatalogEntry {
+  slug: string;
+  title: string;
+  doi?: string;
+  url?: string;
+  authors?: string;
+  year?: number;
+  llm_relevance?: number;
+  region_relevance?: number;
+  taxon_relevance?: number;
+  region: string[];
+  taxa: string[];
+  documentType: "checklist" | "scientific_paper" | "other";
+  greySignalCredible?: boolean;
+  historical: boolean;
+  has_coordinates: boolean;
+  discoveredVia: string;
+  excluded?: boolean;
+  flagged?: boolean;
+  flagReason?: string;
+  regionContainment?: "within" | "broader" | "unrelated" | "unverified";
+}
+
+export async function fetchCatalog(): Promise<CatalogEntry[]> {
+  try {
+    return await callDataService<CatalogEntry[]>("/research/catalog");
+  } catch {
+    return [];
+  }
+}
+
+export interface LlmAnalysis {
+  species?: Array<{
+    scientificName: string;
+    commonName?: string;
+    backboneCommonName?: string;
+    backboneValidated?: boolean;
+    flagged?: boolean;
+    flagReason?: string;
+    acceptedScientificName?: string;
+  }>;
+  coordinates?: Array<{ species?: string; lat: number; lng: number; outOfRangeSuspect?: boolean }>;
+}
+
+/** Batched fetch of each slug's latest LLM analysis — one round trip instead of N. */
+export async function fetchPapersAnalysis(slugs: string[]): Promise<Map<string, LlmAnalysis | null>> {
+  if (slugs.length === 0) return new Map();
+  try {
+    const out = await callDataService<Record<string, LlmAnalysis | null>>("/research/papers-analysis", {
+      method: "POST",
+      body: JSON.stringify({ slugs }),
+    });
+    return new Map(Object.entries(out));
+  } catch {
+    return new Map(slugs.map((slug) => [slug, null]));
+  }
 }

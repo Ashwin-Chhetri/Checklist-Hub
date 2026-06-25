@@ -49,3 +49,5 @@ public/data/*.zip
 public/data/**/*.zip
 **/*.sqlite
 **/*.sqlite3
+
+.vercel
