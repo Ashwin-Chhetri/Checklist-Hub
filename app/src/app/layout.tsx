@@ -16,6 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://checklisthub.in"),
   title: "Checklist Hub - Build Trusted Species Checklists",
   description:
     "Standardize biodiversity data with the industry's most rigorous taxonomy validation engine.",
