@@ -1,0 +1,364 @@
+<!DOCTYPE html><html class="light" lang="en" style="width: 1279px; height: 1024px; overflow: hidden; position: relative;"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Darwin Core Package Archive Review - Checklist Hub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Geist:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f5f3f3;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #dbdad9;
+        }
+        .active-tab-indicator {
+            position: relative;
+        }
+        .active-tab-indicator::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: #c63939;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-container": "#636262",
+                        "error-container": "#ffdad6",
+                        "secondary": "#5f5e5e",
+                        "on-surface": "#1b1c1c",
+                        "surface": "#fbf9f8",
+                        "on-background": "#1b1c1c",
+                        "surface-bright": "#fbf9f8",
+                        "secondary-container": "#e2dfde",
+                        "on-primary": "#ffffff",
+                        "primary": "#a41f24",
+                        "surface-container-low": "#f5f3f3",
+                        "primary-fixed": "#ffdad7",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "on-surface-variant": "#59413f",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-container": "#ffecea",
+                        "on-error": "#ffffff",
+                        "background": "#fbf9f8",
+                        "on-tertiary-container": "#f0f0f0",
+                        "on-primary-fixed": "#410004",
+                        "inverse-primary": "#ffb3ae",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "on-error-container": "#93000a",
+                        "outline-variant": "#e1bebc",
+                        "on-secondary-fixed-variant": "#474746",
+                        "inverse-on-surface": "#f2f0f0",
+                        "secondary-fixed": "#e5e2e1",
+                        "surface-container": "#efeded",
+                        "tertiary-fixed": "#e2e2e2",
+                        "on-primary-fixed-variant": "#8f0d18",
+                        "primary-fixed-dim": "#ffb3ae",
+                        "surface-dim": "#dbdad9",
+                        "tertiary": "#535555",
+                        "outline": "#8d706e",
+                        "inverse-surface": "#303031",
+                        "surface-container-highest": "#e4e2e2",
+                        "tertiary-container": "#6c6d6d",
+                        "on-secondary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#e9e8e7",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "surface-variant": "#e4e2e2",
+                        "surface-tint": "#b22a2c",
+                        "primary-container": "#c63939",
+                        "on-tertiary-fixed-variant": "#454747"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "md": "16px",
+                        "xl": "40px",
+                        "lg": "24px",
+                        "gutter": "24px",
+                        "xs": "4px",
+                        "container-max": "1280px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["JetBrains Mono"],
+                        "headline-lg": ["JetBrains Mono"],
+                        "body-lg": ["Geist"],
+                        "body-sm": ["Geist"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-lg-mobile": ["JetBrains Mono"],
+                        "code-md": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "code-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body-lg selection:bg-primary-container selection:text-white min-h-screen flex">
+<!-- Flushed Left Sidebar -->
+<aside class="w-64 h-screen flex-shrink-0 border-r border-surface-dim bg-surface-container-low flex flex-col sticky top-0 overflow-y-auto custom-scrollbar">
+<!-- Header inside sidebar -->
+<div class="p-4 border-b border-surface-dim bg-surface-container-low flex items-center gap-2">
+<img alt="Checklist Hub Logo" class="h-6 w-6 object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwMf_2w1Je5rT9FgZZdaEeZoTTsp_GU1bCHvx6XTgf1TypEmoyuRChSzNpnzEWl8p_Nr-2gAB05elQPH4VHz2hlGJHuj8UXRN1ZsZInCUzPJRO7zoB6ksGESr7lcujic0lJtiBCb9WHwvh6-j4d4HtiWHBKogeumy4i8756bYOd5pcX8jYUIoQOmk54uIbgB0g6cnRTVLCZDW7MCZ0y12kS9xTpqAvUZJbxzScejRd1uZgPK1HTJyzDatdkCB3tJTtdMRvCPrLfdfB">
+<span class="font-headline-md text-primary-container tracking-tight text-base">Checklist Hub</span>
+</div>
+<!-- Reviewers Section (Moved to top of sidebar) -->
+<section class="p-4 border-b border-surface-dim">
+<h3 class="font-label-caps text-[11px] text-secondary uppercase tracking-widest font-bold mb-4 flex justify-between items-center">
+            Reviewers
+            <span class="material-symbols-outlined text-[14px] cursor-pointer hover:text-primary-container">settings</span>
+</h3>
+<div class="space-y-3 font-body-sm text-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<img alt="Tenzing" class="w-5 h-5 rounded-full border border-surface-dim" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDus5xIf7oAh42K38Cr7LUK8mKm6a0WDGjjk-LMymYtKQKd67NeXJO41RwVRzz5o_ji-yL9_bQnd7XYCIZxr83xd9Q0Qgf9uyb6t3J-hXXTx8WppzUv5UOFjVXEWZNVGQqhZpu0v-txiOY-eInbKLtQlfY1GSBcIoGvAgcA-KantF0JUDqt-sKIoMIxF-f8OtiBkxPk11XxDYXoOBb9CCckCJonh-JCResfYddEnrMBpGBsmduRb4N9lolBZ01wy837TLOd4oYJipW1">
+<span class="font-medium text-on-surface">Tenzing L.</span>
+</div>
+<div class="flex items-center gap-1 text-emerald-600">
+<span class="material-symbols-outlined text-[12px]">check_circle</span>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<img alt="Pema" class="w-5 h-5 rounded-full border border-surface-dim" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC4pM3_b9h8X_otx7TbEWwMbUR71v_dNKaMiHNfJjzqipdo4hdeWjQNACUrvtJBGE1lnKnEWwPxsf7WdT0qJG0xUGc1FRoBqJyFa_mFP_mXhHLYEHrRHkNZU34p50qc6T9D2vMksIDlxSdSE1sOb76J_LGe8KPhgiEYOp0mXuvREeVSeQcOqbxQv4L0Wbj_mjknPsu6vPUWtPaPwkHewowNszJkkh3GdIHYv-zNN1BaWbz5vo-rbRxmrNzkiU20Z5BFEARdeL3Btkga">
+<span class="font-medium text-on-surface">Pema D.</span>
+</div>
+<div class="flex items-center gap-1 text-secondary">
+<span class="material-symbols-outlined text-[12px]">history</span>
+</div>
+</div>
+</div>
+<button class="w-full mt-4 py-2 bg-primary-container text-white text-[10px] font-label-caps uppercase rounded-sm hover:opacity-90 transition-opacity">
+            + Assign Reviewer
+        </button>
+</section>
+<!-- Package Contents -->
+<div class="py-4">
+<div class="font-label-caps text-[11px] font-bold text-secondary uppercase tracking-[0.1em] mb-3 px-4">Package Contents</div>
+<ul class="space-y-1 font-code-md text-[12px]">
+<li class="space-y-1">
+<div class="flex items-center gap-2 px-4 py-1.5 text-secondary font-label-caps text-[10px] tracking-widest uppercase">
+<span class="material-symbols-outlined text-[16px]">archive</span>
+<span class="">DwC-A Package</span>
+</div>
+<ul class="space-y-0.5">
+<li class="flex items-center justify-between px-4 py-2 bg-surface-container-high border-l-2 border-primary-container cursor-pointer group">
+<div class="flex items-center gap-3 text-on-surface">
+<span class="material-symbols-outlined text-[18px] text-primary-container">description</span>
+<span class="">taxon.txt</span>
+</div>
+<span class="text-[9px] bg-primary-container/10 text-primary-container px-1 rounded-sm font-bold">REQ</span>
+</li>
+<li class="flex items-center gap-3 px-4 py-2 text-secondary hover:bg-surface-container-highest hover:text-on-surface transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">description</span>
+<span class="">vernacularname.txt</span>
+</li>
+<li class="flex items-center gap-3 px-4 py-2 text-secondary hover:bg-surface-container-highest hover:text-on-surface transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">description</span>
+<span class="">distribution.txt</span>
+</li>
+<li class="flex items-center gap-3 px-4 py-2 text-secondary hover:bg-surface-container-highest hover:text-on-surface transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">description</span>
+<span class="">description.txt</span>
+</li>
+<li class="flex items-center gap-3 px-4 py-2 text-secondary hover:bg-surface-container-highest hover:text-on-surface transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[18px]">description</span>
+<span class="">resourcerelationship.txt</span>
+</li>
+<li class="flex items-center justify-between px-4 py-2 text-secondary hover:bg-surface-container-highest hover:text-on-surface transition-colors cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px]">code</span>
+<span class="">eml.xml</span>
+</div>
+<span class="text-[9px] text-secondary/50 font-bold">REQ</span>
+</li>
+<li class="flex items-center justify-between px-4 py-2 text-secondary hover:bg-surface-container-highest hover:text-on-surface transition-colors cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px]">code</span>
+<span class="">meta.xml</span>
+</div>
+<span class="text-[9px] text-secondary/50 font-bold">REQ</span>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<!-- Package Metadata (Moved into sidebar scroll) -->
+<div class="mt-auto border-t border-surface-dim p-4 bg-surface-container">
+<div class="font-label-caps text-[10px] font-bold text-secondary uppercase tracking-widest mb-3">Metadata</div>
+<div class="space-y-2 font-code-md text-[10px]">
+<div class="flex flex-col"><span class="text-secondary text-[8px] uppercase">Version</span><span class="text-on-surface">1.0.0-beta.2</span></div>
+<div class="flex flex-col"><span class="text-secondary text-[8px] uppercase">Generated</span><span class="text-on-surface">2024-10-24 14:32</span></div>
+<div class="flex flex-col"><span class="text-secondary text-[8px] uppercase">Size</span><span class="text-on-surface">4.2 MB</span></div>
+</div>
+</div>
+</aside>
+<!-- Main Wrapper -->
+<div class="flex-1 flex flex-col min-h-screen min-w-0">
+<!-- Top Navigation -->
+<header class="h-14 border-b border-surface-dim bg-surface-container-lowest flex items-center justify-between px-lg z-50 sticky top-0">
+<div class="flex items-center gap-4">
+
+</div>
+<div class="flex items-center gap-4">
+
+<button class="text-secondary hover:text-primary-container transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<img alt="User avatar" class="w-8 h-8 rounded-full border border-surface-dim" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAf1m1fcLnwxrhWQjn-pkxn5tAsotiB0rxQq9GGQDs-SrFjUSd0wcz_ga0Z9V_1TMSp1XUbnqnNLwfNTrvRzKPdIXlHn6M31spAPJXlXB--QUz12NJDxKsbxB0M_IpzGt_sEiImP-A9sp6ZyupdWYYM8U3x1jW-Vs_KFJYZsOwm2HInomMwqc_o51skN_jS5XFcMOo8Hbj_pi1IfEJqRdwNLkoHYeQzbTDUtVHX8z_S9eVE1gYMKi4p-OxAsurvTUCt4NMIpla1jQpb">
+</div>
+</header>
+<!-- Content Area -->
+<main class="flex-grow p-lg flex flex-col gap-lg">
+<!-- File Viewer: taxon.txt Content -->
+<div class="bg-surface-container-lowest border border-surface-dim overflow-hidden flex flex-col flex-grow">
+<div class="bg-surface-container-low px-md py-sm border-b border-surface-dim flex justify-between items-center">
+<div class="flex items-center gap-md font-code-md text-xs">
+<span class="font-bold text-on-surface">taxon.txt</span>
+<span class="text-secondary">| text/csv</span>
+<span class="text-secondary">| 2.4 MB</span>
+</div>
+<div class="flex items-center gap-sm">
+<button class="px-2 py-1 bg-surface-container-lowest border border-surface-dim hover:border-primary-container hover:text-primary-container transition-all text-[10px] font-label-caps text-secondary rounded-sm uppercase">Raw</button>
+</div>
+</div>
+<!-- High-density Data Grid -->
+<div class="overflow-auto custom-scrollbar flex-grow bg-surface-container-lowest flex font-code-md text-[13px] leading-6">
+  <!-- Line Number Gutter -->
+  <div class="flex-shrink-0 bg-surface-container-low border-r border-surface-dim px-3 py-4 text-right text-secondary/50 select-none">
+    <div class="">1</div>
+    <div class="">2</div>
+    <div class="">3</div>
+    <div class="">4</div>
+    <div class="">5</div>
+  </div>
+  <!-- Code Content -->
+  <div class="flex-grow py-4 overflow-x-auto">
+    <!-- Header Row -->
+    <div class="px-4 border-b border-surface-dim/30 bg-surface-container-low/50">
+      <span class="font-bold text-primary-container">taxonID</span>, 
+      <span class="font-bold text-primary-container">scientificName</span>, 
+      <span class="font-bold text-primary-container">acceptedNameUsageID</span>, 
+      <span class="font-bold text-primary-container">kingdom</span>, 
+      <span class="font-bold text-primary-container">phylum</span>, 
+      <span class="font-bold text-primary-container">class</span>, 
+      <span class="font-bold text-primary-container">order</span>, 
+      <span class="font-bold text-primary-container">family</span>, 
+      <span class="font-bold text-primary-container">genus</span>
+    </div>
+    <!-- Data Rows -->
+    <div class="hover:bg-surface-container-low transition-colors px-4">
+      <span class="text-on-surface">DWC:001</span>, 
+      <span class="italic text-secondary">"Panthera leo"</span>, 
+      <span class="text-on-surface">DWC:001</span>, 
+      <span class="text-on-surface">Animalia</span>, 
+      <span class="text-on-surface">Chordata</span>, 
+      <span class="text-on-surface">Mammalia</span>, 
+      <span class="text-on-surface">Carnivora</span>, 
+      <span class="text-on-surface">Felidae</span>, 
+      <span class="text-on-surface">Panthera</span>
+    </div>
+    <div class="hover:bg-surface-container-low transition-colors px-4">
+      <span class="text-on-surface">DWC:002</span>, 
+      <span class="italic text-secondary">"Panthera tigris"</span>, 
+      <span class="text-on-surface">DWC:002</span>, 
+      <span class="text-on-surface">Animalia</span>, 
+      <span class="text-on-surface">Chordata</span>, 
+      <span class="text-on-surface">Mammalia</span>, 
+      <span class="text-on-surface">Carnivora</span>, 
+      <span class="text-on-surface">Felidae</span>, 
+      <span class="text-on-surface">Panthera</span>
+    </div>
+    <div class="hover:bg-surface-container-low transition-colors px-4">
+      <span class="text-on-surface">DWC:003</span>, 
+      <span class="italic text-secondary">"Acinonyx jubatus"</span>, 
+      <span class="text-on-surface">DWC:003</span>, 
+      <span class="text-on-surface">Animalia</span>, 
+      <span class="text-on-surface">Chordata</span>, 
+      <span class="text-on-surface">Mammalia</span>, 
+      <span class="text-on-surface">Carnivora</span>, 
+      <span class="text-on-surface">Felidae</span>, 
+      <span class="text-on-surface">Acinonyx</span>
+    </div>
+    <div class="hover:bg-surface-container-low transition-colors px-4">
+      <span class="text-on-surface">DWC:004</span>, 
+      <span class="italic text-secondary">"Lynx lynx"</span>, 
+      <span class="text-on-surface">DWC:004</span>, 
+      <span class="text-on-surface">Animalia</span>, 
+      <span class="text-on-surface">Chordata</span>, 
+      <span class="text-on-surface">Mammalia</span>, 
+      <span class="text-on-surface">Carnivora</span>, 
+      <span class="text-on-surface">Felidae</span>, 
+      <span class="text-on-surface">Lynx</span>
+    </div>
+  </div>
+</div>
+</div>
+<!-- Action Area / Submit Review -->
+<div class="bg-surface-container-lowest border border-surface-dim p-lg flex flex-col gap-md">
+<div class="flex items-center gap-sm pb-sm border-b border-surface-dim">
+<span class="material-symbols-outlined text-secondary">rate_review</span>
+<h3 class="font-label-caps text-sm text-on-surface uppercase tracking-widest font-bold">Review Actions</h3>
+</div>
+<textarea class="w-full bg-surface-container-low border border-surface-dim rounded-sm p-3 font-body-sm text-sm focus:ring-1 focus:ring-primary-container focus:border-primary-container outline-none transition-all placeholder:text-secondary" placeholder="Provide final review notes or approval conditions..." rows="2"></textarea>
+<div class="flex items-center justify-between mt-sm">
+<div class="flex items-center gap-2 font-code-md text-[11px] text-secondary">
+<span class="material-symbols-outlined text-[16px]">info</span>
+                    Markdown supported
+                </div>
+<div class="flex items-center gap-3">
+<button class="bg-surface-container-lowest border border-surface-dim text-secondary px-4 py-1.5 rounded-sm font-label-caps text-xs uppercase hover:text-on-surface hover:border-secondary transition-all">Request Changes</button>
+<button class="bg-primary-container text-white px-4 py-1.5 rounded-sm font-label-caps text-xs uppercase hover:opacity-90 transition-all">Approve Package</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Simplified Footer -->
+<footer class="bg-surface-container-lowest border-t border-surface-dim">
+<div class="flex flex-col md:flex-row justify-between items-center px-lg py-md gap-md">
+<div class="flex items-center gap-lg">
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">© 2024 Biodiversity Informatics Group</span>
+</div>
+<div class="flex gap-xl">
+<a class="font-label-caps text-[10px] text-secondary hover:text-primary-container uppercase tracking-widest transition-all" href="#">Documentation</a>
+<a class="font-label-caps text-[10px] text-secondary hover:text-primary-container uppercase tracking-widest transition-all" href="#">Export Standards</a>
+<a class="font-label-caps text-[10px] text-secondary hover:text-primary-container uppercase tracking-widest transition-all" href="#">Citation Guide</a>
+</div>
+</div>
+</footer>
+</div>
+
+
+
+</body></html>

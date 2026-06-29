@@ -1,0 +1,357 @@
+@import "tailwindcss";
+
+@theme {
+  /* Colors - Technical Documentation Minimalist palette */
+  --color-brand: #c63939;
+  --color-primary: #a41f24;
+  --color-primary-container: #c63939;
+  --color-background: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-bright: #fbf9f8;
+  --color-surface-dim: #dbdad9;
+  --color-surface-container: #f8f8f8;
+  --color-surface-container-low: #f5f3f3;
+  --color-surface-container-high: #e9e8e7;
+  --color-surface-container-highest: #e4e2e2;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-variant: #e4e2e2;
+  --color-surface-tint: #b22a2c;
+
+  --color-on-background: #1b1c1c;
+  --color-on-surface: #1b1c1c;
+  --color-on-surface-variant: #4a4a4a;
+  --color-inverse-surface: #303031;
+  --color-inverse-on-surface: #f2f0f0;
+  --color-inverse-primary: #ffb3ae;
+
+  --color-outline: #8d706e;
+  --color-outline-variant: #e1bebc;
+
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #ffecea;
+  --color-on-primary-fixed: #410004;
+  --color-on-primary-fixed-variant: #8f0d18;
+  --color-primary-fixed: #ffdad7;
+  --color-primary-fixed-dim: #ffb3ae;
+
+  --color-secondary: #5f5e5e;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #e2dfde;
+  --color-on-secondary-container: #636262;
+  --color-secondary-fixed: #e5e2e1;
+  --color-secondary-fixed-dim: #c8c6c5;
+  --color-on-secondary-fixed: #1c1b1b;
+  --color-on-secondary-fixed-variant: #474746;
+
+  --color-tertiary: #535555;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #6c6d6d;
+  --color-on-tertiary-container: #f0f0f0;
+  --color-tertiary-fixed: #e2e2e2;
+  --color-tertiary-fixed-dim: #c6c6c7;
+  --color-on-tertiary-fixed: #1a1c1c;
+  --color-on-tertiary-fixed-variant: #454747;
+
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* Spacing tokens (additive to default scale) */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 40px;
+  --spacing-gutter: 24px;
+
+  /* Border radius tokens */
+  --radius-sm: 0.125rem;
+  --radius-DEFAULT: 0.125rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
+
+  /* Font families */
+  --font-code-md: var(--font-jetbrains-mono), monospace;
+  --font-headline-md: var(--font-jetbrains-mono), monospace;
+  --font-headline-lg: var(--font-jetbrains-mono), monospace;
+  --font-headline-lg-mobile: var(--font-jetbrains-mono), monospace;
+  --font-label-caps: var(--font-jetbrains-mono), monospace;
+  --font-body-sm: var(--font-geist), sans-serif;
+  --font-body-lg: var(--font-geist), sans-serif;
+
+  /* Font sizes (with line-height / weight / tracking) */
+  --text-code-md: 14px;
+  --text-code-md--line-height: 22px;
+  --text-code-md--font-weight: 400;
+
+  --text-headline-md: 20px;
+  --text-headline-md--line-height: 28px;
+  --text-headline-md--font-weight: 700;
+
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 22px;
+  --text-body-sm--font-weight: 400;
+
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 30px;
+  --text-body-lg--font-weight: 400;
+
+  --text-headline-lg-mobile: 32px;
+  --text-headline-lg-mobile--line-height: 40px;
+  --text-headline-lg-mobile--letter-spacing: -0.02em;
+  --text-headline-lg-mobile--font-weight: 700;
+
+  --text-headline-lg: 48px;
+  --text-headline-lg--line-height: 56px;
+  --text-headline-lg--letter-spacing: -0.02em;
+  --text-headline-lg--font-weight: 800;
+
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 16px;
+  --text-label-caps--letter-spacing: 0.05em;
+  --text-label-caps--font-weight: 700;
+}
+
+body {
+  font-family: var(--font-body-sm);
+  background-color: var(--color-surface);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Prevent scrolling when modal pages are open */
+html:has([data-modal="true"]) {
+  overflow: hidden;
+}
+
+.material-symbols-outlined {
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 300,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+@utility hard-shadow {
+  box-shadow: 6px 6px 0px 0px rgba(164, 31, 36, 1);
+}
+
+.shadow-hard {
+  box-shadow: 4px 4px 0px 0px rgba(198, 57, 57, 1);
+}
+
+.mono-text {
+  font-family: var(--font-jetbrains-mono);
+}
+
+/* Shared top navigation bar — keep consistent across all app pages */
+.app-header {
+  @apply h-14 sticky top-0 z-50 bg-surface/80 backdrop-blur-md border-b border-outline-variant flex items-center justify-between px-4;
+}
+
+.app-header-logo {
+  @apply h-10 w-10 object-contain;
+}
+
+.app-header-title {
+  @apply font-headline-md text-lg font-bold text-primary tracking-tight;
+}
+
+.app-header-btn {
+  @apply text-on-surface-variant hover:text-primary transition-colors w-8 h-8 flex items-center justify-center;
+}
+
+.app-header-avatar {
+  @apply w-8 h-8 border-2 border-outline-variant hover:border-primary transition-all rounded-full overflow-hidden flex items-center justify-center bg-slate-100;
+}
+
+/* Shared toolbar buttons — Publish / Add Species / Share */
+.btn-toolbar {
+  @apply bg-primary-container text-white px-4 py-2 rounded-sm text-xs font-code-md font-bold uppercase flex items-center gap-2 hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all;
+  box-shadow: 4px 4px 0px 0px rgba(198, 57, 57, 1);
+}
+
+.btn-toolbar-outline {
+  @apply border border-outline-variant px-4 py-2 rounded-sm text-xs font-code-md flex items-center gap-2 hover:bg-surface-container-low transition-colors;
+}
+
+/* Shared search input — used in toolbar rows above data tables */
+.search-input {
+  @apply pl-10 pr-4 py-2.5 bg-white border border-outline-variant rounded-sm text-sm font-code-md focus:border-primary focus:ring-1 focus:ring-primary outline-none w-80;
+}
+
+/* Compact dashboard-density search input variant */
+.search-input-sm {
+  @apply pl-8 pr-3 py-1.5 bg-white border border-outline-variant rounded-sm text-xs font-code-md focus:border-primary focus:ring-1 focus:ring-primary outline-none w-56;
+}
+
+/* Sticky table header — box-shadow instead of border-bottom so the line
+   stays crisp on scroll (border-collapse + sticky causes collapsed borders
+   to flicker/vanish on repaint). */
+.workbench-table-header {
+  @apply bg-white sticky top-0 z-10;
+  box-shadow: 0 1px 0 0 var(--color-outline-variant);
+}
+
+.status-pill {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.section-spacing {
+  margin-top: 40px;
+  margin-bottom: 40px;
+}
+
+.btn-primary {
+  @apply bg-primary-container text-white px-3 py-1.5 h-[36px] rounded-sm text-xs font-code-md font-medium flex items-center gap-2 transition-transform;
+  box-shadow: 4px 4px 0 rgba(164, 31, 36, 1);
+}
+
+.btn-primary:hover {
+  transform: translate(-1px, -1px);
+}
+
+.btn-primary:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 rgba(164, 31, 36, 1);
+}
+
+.form-label {
+  @apply font-body-sm text-base font-semibold text-on-surface-variant;
+}
+
+.btn-secondary {
+  @apply bg-surface text-on-surface px-3 py-1.5 h-[36px] rounded-sm border border-outline font-code-md text-xs tracking-[0.12em] flex items-center justify-center gap-2 transition-transform;
+  box-shadow: 4px 4px 0 rgba(141, 112, 110, 0.35);
+}
+
+.btn-secondary:hover {
+  transform: translate(-1px, -1px);
+}
+
+.btn-secondary:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 rgba(141, 112, 110, 0.35);
+}
+
+.step-label {
+  @apply font-label-caps text-label-caps text-on-surface-variant;
+}
+
+.btn-primary-cta {
+  @apply bg-primary-container text-white px-4 py-3 text-base font-bold hard-shadow flex items-center gap-2 justify-center hover:translate-x-[-2px] hover:translate-y-[-2px] transition-transform active:translate-x-[2px] active:translate-y-[2px];
+}
+
+.btn-secondary-cta {
+  @apply bg-white text-on-surface px-4 py-3 text-base font-semibold border border-outline hard-shadow flex items-center gap-2 justify-center text-center hover:translate-x-[-2px] hover:translate-y-[-2px] transition-transform active:translate-x-[2px] active:translate-y-[2px];
+}
+
+.nav-link {
+  @apply relative font-code-md text-code-md text-on-surface-variant;
+
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -8px;
+  width: 0;
+  height: 3px;
+  background: var(--color-primary);
+  box-shadow: 2px 2px 0 rgba(164, 31, 36, 0.25);
+  transition: width 0.2s ease;
+}
+
+.nav-link:hover {
+  color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.nav-link:hover::after {
+  width: 100%;
+}
+
+/* =========================================================
+   WORKBENCH SIDEBAR
+   Matches reference HTML
+========================================================= */
+
+.workbench-sidebar {
+  @apply w-44 bg-surface border-r border-outline-variant overflow-y-auto;
+}
+
+.workbench-sidebar-content {
+  @apply p-3 space-y-6;
+}
+
+.workbench-sidebar-section-title {
+  @apply font-label-caps text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-3 px-2;
+}
+
+.workbench-sidebar-item {
+  @apply w-full flex items-center justify-between px-2 py-1.5 text-xs text-slate-600 rounded transition-colors cursor-pointer hover:bg-surface-container-low hover:text-primary;
+
+  font-family: var(--font-geist), sans-serif;
+}
+
+.workbench-sidebar-item-active {
+  @apply bg-surface-container-low border border-outline shadow-sm text-primary-container;
+}
+
+.workbench-sidebar-item-left {
+  @apply flex items-center gap-2 min-w-0;
+}
+
+.workbench-sidebar-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px !important;
+  line-height: 18px;
+  flex-shrink: 0;
+
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 20;
+}
+
+.workbench-sidebar-count {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 9px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+@keyframes dialog-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-dialog-pop-in {
+  animation: dialog-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.workbench-sidebar-count-alert {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 9px;
+  line-height: 1;
+  @apply bg-red-50 text-red-600 px-1.5 rounded-full;
+}
