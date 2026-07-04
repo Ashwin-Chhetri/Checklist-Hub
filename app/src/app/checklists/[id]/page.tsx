@@ -20,8 +20,10 @@ import SettingsModal from "@/components/workbench/SettingsModal";
 import AddSpeciesDialog from "@/components/workbench/AddSpeciesDialog";
 import TeamModal from "@/components/workbench/TeamModal";
 import WatcherSetupDialog, { WatcherResultsDialog } from "@/components/workbench/WatcherDialog";
+import ExportDialog from "@/components/workbench/ExportDialog";
 import ActivityPanel, { type ActivityPanelMode } from "@/components/workbench/panels/ActivityPanel";
 import { useWatcher, useWatcherRuns } from "@/modules/watching/hooks/useWatcher";
+import { computeEvidenceQuality } from "@/modules/editor/utils/evidenceScore";
 import AppHeader from "@/components/shared/AppHeader";
 import Avatar from "@/components/shared/Avatar";
 import CollaboratorAvatarStack from "@/components/shared/CollaboratorAvatarStack";
@@ -34,9 +36,43 @@ import {
   REVIEW_STATUS_STYLES,
   TAXONOMY_STATUS_STYLES,
 } from "@/modules/editor/utils/badges";
-import type { EvidenceQuality, ReviewStatus, TaxonomyStatus } from "@/types/species.types";
+import type { EvidenceQuality, ReviewStatus, Species, TaxonomyStatus } from "@/types/species.types";
 import type { Checklist } from "@/types/checklist.types";
 import type { AppNotification, CollaboratorRole } from "@/types/collaboration.types";
+
+// Keeps each accepted-name row immediately followed by its own synonym
+// row(s) (same gbif_taxon_key) rather than letting sort/search scatter them —
+// otherwise a synonym and the accepted counterpart it was resolved against
+// can end up far apart in the list even though they're the same taxon.
+// Only reorders synonym rows relative to their accepted sibling; every other
+// row keeps its sorted position.
+function groupSynonymsWithAccepted(list: Species[]): Species[] {
+  const byTaxonKey = new Map<number, Species[]>();
+  for (const s of list) {
+    if (s.gbif_taxon_key == null) continue;
+    const group = byTaxonKey.get(s.gbif_taxon_key) ?? [];
+    group.push(s);
+    byTaxonKey.set(s.gbif_taxon_key, group);
+  }
+
+  const placed = new Set<string>();
+  const result: Species[] = [];
+  for (const s of list) {
+    if (placed.has(s.id)) continue;
+    result.push(s);
+    placed.add(s.id);
+    if (s.taxonomy_status === "accepted" && s.gbif_taxon_key != null) {
+      const synonymSiblings = (byTaxonKey.get(s.gbif_taxon_key) ?? []).filter(
+        (sibling) => sibling.taxonomy_status === "synonym" && !placed.has(sibling.id),
+      );
+      for (const sibling of synonymSiblings) {
+        result.push(sibling);
+        placed.add(sibling.id);
+      }
+    }
+  }
+  return result;
+}
 
 function fullRegionAddress(checklist: Checklist): string {
   const parts = [checklist.region_name, checklist.region_district, checklist.region_state, checklist.region_country]
@@ -62,7 +98,10 @@ const TAXONOMY_VIEWS: { id: WorkbenchViewId; label: string; icon: string }[] = [
 
 const DISCUSSION_NOTIFICATION_TYPES = new Set(["mention", "comment_reply", "comment_added"]);
 
-const EVIDENCE_QUALITY_OPTIONS: EvidenceQuality[] = ["high", "medium", "low", "insufficient"];
+// "insufficient" is a DB-level default but computeEvidenceQuality (which drives
+// what's actually shown in the Evidence column) only ever produces these 3 —
+// omitted here so the filter can't offer a value that never matches any row.
+const EVIDENCE_QUALITY_OPTIONS: EvidenceQuality[] = ["high", "medium", "low"];
 const TAXONOMY_STATUS_OPTIONS: TaxonomyStatus[] = ["accepted", "synonym", "authority_conflict", "unresolved"];
 const REVIEW_STATUS_OPTIONS: ReviewStatus[] = ["not_reviewed", "under_review", "reviewed", "accepted", "rejected"];
 const EVIDENCE_RANK: Record<EvidenceQuality, number> = { insufficient: 0, low: 1, medium: 2, high: 3 };
@@ -229,6 +268,7 @@ export default function WorkbenchPage() {
   const [watcherSetupOpen, setWatcherSetupOpen] = useState(false);
   const [watcherResultsRunId, setWatcherResultsRunId] = useState<string | null>(null);
   const [watcherInfoOpen, setWatcherInfoOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   // Deep link from the watcher alert email/notification:
   // /checklists/[id]?watcher_run=<id> opens that run's results dialog directly.
@@ -256,6 +296,17 @@ export default function WorkbenchPage() {
   const effectiveFilterCategory = availableFilterCategories.some((c) => c.id === filterCategory)
     ? filterCategory
     : availableFilterCategories[0].id;
+
+  // species.evidence_quality is never populated by any API route — the badge shown
+  // in the Evidence column is computed client-side from evidence.sources instead, so
+  // filtering/sorting must use that same computation rather than the always-empty field.
+  const evidenceQualityById = useMemo(() => {
+    const map = new Map<string, EvidenceQuality>();
+    for (const s of species) {
+      map.set(s.id, computeEvidenceQuality(s.evidence, s.class));
+    }
+    return map;
+  }, [species]);
 
   const familyCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -297,7 +348,7 @@ export default function WorkbenchPage() {
       list = list.filter((s) => filters.families.has(s.family ?? "Unclassified"));
     }
     if (filters.evidenceQuality.size > 0) {
-      list = list.filter((s) => filters.evidenceQuality.has(s.evidence_quality));
+      list = list.filter((s) => filters.evidenceQuality.has(evidenceQualityById.get(s.id) ?? "low"));
     }
     if (filters.taxonomyStatus.size > 0) {
       list = list.filter((s) => filters.taxonomyStatus.has(s.taxonomy_status));
@@ -306,7 +357,7 @@ export default function WorkbenchPage() {
       list = list.filter((s) => filters.reviewStatus.has(s.review_status));
     }
     return list;
-  }, [species, filters]);
+  }, [species, filters, evidenceQualityById]);
 
   const searchSuggestions = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
@@ -336,7 +387,9 @@ export default function WorkbenchPage() {
           cmp = (a.evidence?.occurrence_count ?? 0) - (b.evidence?.occurrence_count ?? 0);
           break;
         case "evidence":
-          cmp = EVIDENCE_RANK[a.evidence_quality] - EVIDENCE_RANK[b.evidence_quality];
+          cmp =
+            EVIDENCE_RANK[evidenceQualityById.get(a.id) ?? "low"] -
+            EVIDENCE_RANK[evidenceQualityById.get(b.id) ?? "low"];
           break;
       }
       return sort.dir === "asc" ? cmp : -cmp;
@@ -345,8 +398,8 @@ export default function WorkbenchPage() {
     // Float pinned rows to the top, preserving their relative sort order.
     const pinned = sorted.filter((s) => pinnedIds.has(s.id));
     const unpinned = sorted.filter((s) => !pinnedIds.has(s.id));
-    return [...pinned, ...unpinned];
-  }, [filteredSpecies, deferredSearch, searchIndex, sort, pinnedIds]);
+    return [...groupSynonymsWithAccepted(pinned), ...groupSynonymsWithAccepted(unpinned)];
+  }, [filteredSpecies, deferredSearch, searchIndex, sort, pinnedIds, evidenceQualityById]);
 
   const activeFilterCount =
     filters.families.size + filters.evidenceQuality.size + filters.taxonomyStatus.size + filters.reviewStatus.size;
@@ -889,6 +942,22 @@ export default function WorkbenchPage() {
                 </div>
               </div>
             </section>
+
+            {/* EXPORT */}
+
+            <section>
+              <h3 className="workbench-sidebar-section-title">Export</h3>
+
+              <div className="flex flex-col gap-3 px-2">
+                <button
+                  onClick={() => setExportOpen(true)}
+                  className="w-fit bg-primary-container text-white px-2.5 py-1 rounded-sm text-[10px] font-code-md font-bold uppercase tracking-wide transition-transform"
+                  style={{ boxShadow: "3px 3px 0 rgba(164, 31, 36, 1)" }}
+                >
+                  Export
+                </button>
+              </div>
+            </section>
           </div>
         </aside>
 
@@ -1336,6 +1405,14 @@ export default function WorkbenchPage() {
           checklistId={checklistId}
           runId={watcherResultsRunId}
           onClose={() => setWatcherResultsRunId(null)}
+        />
+      )}
+
+      {exportOpen && (
+        <ExportDialog
+          species={visibleSpecies}
+          fileBaseName={checklist?.title ?? "checklist"}
+          onClose={() => setExportOpen(false)}
         />
       )}
     </div>

@@ -12,6 +12,7 @@ import { computeEvidenceQuality } from "@/modules/editor/utils/evidenceScore";
 import { useResolveTaxonomy } from "@/modules/taxonomy/hooks/useResolveTaxonomy";
 import { useResolveConflict } from "@/modules/taxonomy/hooks/useResolveConflict";
 import { sortConflictsGbifFirst } from "@/modules/taxonomy/utils/sortConflicts";
+import EvidenceStrengthDialog from "@/components/workbench/EvidenceStrengthDialog";
 
 interface SpeciesRowProps {
   species: Species;
@@ -105,17 +106,20 @@ function rowClassName(species: Species, isActive: boolean, isPinned: boolean): s
   if (species.review_status === "rejected") {
     return "bg-slate-50/50 opacity-60 hover:bg-slate-100 border-l-2 border-l-transparent hover:border-l-slate-400";
   }
+  // Taxonomy status drives a full-row highlight: red for an active conflict,
+  // yellow for anything else that still needs a decision (outdated name,
+  // no backbone match), green once the taxonomy is clean/accepted.
   if (species.taxonomy_status === "authority_conflict") {
-    return "hover:bg-amber-50/50 border-l-2 border-l-transparent hover:border-l-amber-500";
+    return "bg-red-50/70 hover:bg-red-50 border-l-2 border-l-red-500";
   }
   if (species.taxonomy_status === "synonym") {
-    return "hover:bg-brand/[0.02] border-l-2 border-l-transparent";
+    return "bg-amber-50/70 hover:bg-amber-50 border-l-2 border-l-amber-500";
   }
   if (species.taxonomy_status === "unresolved") {
-    return "hover:bg-slate-50/50 border-l-2 border-l-transparent hover:border-l-slate-400";
+    return "bg-amber-50/40 hover:bg-amber-50/60 border-l-2 border-l-amber-400";
   }
-  if (species.review_status === "accepted") {
-    return "bg-green-50/50 hover:bg-green-50 border-l-2 border-l-transparent hover:border-l-green-600";
+  if (species.taxonomy_status === "accepted") {
+    return "bg-green-50/70 hover:bg-green-50 border-l-2 border-l-green-500";
   }
   return "hover:bg-brand/[0.02] border-l-2 border-l-transparent hover:border-l-brand";
 }
@@ -151,6 +155,7 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
   // Taxonomic Status rows.
   const [synonymsExpanded, setSynonymsExpanded] = useState(false);
   const [statusExpanded, setStatusExpanded] = useState(false);
+  const [evidenceStrengthInfoOpen, setEvidenceStrengthInfoOpen] = useState(false);
   const reviewStyle = REVIEW_STATUS_STYLES[species.review_status];
   // Merge evidence sources from related rows (e.g. eBird + GBIF when deduplicated into one row).
   const sources = [
@@ -284,6 +289,7 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
   );
 
   return (
+    <>
     <tr
       ref={ref}
       data-index={rowIndex}
@@ -395,9 +401,19 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
             <span className={`status-pill ${evidenceStyle.pillClass} font-bold mono-text text-[9px]`}>
               {evidenceStyle.label}
             </span>
-            <span className={`material-symbols-outlined text-[14px] ${evidenceStyle.iconClass}`}>
-              {evidenceStyle.icon}
-            </span>
+            <button
+              type="button"
+              title="How is evidence strength determined?"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEvidenceStrengthInfoOpen(true);
+              }}
+              className={evidenceStyle.iconClass}
+            >
+              <span className="material-symbols-outlined text-[14px]">
+                {evidenceStyle.icon}
+              </span>
+            </button>
           </div>
 
           {/* For conflict rows, show one evidence container per scientific name */}
@@ -488,10 +504,12 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
                     </span>
                   </div>
                 )}
-                <div className="flex items-baseline gap-1">
-                  <span>Publication:</span>
-                  <span className="text-sm font-bold text-on-surface ml-auto">{publicationCount.toLocaleString()}</span>
-                </div>
+                {publicationCount > 0 && (
+                  <div className="flex items-baseline gap-1">
+                    <span>Publication:</span>
+                    <span className="text-sm font-bold text-on-surface ml-auto">{publicationCount.toLocaleString()}</span>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -1044,6 +1062,10 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
         </div>
       </td>
     </tr>
+    {evidenceStrengthInfoOpen && (
+      <EvidenceStrengthDialog onClose={() => setEvidenceStrengthInfoOpen(false)} />
+    )}
+    </>
   );
 });
 

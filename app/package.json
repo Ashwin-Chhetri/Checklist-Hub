@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.19.5",
+    "@remotion/player": "^4.0.484",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",
     "@tanstack/react-query": "^5.101.0",
@@ -20,6 +21,7 @@
     "better-sqlite3": "^12.10.0",
     "canvas-confetti": "^1.9.4",
     "d3-geo": "^3.1.1",
+    "exceljs": "^4.4.0",
     "gsap": "^3.15.0",
     "idb": "^8.0.3",
     "jszip": "^3.10.1",
@@ -27,6 +29,7 @@
     "nodemailer": "^9.0.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "remotion": "^4.0.484",
     "topojson-client": "^3.1.0",
     "unzipper": "^0.12.3",
     "xlsx": "^0.18.5",
