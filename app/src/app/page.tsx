@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import SwapWord from "@/components/landing/SwapWord";
-import DotWorldMap from "@/components/landing/DotWorldMap";
 import SiteNavbar from "@/components/shared/SiteNavbar";
 import SiteFooter from "@/components/shared/SiteFooter";
+
+// Decorative, desktop-only background (hidden on mobile) that pulls in
+// d3-geo/topojson-client/gsap and fetches a world-atlas file at runtime.
+// Loading it lazily keeps that weight off the critical bundle that blocks
+// hydration of the actual hero text (the real LCP element).
+const DotWorldMap = dynamic(() => import("@/components/landing/DotWorldMap"), {
+  ssr: false,
+});
 
 const emailCards = [
   {

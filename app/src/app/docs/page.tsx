@@ -58,7 +58,13 @@ function DocsImage({ src, alt }: { src: string; alt: string }) {
   return (
     <div className="border border-outline-variant bg-white p-lg mt-6">
       <div className="relative w-full aspect-[16/10]">
-        <Image src={src} alt={alt} fill className="object-contain" />
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          sizes="(min-width: 768px) 700px, 100vw"
+          className="object-contain"
+        />
       </div>
     </div>
   );

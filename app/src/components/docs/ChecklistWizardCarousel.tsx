@@ -128,7 +128,13 @@ export default function ChecklistWizardCarousel() {
 
         {slide.image && (
           <div className="relative w-full aspect-[16/10] border border-outline-variant shrink-0">
-            <Image src={slide.image} alt={slide.imageAlt ?? ""} fill className="object-contain" />
+            <Image
+              src={slide.image}
+              alt={slide.imageAlt ?? ""}
+              fill
+              sizes="(min-width: 768px) 700px, 100vw"
+              className="object-contain"
+            />
           </div>
         )}
 
@@ -144,7 +150,13 @@ export default function ChecklistWizardCarousel() {
             <div className="flex gap-3">
               {slide.highlight.images.map((img) => (
                 <div key={img.src} className="relative flex-1 h-40 border border-outline-variant bg-white">
-                  <Image src={img.src} alt={img.alt} fill className="object-contain" />
+                  <Image
+                    src={img.src}
+                    alt={img.alt}
+                    fill
+                    sizes="(min-width: 768px) 340px, 45vw"
+                    className="object-contain"
+                  />
                 </div>
               ))}
             </div>
