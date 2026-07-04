@@ -72,11 +72,18 @@ const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
+      "@type": "Person",
+      "@id": `${SITE_URL}/#founder`,
+      name: "Ashwin Chhetri",
+      email: "mailto:ashwinchhetri272@gmail.com",
+    },
+    {
       "@type": "Organization",
       "@id": `${SITE_URL}/#organization`,
       name: SITE_NAME,
       url: SITE_URL,
       logo: `${SITE_URL}/res/landing/checklist_hub_logo.png`,
+      founder: { "@id": `${SITE_URL}/#founder` },
     },
     {
       "@type": "WebSite",
@@ -88,15 +95,13 @@ const jsonLd = {
     {
       "@type": "SoftwareApplication",
       name: SITE_NAME,
-      applicationCategory: "ScienceApplication",
+      applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       description: SITE_DESCRIPTION,
       url: SITE_URL,
-      offers: {
-        "@type": "Offer",
-        price: "0",
-        priceCurrency: "USD",
-      },
+      datePublished: "2026-06-29",
+      dateModified: "2026-07-04",
+      author: { "@id": `${SITE_URL}/#founder` },
     },
   ],
 };
@@ -109,6 +114,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geist.variable} ${jetbrainsMono.variable}`}>
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
           rel="stylesheet"

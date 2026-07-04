@@ -38,6 +38,17 @@ const navGroups: NavGroup[] = [
       { slug: "discussion-pinging", label: "Discussion & Pinging", icon: "forum" },
     ],
   },
+  {
+    label: "Guides",
+    links: [
+      { slug: "what-is-a-gbif-checklist", label: "What is a GBIF checklist?", icon: "help" },
+      {
+        slug: "how-to-publish-darwin-core-archive-to-gbif",
+        label: "Publish a DwC-A to GBIF",
+        icon: "menu_book",
+      },
+    ],
+  },
 ];
 
 const highlights = [

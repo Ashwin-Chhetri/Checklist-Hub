@@ -1,0 +1,15 @@
+# Checklist Hub
+
+> Checklist Hub is a collaborative platform for building evidence-based species checklists. Biodiversity researchers, taxonomists, and reviewers import species data, validate taxonomy against the GBIF Backbone and Catalogue of Life, gather evidence from GBIF, iNaturalist, eBird, and literature, review as a team, and publish a Darwin Core Archive to a GBIF-registered IPT installation.
+
+Every species on a checklist is treated as a decision record — identity, taxonomy, evidence, and review history — not just a row in a spreadsheet. No species is accepted without at least one expert reviewer signing off, and nothing is published or updated automatically.
+
+## Product
+
+- [Homepage](https://checklisthub.in/): overview, workflow summary, and frequently asked questions about species checklists, evidence scoring, and GBIF publishing.
+- [About](https://checklisthub.in/about): what Checklist Hub does and who it's for.
+- [Docs](https://checklisthub.in/docs): full how-it-works guide — importing and validating species, gathering evidence, the review Workbench, the Watcher (ongoing monitoring), collaboration and invites, history and discussion, and publishing a Darwin Core Archive through an IPT.
+
+## Contact
+
+- [Contact](https://checklisthub.in/contact): support, feedback, and partnership inquiries.

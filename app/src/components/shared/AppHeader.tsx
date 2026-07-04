@@ -46,6 +46,7 @@ export default function AppHeader() {
           alt=""
           fill
           priority
+          sizes="40px"
           className="object-contain scale-130 origin-center"
           style={{ opacity: isIconReady ? 0 : 0.9 }}
         />

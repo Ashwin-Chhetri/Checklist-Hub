@@ -37,6 +37,22 @@ export default function AboutPage() {
               with a record of why each species was included.
             </p>
 
+            <div className="border border-outline-variant bg-white p-lg mb-xl">
+              <h2 className="font-headline-md text-[18px] uppercase tracking-tight mb-3">
+                Built by
+              </h2>
+              <p className="font-body-sm text-body-sm text-secondary">
+                Checklist Hub is built by{" "}
+                <a
+                  href="mailto:ashwinchhetri272@gmail.com"
+                  className="text-primary underline underline-offset-4 hover:opacity-80"
+                >
+                  Ashwin Chhetri
+                </a>
+                .
+              </p>
+            </div>
+
             <div className="border border-outline-variant bg-white p-lg">
               <h2 className="font-headline-md text-[18px] uppercase tracking-tight mb-3">
                 Get in touch

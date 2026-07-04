@@ -28,6 +28,12 @@ export default function SiteFooter() {
           </Link>
           <Link
             className="text-secondary font-code-md text-code-md hover:text-primary transition-all underline underline-offset-4"
+            href="/privacy"
+          >
+            Privacy Policy
+          </Link>
+          <Link
+            className="text-secondary font-code-md text-code-md hover:text-primary transition-all underline underline-offset-4"
             href="/contact"
           >
             Contact Us
