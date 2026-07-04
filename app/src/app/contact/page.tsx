@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import SiteNavbar from "@/components/shared/SiteNavbar";
 import SiteFooter from "@/components/shared/SiteFooter";
+
+export const metadata: Metadata = {
+  title: "Contact",
+  description: "Get in touch with the Checklist Hub team for support, feedback, or partnership inquiries.",
+  alternates: { canonical: "/contact" },
+};
 
 const CONTACT_EMAIL = "checklisthub.review@gmail.com";
 

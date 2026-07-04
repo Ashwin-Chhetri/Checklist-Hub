@@ -338,7 +338,7 @@ function ContributeDialog({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div className="flex flex-col gap-3 mb-4">
           <div
             onClick={() => fileInputRef.current?.click()}
             onDragOver={(e) => {
@@ -371,29 +371,25 @@ function ContributeDialog({
             />
           </div>
 
-          <div className="border border-outline-variant bg-white flex flex-col items-center justify-center gap-1.5 py-6 px-3">
-            <span className="material-symbols-outlined text-on-surface-variant text-[28px]">link</span>
-            <p className="text-xs text-on-surface-variant text-center">Or paste a DOI / PDF link</p>
-            <div className="flex items-center gap-2 w-full max-w-xs">
-              <input
-                type="text"
-                value={url}
-                onChange={(e) => {
-                  setUrl(e.target.value);
-                  if (contributionSucceeded || contributionError) reset();
-                }}
-                placeholder="https://doi.org/..."
-                className="flex-1 text-xs border border-outline-variant rounded-sm px-2 py-1.5 bg-white"
-              />
-              <button
-                type="button"
-                onClick={handleUrlSubmit}
-                disabled={isContributing || !url.trim()}
-                className="mono-text text-[10px] font-bold uppercase px-3 py-1.5 rounded-sm border border-outline-variant hover:bg-surface-container-low disabled:opacity-50"
-              >
-                Add
-              </button>
-            </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={url}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                if (contributionSucceeded || contributionError) reset();
+              }}
+              placeholder="Or paste a DOI / PDF link"
+              className="flex-1 text-xs border border-outline-variant rounded-sm px-3 py-2 bg-white"
+            />
+            <button
+              type="button"
+              onClick={handleUrlSubmit}
+              disabled={isContributing || !url.trim()}
+              className="shrink-0 mono-text text-[10px] font-bold uppercase px-3 py-2 rounded-sm border border-outline-variant hover:bg-surface-container-low disabled:opacity-50"
+            >
+              Add
+            </button>
           </div>
         </div>
 

@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import SiteNavbar from "@/components/shared/SiteNavbar";
 import SiteFooter from "@/components/shared/SiteFooter";
+
+export const metadata: Metadata = {
+  title: "Terms of Service",
+  description: "Terms of Service for using Checklist Hub.",
+  alternates: { canonical: "/terms" },
+};
 
 const sections = [
   {

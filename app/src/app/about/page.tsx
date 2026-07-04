@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import SiteNavbar from "@/components/shared/SiteNavbar";
 import SiteFooter from "@/components/shared/SiteFooter";
+
+export const metadata: Metadata = {
+  title: "About",
+  description:
+    "Checklist Hub turns raw species lists into evidence-based, reviewer-approved checklists — validated taxonomy, aggregated evidence, and a transparent decision trail, published straight to GBIF.",
+  alternates: { canonical: "/about" },
+};
 
 export default function AboutPage() {
   return (
