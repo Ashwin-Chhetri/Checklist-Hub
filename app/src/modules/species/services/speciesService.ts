@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { parseJsonResponse } from "@/lib/http/parseJsonResponse";
 import type { CreateChecklistSpeciesInput } from "@/types/checklist.types";
 import type { ReviewStatus, Species } from "@/types/species.types";
 
@@ -54,9 +55,5 @@ export async function addSpeciesToChecklist(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ species }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error ?? "Failed to add species.");
-  }
-  return res.json();
+  return parseJsonResponse<AddSpeciesResult>(res, "Failed to add species.");
 }

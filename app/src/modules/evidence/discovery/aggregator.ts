@@ -111,24 +111,38 @@ export async function aggregateInventory(ctx: DiscoveryContext, runs: ProviderRu
     mergeRecord(species, stamped);
   }
 
-  // A record can land in an "unresolved" (name-keyed) bucket even though
-  // another provider's record for the very same species resolved cleanly —
-  // e.g. one source supplies a GBIF key that matches the backbone while
-  // another only sends a raw name string the backbone lookup couldn't
-  // exact-match. Left alone, that produces two InventorySpecies entries
-  // sharing the same acceptedName, which breaks everything keyed off it
-  // (the species table's React key, the selection Map, etc — this is what
-  // surfaces as a "two children with the same key" warning). Fold any such
-  // unresolved bucket into the resolved bucket with the same accepted name.
-  const resolvedByName = new Map<string, InventorySpecies>();
-  for (const candidate of buckets.values()) {
-    if (!candidate.unresolved) resolvedByName.set(candidate.acceptedName.trim().toLowerCase(), candidate);
+  // Two different buckets can still end up with the same accepted name:
+  // - an "unresolved" (name-keyed) bucket alongside a resolved bucket for the
+  //   same species, when one provider supplies a GBIF key the backbone
+  //   matches while another only sends a raw name string that doesn't
+  //   exact-match; or
+  // - two *resolved* buckets with different taxonKeys that nonetheless share
+  //   a canonical name (e.g. distinct backbone entries reconciled
+  //   differently across ranks/synonym chains — common in large scopes like
+  //   Tracheophyta).
+  // Left alone, either case produces two InventorySpecies entries sharing the
+  // same acceptedName, which breaks everything keyed off it (the species
+  // table's React key, the selection Map, etc — this is what surfaces as a
+  // "two children with the same key" warning). Collapse every bucket down to
+  // one per accepted name, preferring a resolved bucket as the merge target.
+  const canonicalKeyByName = new Map<string, string>();
+  for (const [key, candidate] of buckets) {
+    const nameKey = candidate.acceptedName.trim().toLowerCase();
+    const existingKey = canonicalKeyByName.get(nameKey);
+    if (!existingKey) {
+      canonicalKeyByName.set(nameKey, key);
+      continue;
+    }
+    const existing = buckets.get(existingKey)!;
+    if (existing.unresolved && !candidate.unresolved) canonicalKeyByName.set(nameKey, key);
   }
   for (const [key, candidate] of [...buckets.entries()]) {
-    if (!candidate.unresolved) continue;
-    const match = resolvedByName.get(candidate.acceptedName.trim().toLowerCase());
-    if (!match) continue;
-    for (const record of candidate.records) mergeRecord(match, record);
+    const nameKey = candidate.acceptedName.trim().toLowerCase();
+    const targetKey = canonicalKeyByName.get(nameKey);
+    if (!targetKey || targetKey === key) continue;
+    const target = buckets.get(targetKey);
+    if (!target) continue;
+    for (const record of candidate.records) mergeRecord(target, record);
     buckets.delete(key);
   }
 

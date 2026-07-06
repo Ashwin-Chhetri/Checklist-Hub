@@ -1,7 +1,35 @@
 import { createClient } from "@/lib/supabase/client";
+import { parseJsonResponse } from "@/lib/http/parseJsonResponse";
+import { addSpeciesToChecklist } from "@/modules/species/services/speciesService";
 import type { Checklist, ChecklistPublicationDraft, CreateChecklistInput } from "@/types/checklist.types";
 import type { ChecklistInvite, Collaborator, Profile } from "@/types/collaboration.types";
 import type { WatchFrequency } from "@/types/watching.types";
+
+// Keep the initial POST body (and each follow-up append) small enough to
+// stay well under typical platform request-body limits (e.g. Vercel's
+// ~4.5MB) — a checklist with tens of thousands of species, each carrying
+// classification/occurrence/source-link/revision data, can otherwise
+// balloon a single JSON payload past that limit and come back as a
+// plain-text 413 instead of the created checklist.
+const SPECIES_BATCH_SIZE = 300;
+// Bound how many batches run concurrently so large (50k+ species) checklists
+// don't take one request each in strict sequence, without opening so many
+// connections at once that we trip a different rate limit.
+const BATCH_CONCURRENCY = 4;
+
+async function runInBatches<T>(items: T[], batchSize: number, concurrency: number, run: (batch: T[]) => Promise<void>) {
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += batchSize) batches.push(items.slice(i, i + batchSize));
+
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < batches.length) {
+      const batch = batches[nextIndex++];
+      await run(batch);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, worker));
+}
 
 export interface ChecklistCollaboratorProfile {
   id: string;
@@ -94,18 +122,28 @@ export async function getChecklist(checklistId: string): Promise<Checklist> {
 }
 
 export async function createChecklist(input: CreateChecklistInput): Promise<Checklist> {
+  const allSpecies = input.species ?? [];
+  const firstBatch = allSpecies.slice(0, SPECIES_BATCH_SIZE);
+  const remaining = allSpecies.slice(SPECIES_BATCH_SIZE);
+
   const response = await fetch("/api/checklists", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, species: firstBatch, totalSpeciesCount: allSpecies.length }),
   });
 
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error(body.error ?? "Failed to create checklist.");
+  const body = await parseJsonResponse<{ checklist: Checklist }>(response, "Failed to create checklist.");
+  const checklist = body.checklist;
+
+  // The checklist now exists with its first batch of species — append the
+  // rest in further size-capped requests instead of one all-or-nothing POST.
+  if (remaining.length > 0) {
+    await runInBatches(remaining, SPECIES_BATCH_SIZE, BATCH_CONCURRENCY, (batch) =>
+      addSpeciesToChecklist(checklist.id, batch).then(() => undefined),
+    );
   }
 
-  return body.checklist as Checklist;
+  return checklist;
 }
 
 export async function getChecklistCollaborators(checklistId: string): Promise<Collaborator[]> {
@@ -177,12 +215,10 @@ export async function inviteCollaborator(
     body: JSON.stringify(input),
   });
 
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error(body.error ?? "Failed to invite collaborator.");
-  }
-
-  return body;
+  return parseJsonResponse<{ ok: boolean; matched: boolean; email: string }>(
+    response,
+    "Failed to invite collaborator.",
+  );
 }
 
 export async function removeCollaborator(checklistId: string, userId: string): Promise<{ ok: boolean }> {
@@ -190,12 +226,7 @@ export async function removeCollaborator(checklistId: string, userId: string): P
     method: "DELETE",
   });
 
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error(body.error ?? "Failed to remove collaborator.");
-  }
-
-  return body;
+  return parseJsonResponse<{ ok: boolean }>(response, "Failed to remove collaborator.");
 }
 
 export type EmailLookupResult = { matched: true; profile: Profile } | { matched: false; verified: boolean };
@@ -206,11 +237,7 @@ export type EmailLookupResult = { matched: true; profile: Profile } | { matched:
  */
 export async function lookupEmail(email: string): Promise<EmailLookupResult> {
   const response = await fetch(`/api/users/email-lookup?email=${encodeURIComponent(email)}`);
-  const body = await response.json();
-  if (!response.ok) {
-    throw new Error(body.error ?? "Failed to look up email.");
-  }
-  return body as EmailLookupResult;
+  return parseJsonResponse<EmailLookupResult>(response, "Failed to look up email.");
 }
 
 export async function searchProfiles(query: string, excludeIds: string[] = []): Promise<Profile[]> {

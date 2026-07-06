@@ -19,7 +19,7 @@ export function useTaxonomicScopeSuggestion(title: string) {
   const [debounced, setDebounced] = useState(title.trim());
 
   useEffect(() => {
-    const handle = setTimeout(() => setDebounced(title.trim()), 500);
+    const handle = setTimeout(() => setDebounced(title.trim()), 300);
     return () => clearTimeout(handle);
   }, [title]);
 

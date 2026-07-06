@@ -14,6 +14,7 @@ import {
 import type { CollaboratorInviteInput, TaxonomicScope } from "@/types/checklist.types";
 import { TaxonomicScopeSelector } from "@/components/checklist-wizard/step1/TaxonomicScopeSelector";
 import { useTaxonomicScopeSuggestion } from "@/modules/taxonomy/hooks/useTaxonomicScopeSuggestion";
+import { matchSpeciesName } from "@/modules/taxonomy/services/taxonomyApi";
 import { RegionInput, type RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
 import { SpeciesDiscoveryPanel } from "@/components/checklist-wizard/step2/discovery/SpeciesDiscoveryPanel";
 import { SpeciesInventoryPanel } from "@/components/checklist-wizard/step2/discovery/SpeciesInventoryPanel";
@@ -35,6 +36,23 @@ const STEPS = [
   { id: 4, label: "Collab" },
   { id: 5, label: "Create" },
 ];
+
+const SCOPE_RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"] as const;
+
+/** Renders a scope's ranks as a wrapping breadcrumb (e.g. Animalia › Chordata › Aves) instead of a truncated bracketed string. */
+function ScopeBreadcrumb({ classification }: { classification: TaxonomicScope }) {
+  const names = SCOPE_RANKS.map((rank) => classification[rank]).filter((name): name is string => Boolean(name));
+  return (
+    <span className="flex flex-wrap items-center text-on-surface-variant ">
+      {names.map((name, i) => (
+        <span key={`${name}-${i}`} className="flex items-center">
+          {i > 0 && <span className="material-symbols-outlined scale-75">chevron_right</span>}
+          {name}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 const DEFAULT_REGION: RegionValue = {
   region_name: "",
@@ -114,9 +132,24 @@ export default function NewChecklistPage() {
 
   function applyScopeSuggestion() {
     if (!suggestedScope) return;
-    setTaxonomicScope(suggestedScope.classification);
-    setDeepestTaxonKey(null);
+    const classification = suggestedScope.classification;
+    setTaxonomicScope(classification);
     setScopeVersion((v) => v + 1);
+
+    // TaxonomicScopeSelector only resolves/report GBIF keys for ranks the
+    // user picks by hand (its own children-of-parent walk) — applying a
+    // suggestion bypasses that, so without this the deepest rank's key would
+    // stay null and Step 2's discovery fetching (gated on deepestTaxonKey !==
+    // null) would never trigger. Resolve it directly instead.
+    const deepestName = [...SCOPE_RANKS].reverse().map((rank) => classification[rank]).find(Boolean);
+    if (!deepestName) {
+      setDeepestTaxonKey(null);
+      return;
+    }
+    setDeepestTaxonKey(null);
+    matchSpeciesName(deepestName)
+      .then((match) => setDeepestTaxonKey(match.acceptedUsageKey ?? match.usageKey))
+      .catch(() => {});
   }
 
   // Step 2 — Import. Kept as one entry per uploaded file (rather than a single
@@ -304,7 +337,14 @@ export default function NewChecklistPage() {
   }
 
   function canContinue(): boolean {
-    if (step === 1) return title.trim().length > 0;
+    if (step === 1) {
+      return (
+        title.trim().length > 0 &&
+        Object.keys(taxonomicScope).length > 0 &&
+        Boolean(region.region_district || region.region_state || region.region_country) &&
+        Boolean(region.region_gadm_id)
+      );
+    }
     return true;
   }
 
@@ -405,33 +445,33 @@ export default function NewChecklistPage() {
                 </div>
 
                 <div className="space-y-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-sm font-semibold text-on-surface-variant">
-                      Taxonomic Scope
-                    </label>
-                    {suggestedScope && (
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-on-surface-variant">
-                          Suggested from title: <span className="font-semibold text-primary">{suggestedScope.matchedTerm}</span>
-                        </span>
+                  <label className="text-sm font-semibold text-on-surface-variant">
+                    Taxonomic Scope
+                  </label>
+                  {suggestedScope && (
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs bg-surface-container-low/60 border border-outline-variant/40 px-2 py-1.5">
+                      <span className="text-on-surface-variant">Suggested from title:</span>
+                      <span className="font-semibold text-primary gap-y-2 capitalize">{suggestedScope.matchedTerm}</span>
+                      <ScopeBreadcrumb classification={suggestedScope.classification} />
+                      <div className="flex items-center gap-1 ml-auto">
                         <button
                           type="button"
                           onClick={applyScopeSuggestion}
-                          className="font-label-caps uppercase tracking-wider text-primary hover:underline"
+                          className="shrink-0 font-label-caps uppercase tracking-wider text-[10px] text-primary border border-primary/40 bg-primary-container/20 hover:bg-primary-container/40 px-2 py-0.5 rounded-sm transition-colors"
                         >
-                          Apply
+                          Select
                         </button>
                         <button
                           type="button"
                           onClick={() => setDismissedSuggestionTerm(suggestedScope.matchedTerm)}
-                          className="material-symbols-outlined text-[14px] text-on-surface-variant hover:text-primary"
+                          className="shrink-0 material-symbols-outlined text-[14px] text-on-surface-variant hover:text-primary"
                           aria-label="Dismiss scope suggestion"
                         >
                           close
                         </button>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <TaxonomicScopeSelector
                     key={scopeVersion}
                     value={taxonomicScope}
@@ -444,9 +484,14 @@ export default function NewChecklistPage() {
                 </div>
 
                 <div className="space-y-xs">
-                  <label className="text-sm font-semibold text-on-surface-variant">
-                    Region
-                  </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-sm font-semibold text-on-surface-variant">
+                      Region
+                    </label>
+                    {region.region_gadm_id && (
+                      <span className="text-sm font-semibold text-primary">{region.region_gadm_id}</span>
+                    )}
+                  </div>
                   <RegionInput value={region} onChange={setRegion} compact />
                 </div>
               </div>

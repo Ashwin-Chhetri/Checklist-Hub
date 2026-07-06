@@ -253,6 +253,28 @@ export interface BackboneSuggestion {
 }
 
 /**
+ * Exact vernacular-name -> taxon id(s), without requiring the taxon's own
+ * row to exist in this mirror's gbif_taxa table (which only holds
+ * species-and-below ranks). Used as a fallback for higher-rank group names
+ * (e.g. "Birds") that `lookupByVernacularName` can't resolve locally —
+ * callers fetch the classification for the returned id(s) from the live
+ * GBIF API instead.
+ */
+export async function matchVernacularTaxonId(name: string): Promise<number[]> {
+  const trimmed = name.trim();
+  if (!trimmed) return [];
+  try {
+    const { taxonIds } = await callDataService<{ taxonIds: number[] }>(
+      `/backbone/vernacular-match?name=${encodeURIComponent(trimmed)}`,
+    );
+    return taxonIds ?? [];
+  } catch (err) {
+    onServiceError("matchVernacularTaxonId", err);
+    return [];
+  }
+}
+
+/**
  * Type-ahead search used by the manual taxonomy edit form.
  */
 export async function searchBackbone(query: string, limit = 8): Promise<BackboneSuggestion[]> {

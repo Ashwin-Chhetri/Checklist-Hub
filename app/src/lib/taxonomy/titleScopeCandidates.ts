@@ -15,6 +15,14 @@ const STOPWORDS = new Set([
 const LOCATIVE_SPLIT_RE = /\s+(?:of|in|near|around|from|at)\s+/i;
 const GROUP_SPLIT_RE = /\s*(?:,|&|\band\b)\s*/i;
 
+// Generic size/frequency descriptors that qualify a group rather than name
+// one — e.g. "Small Mammals"/"Large Mammals" both mean the group "Mammals".
+// Stripping these (in addition to trying the phrase unstripped) lets the
+// bare group name still resolve without guessing what "small"/"large" means
+// taxonomically.
+const LEADING_DESCRIPTOR_RE =
+  /^(small|large|big|tiny|giant|common|rare|wild|domestic|native|introduced|endemic|migratory|nocturnal|diurnal|freshwater|marine|terrestrial|aquatic)\s+/i;
+
 export function extractScopeCandidates(title: string): string[] {
   const trimmed = title.trim();
   if (!trimmed) return [];
@@ -36,12 +44,37 @@ export function extractScopeCandidates(title: string): string[] {
   add(subject);
 
   // "Reptiles and Amphibians of Sikkim" -> try each coordinated group too.
-  for (const group of subject.split(GROUP_SPLIT_RE)) add(group);
+  const groups = subject.split(GROUP_SPLIT_RE);
+  for (const group of groups) add(group);
+
+  // "Small Mammals"/"Large Mammals" -> also try the bare group name.
+  for (const group of [subject, ...groups]) {
+    let stripped = group;
+    let prev = "";
+    while (prev !== stripped) {
+      prev = stripped;
+      stripped = stripped.replace(LEADING_DESCRIPTOR_RE, "");
+    }
+    if (stripped !== group) add(stripped);
+  }
 
   // Last resort: individual content words, dropping generic function words.
-  for (const word of subject.split(/\s+/)) {
-    if (!STOPWORDS.has(word.toLowerCase())) add(word);
+  const words = subject.split(/\s+/).filter((w) => !STOPWORDS.has(w.toLowerCase()));
+  for (const word of words) add(word);
+
+  // Plural forms rarely match a species/genus vernacular name verbatim (e.g.
+  // "Tigers" vs. "Tiger") — append naive singularizations as lower-priority
+  // fallbacks, tried only once every exact/plural candidate above has missed.
+  for (const word of words) {
+    const singular = singularize(word);
+    if (singular) add(singular);
   }
 
   return candidates;
+}
+
+function singularize(word: string): string | null {
+  if (/[a-z]ies$/i.test(word)) return word.slice(0, -3) + "y";
+  if (/[^s]s$/i.test(word) && word.length > 3) return word.slice(0, -1);
+  return null;
 }

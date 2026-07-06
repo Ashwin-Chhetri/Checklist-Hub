@@ -298,6 +298,31 @@ function lookupByVernacularName(commonName) {
   return tryMatch(stripped);
 }
 
+// Exact vernacular-name -> taxon id(s), without joining gbif_taxa. Unlike
+// lookupByVernacularName, this also surfaces matches for higher-rank taxa
+// (kingdom/phylum/class/order/family/genus) whose own row isn't present in
+// this mirror's gbif_taxa table (only built from species-and-below ranks) —
+// the vernacular_names table itself still carries their taxon_id, just with
+// nothing local to join it against. Callers resolve the classification for
+// the returned id(s) via the live GBIF API instead.
+function matchVernacularTaxonId(name) {
+  const db = getDb();
+  try {
+    db.prepare("SELECT 1 FROM gbif_vernacular_names LIMIT 1").get();
+  } catch {
+    return [];
+  }
+  const trimmed = name.trim();
+  if (!trimmed) return [];
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT taxon_id FROM gbif_vernacular_names
+       WHERE language IN ('eng', 'en') AND LOWER(vernacular_name) = LOWER(?)`,
+    )
+    .all(trimmed);
+  return [...new Set(rows.map((r) => r.taxon_id))];
+}
+
 function lookupBackbone(input, kingdomHint) {
   const db = getDb();
   const cols = selectCols();
@@ -620,6 +645,7 @@ module.exports = {
   lookupBackboneBatch,
   lookupBackboneExhaustive,
   lookupByVernacularName,
+  matchVernacularTaxonId,
   normalizeVernacularName,
   getSubspecies,
   getVernacularNames,

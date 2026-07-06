@@ -64,6 +64,11 @@ app.post("/backbone/vernacular-batch", safe((req, res) => {
   res.json(backbone.getVernacularNamesBatch(taxonIds ?? []));
 }));
 
+app.get("/backbone/vernacular-match", safe((req, res) => {
+  const name = String(req.query.name ?? "");
+  res.json({ taxonIds: backbone.matchVernacularTaxonId(name) });
+}));
+
 app.get("/backbone/search", safe((req, res) => {
   const q = String(req.query.q ?? "");
   const limit = req.query.limit ? Number(req.query.limit) : 8;

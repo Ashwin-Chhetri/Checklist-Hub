@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
         origin,
         inviterName,
         checklist,
-        speciesCount: species.length,
+        speciesCount: input.totalSpeciesCount ?? species.length,
         toEmail: row.email,
         hasAccount: row.status === "accepted",
         note: row.note ?? undefined,

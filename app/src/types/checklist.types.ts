@@ -296,6 +296,8 @@ export interface CreateChecklistInput {
   taxonomic_scope: TaxonomicScope;
   species: CreateChecklistSpeciesInput[];
   invites: CollaboratorInviteInput[];
+  /** Full intended species count when `species` on this request is only the first of several batches (see checklistService.createChecklist) — lets the invite email report the true total instead of just this request's batch size. Defaults to `species.length` when omitted. */
+  totalSpeciesCount?: number;
 }
 
 export type ImportStatus = "pending" | "processing" | "validated" | "failed";

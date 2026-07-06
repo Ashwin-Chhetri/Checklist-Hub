@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TaxonomicScope } from "@/types/checklist.types";
 import type { RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
 import type { ParsedSpeciesRow } from "@/modules/checklist/utils/speciesFileParser";
@@ -90,6 +91,9 @@ const SOURCE_LABEL: Record<SourceKey, string> = {
   ...(Object.fromEntries(EVIDENCE_PROVIDERS.map((p) => [p.key, p.label])) as Record<SourceKey, string>),
   literature: "Literature",
 };
+
+/** Shared grid template for the virtualized species table — header and rows must stay in sync, so column widths live in one place. */
+const TABLE_GRID_TEMPLATE = `32px minmax(160px,2fr) minmax(120px,1.2fr) minmax(100px,1fr) ${SOURCE_ORDER.map(() => "70px").join(" ")} 130px`;
 
 type ViewMode = "list" | "chart";
 type SortMode = "default" | "occurrence-desc" | "occurrence-asc";
@@ -238,11 +242,13 @@ export function SpeciesInventoryPanel({
 }: SpeciesInventoryPanelProps) {
   const [familyFilter, setFamilyFilter] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [sortMode, setSortMode] = useState<SortMode>("default");
   const [sourceFilter, setSourceFilter] = useState<Set<SourceKey>>(new Set());
   const [selectedOnly, setSelectedOnly] = useState(false);
   const [uploadedOnly, setUploadedOnly] = useState(false);
+  const [showDateRangeInfo, setShowDateRangeInfo] = useState(false);
   const inventory = useSpeciesInventory(taxonomicScope, deepestTaxonKey, region, enabledSources, literatureRecords);
 
   // The filter button only renders while there are uploaded rows — reset it
@@ -250,6 +256,14 @@ export function SpeciesInventoryPanel({
   useEffect(() => {
     if (uploadedRows.length === 0) setUploadedOnly(false);
   }, [uploadedRows.length]);
+
+  // Debounce the search box so large inventories (5k-50k+ rows) don't re-run
+  // the filter/sort pass on every keystroke — that synchronous work on the
+  // full array is what made typing feel like it froze the tab.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearchTerm(searchTerm), 200);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
 
   // Every uploaded scientific name, for tagging/filtering rows in the merged
   // inventory below regardless of whether they were also independently
@@ -374,8 +388,8 @@ export function SpeciesInventoryPanel({
     if (sourceFilter.size > 0) list = list.filter((s) => s.sources.some((src) => sourceFilter.has(src)));
     if (selectedOnly) list = list.filter((s) => selected.has(discoverySpeciesKey(s.acceptedName)));
     if (uploadedOnly) list = list.filter((s) => uploadedNameSet.has(s.acceptedName.trim().toLowerCase()));
-    if (searchTerm.trim()) {
-      const term = searchTerm.trim().toLowerCase();
+    if (debouncedSearchTerm.trim()) {
+      const term = debouncedSearchTerm.trim().toLowerCase();
       list = list.filter(
         (s) => s.acceptedName.toLowerCase().includes(term) || s.canonicalName.toLowerCase().includes(term),
       );
@@ -389,7 +403,25 @@ export function SpeciesInventoryPanel({
       );
     }
     return list;
-  }, [effectiveSpecies, familyFilter, sourceFilter, selectedOnly, uploadedOnly, uploadedNameSet, selected, searchTerm, sortMode]);
+  }, [
+    effectiveSpecies,
+    familyFilter,
+    sourceFilter,
+    selectedOnly,
+    uploadedOnly,
+    uploadedNameSet,
+    selected,
+    debouncedSearchTerm,
+    sortMode,
+  ]);
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: visibleSpecies.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => 34,
+    overscan: 12,
+  });
 
   function toggle(species: InventorySpecies) {
     const key = discoverySpeciesKey(species.acceptedName);
@@ -472,8 +504,35 @@ export function SpeciesInventoryPanel({
           <SourceStat key={s.source} summary={s} />
         ))}
         {uploadedRows.length > 0 && <StatCard label="User Uploaded" value={uploadedRows.length} />}
-        <StatCard label="Date Range" value={dateRange ? `${dateRange.earliest}–${dateRange.latest}` : "—"} />
+        <StatCard
+          label="Date Range"
+          value={dateRange ? `${dateRange.earliest}–${dateRange.latest}` : "—"}
+          onHelpClick={() => setShowDateRangeInfo(true)}
+        />
       </div>
+
+      {showDateRangeInfo && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30"
+          onClick={() => setShowDateRangeInfo(false)}
+        >
+          <div
+            className="bg-white border border-outline-variant rounded-sm shadow-hard w-[22rem] max-w-[90vw] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-on-surface">Date Range</h3>
+              <button onClick={() => setShowDateRangeInfo(false)} className="text-on-surface-variant hover:text-primary">
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              This range spans the earliest and latest observation dates among the occurrence
+              records contributing to this inventory — not when this data was fetched.
+            </p>
+          </div>
+        </div>
+      )}
 
       <PriorChecklistBanner
         priorChecklists={data.priorChecklists}
@@ -586,50 +645,106 @@ export function SpeciesInventoryPanel({
         <InventoryChart species={visibleSpecies} selected={selected} onToggleFamily={toggleFamily} />
       ) : (
         /* Species list with source presence matrix — scrollable so the
-           surrounding dialog/page never has to grow past the viewport. */
-        <div className="border border-outline-variant bg-white overflow-auto max-h-[min(55vh,520px)]">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-surface-container-low sticky top-0 z-10">
-              <tr className="font-label-caps text-[9px] uppercase tracking-wider text-on-surface-variant">
-                <th className="px-2 py-1.5">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={toggleAll}
-                    aria-label="Select all visible species"
-                  />
-                </th>
-                <th className="px-2 py-1.5">Scientific Name</th>
-                <th className="px-2 py-1.5">Common Name</th>
-                <th className="px-2 py-1.5">Family</th>
-                {SOURCE_ORDER.map((key) => (
-                  <th key={key} className="px-2 py-1.5 text-center">
-                    {SOURCE_LABEL[key]}
-                  </th>
-                ))}
-                <th className="px-2 py-1.5 text-right">Total Occurrences</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant">
-              {visibleSpecies.map((species) => {
+           surrounding dialog/page never has to grow past the viewport.
+           Rendered as a virtualized CSS grid (not a real <table>) since a
+           plain <table>/<tbody> can't be windowed without breaking column
+           alignment — this is what let 1000+ row inventories render every
+           <tr> at once and freeze the tab. Only the rows in/near the
+           viewport are ever mounted, regardless of inventory size. */
+        <div
+          ref={scrollContainerRef}
+          role="table"
+          aria-label="Species inventory"
+          className="border border-outline-variant bg-white overflow-auto max-h-[min(55vh,520px)] text-left text-xs"
+        >
+          <div
+            role="row"
+            style={{ gridTemplateColumns: TABLE_GRID_TEMPLATE }}
+            className="grid bg-surface-container-low sticky top-0 z-10 font-label-caps text-[9px] uppercase tracking-wider text-on-surface-variant"
+          >
+            <div role="columnheader" className="px-2 py-1.5 flex items-center">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleAll}
+                aria-label="Select all visible species"
+              />
+            </div>
+            <div role="columnheader" className="px-2 py-1.5 flex items-center">
+              Scientific Name
+            </div>
+            <div role="columnheader" className="px-2 py-1.5 flex items-center">
+              Common Name
+            </div>
+            <div role="columnheader" className="px-2 py-1.5 flex items-center">
+              Family
+            </div>
+            {SOURCE_ORDER.map((key) => (
+              <div key={key} role="columnheader" className="px-2 py-1.5 flex items-center justify-center">
+                {SOURCE_LABEL[key]}
+              </div>
+            ))}
+            <div role="columnheader" className="px-2 py-1.5 flex items-center justify-end">
+              Total Occurrences
+            </div>
+          </div>
+
+          {visibleSpecies.length === 0 ? (
+            <div className="px-3 py-4 text-center text-on-surface-variant">
+              No species found for this scope/region/filter combination.
+            </div>
+          ) : (
+            <div
+              style={{
+                position: "relative",
+                height: rowVirtualizer.getTotalSize(),
+                // Establishes the same total width as the header row below
+                // (an ordinary grid using this exact column template also
+                // overflows past the viewport, via CSS Grid's automatic
+                // minimum-size rule, since every column has a fixed px
+                // minimum). Without this, this wrapper has no in-flow
+                // content of its own (every row inside is position:absolute,
+                // so none of them count toward its auto width) and collapses
+                // to the *visible* width — so each row's `width: "100%"`
+                // below was only ever 100% of that narrow, pre-scroll width,
+                // leaving its background/border-bottom short of the real
+                // right edge while the header (sized independently) still
+                // spanned the full scrollable width.
+                display: "grid",
+                gridTemplateColumns: TABLE_GRID_TEMPLATE,
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const species = visibleSpecies[virtualRow.index];
                 const key = discoverySpeciesKey(species.acceptedName);
                 const isSelected = selected.has(key);
                 return (
-                  <tr
+                  <div
                     key={key}
-                    className={`hover:bg-surface-container-low transition-colors ${
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    role="row"
+                    style={{
+                      gridTemplateColumns: TABLE_GRID_TEMPLATE,
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    className={`grid border-b border-outline-variant hover:bg-surface-container-low transition-colors ${
                       species.unresolved ? "bg-amber-50" : ""
                     }`}
                   >
-                    <td className="px-2 py-1.5">
+                    <div role="cell" className="px-2 py-1.5 flex items-center">
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggle(species)}
                         aria-label={`Select ${species.acceptedName}`}
                       />
-                    </td>
-                    <td className="px-2 py-1.5 italic">
+                    </div>
+                    <div role="cell" className="px-2 py-1.5 flex items-center italic">
                       {species.acceptedName}
                       {uploadedNameSet.has(species.acceptedName.trim().toLowerCase()) && (
                         <span className="ml-2 font-label-caps text-[9px] uppercase tracking-wider text-blue-700">
@@ -641,16 +756,24 @@ export function SpeciesInventoryPanel({
                           unresolved
                         </span>
                       )}
-                    </td>
-                    <td className="px-2 py-1.5">{species.commonName ?? "—"}</td>
-                    <td className="px-2 py-1.5 text-on-surface-variant">{species.family ?? "—"}</td>
+                    </div>
+                    <div role="cell" className="px-2 py-1.5 flex items-center">
+                      {species.commonName ?? "—"}
+                    </div>
+                    <div role="cell" className="px-2 py-1.5 flex items-center text-on-surface-variant">
+                      {species.family ?? "—"}
+                    </div>
                     {SOURCE_ORDER.map((sourceKey) => {
                       const count = species.occurrenceCounts[sourceKey];
                       const present = species.sources.includes(sourceKey);
                       const sourceLink =
                         sourceKey === "literature" && present ? findLiteratureLink(species.records) : null;
                       return (
-                        <td key={sourceKey} className="px-2 py-1.5 text-center mono-text text-[11px]">
+                        <div
+                          key={sourceKey}
+                          role="cell"
+                          className="px-2 py-1.5 flex items-center justify-center mono-text text-[11px]"
+                        >
                           {present ? (
                             sourceLink ? (
                               <a
@@ -670,22 +793,17 @@ export function SpeciesInventoryPanel({
                           ) : (
                             <span className="text-on-surface-variant/30">—</span>
                           )}
-                        </td>
+                        </div>
                       );
                     })}
-                    <td className="px-2 py-1.5 text-right mono-text font-bold">{species.totalOccurrences || "—"}</td>
-                  </tr>
+                    <div role="cell" className="px-2 py-1.5 flex items-center justify-end mono-text font-bold">
+                      {species.totalOccurrences || "—"}
+                    </div>
+                  </div>
                 );
               })}
-              {visibleSpecies.length === 0 && (
-                <tr>
-                  <td colSpan={SOURCE_ORDER.length + 5} className="px-3 py-4 text-center text-on-surface-variant">
-                    No species found for this scope/region/filter combination.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -756,14 +874,36 @@ export function PriorChecklistBanner({
   );
 }
 
-function StatCard({ label, value, highlight }: { label: string; value: string | number; highlight?: boolean }) {
+function StatCard({
+  label,
+  value,
+  highlight,
+  onHelpClick,
+}: {
+  label: string;
+  value: string | number;
+  highlight?: boolean;
+  onHelpClick?: () => void;
+}) {
   return (
     <div
       className={`border border-outline-variant px-3 py-2 flex flex-col gap-0.5 ${
         highlight ? "bg-primary-container/20" : "bg-surface"
       }`}
     >
-      <span className="font-label-caps text-[9px] uppercase tracking-wider text-on-surface-variant/70">{label}</span>
+      <span className="flex items-center gap-1 font-label-caps text-[9px] uppercase tracking-wider text-on-surface-variant/70">
+        {label}
+        {onHelpClick && (
+          <button
+            type="button"
+            onClick={onHelpClick}
+            aria-label={`About ${label}`}
+            className="material-symbols-outlined scale-65 relative -top-0.5 text-on-surface-variant hover:text-primary normal-case tracking-normal "
+          >
+            help
+          </button>
+        )}
+      </span>
       <span className="font-code-md text-[14px] font-bold text-on-surface">{value}</span>
     </div>
   );

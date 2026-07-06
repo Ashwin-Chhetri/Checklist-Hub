@@ -38,8 +38,15 @@ export function FamilySpeciesList({ items, selected, onToggle }: FamilySpeciesLi
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const families = useMemo(() => {
+    // Guard against duplicate scientific names in `items` (e.g. an upstream
+    // source list that hasn't been deduped) — without this, two entries
+    // sharing a name would collide on the same React key below.
+    const seenNames = new Set<string>();
     const groups = new Map<string, DiscoverySpeciesItem[]>();
     for (const item of items) {
+      const nameKey = speciesKey(item.scientificName);
+      if (seenNames.has(nameKey)) continue;
+      seenNames.add(nameKey);
       const family = item.family || UNKNOWN_FAMILY;
       if (!groups.has(family)) groups.set(family, []);
       groups.get(family)!.push(item);
