@@ -18,9 +18,9 @@ export default function DocsImage({ src, alt }: { src: string; alt: string }) {
             src={src}
             alt={alt}
             fill
-            sizes="(min-width: 768px) 700px, 100vw"
+            sizes="(min-width: 1024px) 768px, 100vw"
             className="object-contain"
-            quality={90}
+            quality={100}
           />
         </div>
       </div>

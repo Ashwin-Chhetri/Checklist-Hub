@@ -9,7 +9,7 @@ function LightboxImage({ src, alt, sizes, className }: { src: string; alt: strin
   return (
     <>
       <div className="relative w-full h-full cursor-zoom-in" onClick={() => setOpen(true)}>
-        <Image src={src} alt={alt} fill sizes={sizes} className={className ?? "object-contain"} quality={90} />
+        <Image src={src} alt={alt} fill sizes={sizes} className={className ?? "object-contain"} quality={100} />
       </div>
       {open && (
         <div
@@ -160,7 +160,7 @@ export default function ChecklistWizardCarousel() {
             <LightboxImage
               src={slide.image}
               alt={slide.imageAlt ?? ""}
-              sizes="(min-width: 768px) 700px, 100vw"
+              sizes="(min-width: 1024px) 768px, 100vw"
             />
           </div>
         )}
@@ -180,7 +180,7 @@ export default function ChecklistWizardCarousel() {
                   <LightboxImage
                     src={img.src}
                     alt={img.alt}
-                    sizes="(min-width: 768px) 340px, 45vw"
+                    sizes="(min-width: 768px) 384px, 50vw"
                   />
                 </div>
               ))}
