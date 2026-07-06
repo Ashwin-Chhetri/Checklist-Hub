@@ -958,6 +958,20 @@ const FAMILY_PALETTE = [
 ];
 
 /** Donut chart of the visible species, broken down by family. Clicking a family row selects/deselects all of its species. */
+/** Point on a circle of radius `r` centered at (cx,cy), at `angleDeg` clockwise from the top — matches CSS conic-gradient's own angle convention. */
+function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number): { x: number; y: number } {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+/** SVG path for one pie slice spanning [startAngle, endAngle) (degrees, clockwise from top). */
+function describePieSlice(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
+  const start = polarToCartesian(cx, cy, r, startAngle);
+  const end = polarToCartesian(cx, cy, r, endAngle);
+  const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
+}
+
 function InventoryChart({
   species,
   selected,
@@ -967,6 +981,15 @@ function InventoryChart({
   selected: Map<string, ParsedSpeciesRow>;
   onToggleFamily: (family: string, familySpecies: InventorySpecies[]) => void;
 }) {
+  // The family shown below the chart — set on hover, but deliberately never
+  // cleared back to null on mouse-leave (only ever replaced by hovering/
+  // clicking a *different* slice or table row), so the info line doesn't
+  // vanish the moment the pointer leaves the slice.
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  // Whether the active family's genus subdivision list is expanded — toggled
+  // by clicking the info line itself, independent of which family is active.
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
   const segments = useMemo(() => {
     const groups = new Map<string, InventorySpecies[]>();
     for (const s of species) {
@@ -996,40 +1019,127 @@ function InventoryChart({
     );
   }
 
-  const gradientParts = segments.reduce<{ parts: string[]; cumulative: number }>(
+  const arcs = segments.reduce<{ parts: { seg: (typeof segments)[number]; start: number; end: number }[]; cumulative: number }>(
     (acc, seg) => {
       const start = (acc.cumulative / total) * 360;
       const cumulative = acc.cumulative + seg.value;
       const end = (cumulative / total) * 360;
-      return { parts: [...acc.parts, `${seg.color} ${start}deg ${end}deg`], cumulative };
+      return { parts: [...acc.parts, { seg, start, end }], cumulative };
     },
     { parts: [], cumulative: 0 },
   ).parts;
 
+  const displaySeg = activeKey ? segments.find((s) => s.key === activeKey) ?? null : null;
+
+  function toggleExpanded(key: string) {
+    setExpandedKey((prev) => (prev === key ? null : key));
+  }
+
+  /** Species in this family grouped by genus, for the subdivision list. */
+  function genusBreakdown(familySpecies: InventorySpecies[]): { genus: string; count: number }[] {
+    const counts = new Map<string, number>();
+    for (const s of familySpecies) {
+      const genus = s.classification.genus ?? "Unclassified";
+      counts.set(genus, (counts.get(genus) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([genus, count]) => ({ genus, count }));
+  }
+
+  // Hover feedback is purely a translation — the hovered slice's own arc
+  // (start/end angles, radius) never changes, so its shape stays identical;
+  // it just shifts outward along its own mid-angle direction, which opens a
+  // small gap on either side of it as a side effect of moving away from its
+  // neighbors rather than from resizing itself. No dimming/recoloring of the
+  // rest either, so every slice keeps its assigned color at all times.
+  const POP_DISTANCE = 8;
+  const CENTER = 100;
+  // Leaves margin inside the 200x200 viewBox for POP_DISTANCE: at RADIUS=100
+  // the circle exactly touches every edge, so popping a slice outward pushed
+  // part of its arc past the SVG viewport's boundary and got clipped —
+  // visible as a flattened/cut edge, and most noticeable on big slices since
+  // they sweep across more of that boundary.
+  const RADIUS = 100 - POP_DISTANCE - 4;
+
   return (
     <div className="border border-outline-variant bg-white p-md flex flex-col sm:flex-row items-start gap-lg">
-      <div className="flex flex-col items-center gap-2 shrink-0 mx-auto sm:mx-0">
-        <div
-          className="w-[160px] h-[160px] rounded-full shrink-0"
-          style={{ background: `conic-gradient(${gradientParts.join(", ")})` }}
-          role="img"
-          aria-label="Species count by family"
-        />
+      <div className="flex flex-col items-center gap-2 shrink-0 mx-auto sm:mx-0 w-[200px]">
+        <div className="relative w-[200px] h-[200px] shrink-0">
+          <svg
+            viewBox="0 0 200 200"
+            className="w-full h-full overflow-visible"
+            role="img"
+            aria-label="Species count by family"
+          >
+            {/* Active slice's path is rendered last (SVG stacks purely by
+                document order, no z-index) so its outward pop-out never
+                gets covered by a later neighbor. */}
+            {[...arcs]
+              .sort((a, b) => (a.seg.key === activeKey ? 1 : 0) - (b.seg.key === activeKey ? 1 : 0))
+              .map(({ seg, start, end }) => {
+                const isActive = activeKey === seg.key;
+                const midRad = ((start + end) / 2 - 90) * (Math.PI / 180);
+                const offset = isActive ? POP_DISTANCE : 0;
+                const dx = Math.cos(midRad) * offset;
+                const dy = Math.sin(midRad) * offset;
+                return (
+                  <path
+                    key={seg.key}
+                    d={describePieSlice(CENTER, CENTER, RADIUS, start, end)}
+                    fill={seg.color}
+                    stroke="white"
+                    strokeWidth={1}
+                    style={{ transform: `translate(${dx}px, ${dy}px)`, transition: "transform 150ms ease" }}
+                    className="cursor-pointer"
+                    onMouseEnter={() => setActiveKey(seg.key)}
+                    onClick={() => setActiveKey(seg.key)}
+                  />
+                );
+              })}
+          </svg>
+        </div>
         <p className="font-label-caps text-[10px] uppercase tracking-wider text-on-surface-variant/70">
           {total} species total
         </p>
+
+        {displaySeg && (
+          <div className="w-full text-xs">
+            <button
+              type="button"
+              onClick={() => toggleExpanded(displaySeg.key)}
+              className="w-full flex items-center justify-center gap-1 hover:text-primary transition-colors"
+            >
+              <span className="w-2.5 h-2.5 inline-block rounded-sm shrink-0" style={{ backgroundColor: displaySeg.color }} />
+              <span className="font-bold text-on-surface">{displaySeg.label}</span>
+              <span className="text-on-surface-variant">{Math.round((displaySeg.value / total) * 100)}%</span>
+              <span className="material-symbols-outlined text-[14px] text-on-surface-variant">
+                {expandedKey === displaySeg.key ? "expand_less" : "expand_more"}
+              </span>
+            </button>
+
+            {expandedKey === displaySeg.key && (
+              <div className="mt-1.5 border border-outline-variant bg-surface-container-low max-h-32 overflow-y-auto divide-y divide-outline-variant/50">
+                {genusBreakdown(displaySeg.species).map(({ genus, count }) => (
+                  <div key={genus} className="flex items-center justify-between px-2 py-1">
+                    <span className="italic text-on-surface-variant">{genus}</span>
+                    <span className="mono-text text-on-surface">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Family breakdown table — scrollable so a long family list doesn't push the chart out of view. */}
       <div className="flex-1 w-full border border-outline-variant max-h-[320px] overflow-y-auto">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-left text-xs">
           <thead className="bg-surface-container-low sticky top-0">
             <tr className="font-label-caps text-[10px] uppercase tracking-wider text-on-surface-variant">
-              <th className="px-3 py-2"></th>
-              <th className="px-3 py-2"></th>
-              <th className="px-3 py-2">Family</th>
-              <th className="px-3 py-2 text-right">Species</th>
-              <th className="px-3 py-2 text-right">Share</th>
+              <th className="pl-2 pr-0.5 py-1.5"></th>
+              <th className="px-0.5 py-1.5"></th>
+              <th className="pl-1 pr-3 py-1.5">Family</th>
+              <th className="px-3 py-1.5 text-right">Species</th>
+              <th className="px-3 py-1.5 text-right">Share</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant">
@@ -1040,11 +1150,14 @@ function InventoryChart({
               return (
                 <tr
                   key={seg.key}
-                  className="cursor-pointer hover:bg-surface-container-low transition-colors"
+                  className={`cursor-pointer transition-colors ${
+                    activeKey === seg.key ? "bg-surface-container-low" : "hover:bg-surface-container-low"
+                  }`}
                   onClick={() => onToggleFamily(seg.label, seg.species)}
+                  onMouseEnter={() => setActiveKey(seg.key)}
                   title={`Click to ${allSelected ? "deselect" : "select"} all ${seg.label} species`}
                 >
-                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <td className="pl-2 pr-0.5 py-1.5" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -1053,14 +1166,15 @@ function InventoryChart({
                       }}
                       onChange={() => onToggleFamily(seg.label, seg.species)}
                       aria-label={`Select all ${seg.label} species`}
+                      className="scale-75"
                     />
                   </td>
-                  <td className="px-3 py-2">
-                    <span className="w-3 h-3 inline-block rounded-sm" style={{ backgroundColor: seg.color }} />
+                  <td className="px-0.5 py-1.5">
+                    <span className="w-2 h-2 inline-block rounded-sm" style={{ backgroundColor: seg.color }} />
                   </td>
-                  <td className="px-3 py-2 font-bold">{seg.label}</td>
-                  <td className="px-3 py-2 text-right mono-text">{seg.value}</td>
-                  <td className="px-3 py-2 text-right mono-text text-on-surface-variant">
+                  <td className="pl-1 pr-3 py-1.5">{seg.label}</td>
+                  <td className="px-3 py-1.5 text-right mono-text">{seg.value}</td>
+                  <td className="px-3 py-1.5 text-right mono-text text-on-surface-variant">
                     {Math.round((seg.value / total) * 100)}%
                   </td>
                 </tr>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCreateChecklist } from "@/modules/checklist/hooks/useCreateChecklist";
+import type { CreateChecklistProgress } from "@/modules/checklist/services/checklistService";
 import { useEmailLookup, useProfileSearch } from "@/modules/checklist/hooks/useChecklist";
 import { isValidEmailFormat } from "@/lib/validation/email";
 import {
@@ -66,6 +67,7 @@ const DEFAULT_REGION: RegionValue = {
 export default function NewChecklistPage() {
   const router = useRouter();
   const createChecklist = useCreateChecklist();
+  const [creationProgress, setCreationProgress] = useState<CreateChecklistProgress | null>(null);
 
   // Whether the IndexedDB draft has finished loading. Persistence is skipped
   // until then, so we don't overwrite a saved draft with initial defaults.
@@ -357,20 +359,24 @@ export default function NewChecklistPage() {
   }
 
   function handleCreate() {
+    setCreationProgress(null);
     createChecklist.mutate(
       {
-        title: title.trim(),
-        region_name: region.region_name.trim() || undefined,
-        region_district: region.region_district.trim() || undefined,
-        region_state: region.region_state.trim() || undefined,
-        region_country: region.region_country.trim() || undefined,
-        region_gadm_id: region.region_gadm_id.trim() || undefined,
-        region_osm_type: region.region_osm_type?.trim() || undefined,
-        region_osm_id: region.region_osm_id?.trim() || undefined,
-        region_pin: region.region_pin?.trim() || undefined,
-        taxonomic_scope: taxonomicScope,
-        species: mergedRows,
-        invites: collaboratorInvites,
+        input: {
+          title: title.trim(),
+          region_name: region.region_name.trim() || undefined,
+          region_district: region.region_district.trim() || undefined,
+          region_state: region.region_state.trim() || undefined,
+          region_country: region.region_country.trim() || undefined,
+          region_gadm_id: region.region_gadm_id.trim() || undefined,
+          region_osm_type: region.region_osm_type?.trim() || undefined,
+          region_osm_id: region.region_osm_id?.trim() || undefined,
+          region_pin: region.region_pin?.trim() || undefined,
+          taxonomic_scope: taxonomicScope,
+          species: mergedRows,
+          invites: collaboratorInvites,
+        },
+        onProgress: setCreationProgress,
       },
       {
         onSuccess: (checklist) => {
@@ -706,6 +712,29 @@ export default function NewChecklistPage() {
                   </div>
                 </div>
 
+                {createChecklist.isPending && creationProgress && creationProgress.total > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-xs text-on-surface-variant">
+                      <span>
+                        {creationProgress.completed < creationProgress.total
+                          ? `Adding species to checklist… ${creationProgress.completed.toLocaleString()} / ${creationProgress.total.toLocaleString()}`
+                          : "Finalizing checklist…"}
+                      </span>
+                      <span className="mono-text">
+                        {Math.round((creationProgress.completed / creationProgress.total) * 100)}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-outline-variant/40 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, (creationProgress.completed / creationProgress.total) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {createChecklist.isError && (
                   <p className="text-xs text-red-600">
                     {(createChecklist.error as Error).message}
@@ -752,7 +781,11 @@ export default function NewChecklistPage() {
               disabled={createChecklist.isPending}
               className="bg-[#c63939] text-on-primary px-5 py-2 font-label-caps text-[11px] hard-shadow disabled:opacity-50 hover:translate-y-[-2px] transition-transform active:translate-y-[2px]"
             >
-              {createChecklist.isPending ? "CREATING..." : "CREATE CHECKLIST"}
+              {createChecklist.isPending
+                ? creationProgress && creationProgress.total > 0
+                  ? `CREATING… (${creationProgress.completed}/${creationProgress.total})`
+                  : "CREATING..."
+                : "CREATE CHECKLIST"}
             </button>
           )}
         </div>

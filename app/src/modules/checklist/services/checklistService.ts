@@ -121,26 +121,44 @@ export async function getChecklist(checklistId: string): Promise<Checklist> {
   return data as Checklist;
 }
 
-export async function createChecklist(input: CreateChecklistInput): Promise<Checklist> {
+export interface CreateChecklistProgress {
+  /** Species inserted into the checklist so far, across the initial POST and every append batch. */
+  completed: number;
+  /** Total species this call was asked to create — same for every progress callback within one call. */
+  total: number;
+}
+
+export async function createChecklist(
+  input: CreateChecklistInput,
+  onProgress?: (progress: CreateChecklistProgress) => void,
+): Promise<Checklist> {
   const allSpecies = input.species ?? [];
   const firstBatch = allSpecies.slice(0, SPECIES_BATCH_SIZE);
   const remaining = allSpecies.slice(SPECIES_BATCH_SIZE);
+  const total = allSpecies.length;
 
   const response = await fetch("/api/checklists", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...input, species: firstBatch, totalSpeciesCount: allSpecies.length }),
+    body: JSON.stringify({ ...input, species: firstBatch, totalSpeciesCount: total }),
   });
 
   const body = await parseJsonResponse<{ checklist: Checklist }>(response, "Failed to create checklist.");
   const checklist = body.checklist;
+  onProgress?.({ completed: firstBatch.length, total });
 
   // The checklist now exists with its first batch of species — append the
-  // rest in further size-capped requests instead of one all-or-nothing POST.
+  // rest in further size-capped requests instead of one all-or-nothing POST,
+  // reporting progress after each batch so the UI can show real feedback
+  // instead of a bare spinner for what can be a multi-minute operation on
+  // very large (10k+) species lists.
   if (remaining.length > 0) {
-    await runInBatches(remaining, SPECIES_BATCH_SIZE, BATCH_CONCURRENCY, (batch) =>
-      addSpeciesToChecklist(checklist.id, batch).then(() => undefined),
-    );
+    let completed = firstBatch.length;
+    await runInBatches(remaining, SPECIES_BATCH_SIZE, BATCH_CONCURRENCY, async (batch) => {
+      await addSpeciesToChecklist(checklist.id, batch);
+      completed += batch.length;
+      onProgress?.({ completed, total });
+    });
   }
 
   return checklist;
