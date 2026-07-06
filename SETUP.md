@@ -34,6 +34,25 @@ Apply the database schema (run the migrations in `app/supabase/migrations`
 against your Supabase project — via `supabase db push` if using the CLI, or
 the SQL editor in the Supabase dashboard).
 
+### Sign-in providers
+
+- **Email** works out of the box once Supabase is configured.
+- **Google** — enable it under Supabase Dashboard → Authentication →
+  Providers → Google (needs a Google Cloud OAuth client ID/secret).
+- **ORCID** — Supabase has no built-in ORCID provider, so this app drives
+  ORCID's OAuth2 flow itself (`app/src/app/api/auth/orcid/*`) rather than
+  going through `supabase.auth.signInWithOAuth`. To enable it:
+  1. Register an app at [orcid.org/developer-tools](https://orcid.org/developer-tools)
+     with redirect URI `https://<your-domain>/api/auth/orcid/callback`
+     (production ORCID only accepts HTTPS redirect URIs — it can't be
+     exercised from `localhost`; use a separate [sandbox.orcid.org](https://sandbox.orcid.org)
+     app + `ORCID_ENV=sandbox` for local testing).
+  2. Set `ORCID_CLIENT_ID` and `ORCID_CLIENT_SECRET` in `.env.local` (and in
+     your production host's env vars).
+  3. ORCID's free/public API doesn't return the user's email, only their
+     ORCID iD and (if public) name — signed-in users are matched/created by
+     ORCID iD (`profiles.orcid_id`), not email.
+
 ### Reference data (required for taxonomy/region lookups)
 
 These power taxonomic validation and region resolution. The app reads them

@@ -21,6 +21,7 @@ species backed by evidence — not just a name on a spreadsheet.
 - **Reconcile** against other checklists — shared species, missing species, conflicts
 - **Watch** live checklists for new field records over time, with reviewer-confirmed updates
 - **Publish** a Darwin Core Archive, ready for an IPT installation
+- **Sign in** with Google or ORCID (the researcher identity standard), or email
 
 See [`USER_GUIDE.md`](USER_GUIDE.md) for the step-by-step workflow,
 [`checklistHub_architecture.md`](checklistHub_architecture.md) for the full

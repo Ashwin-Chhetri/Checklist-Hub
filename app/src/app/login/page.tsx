@@ -120,18 +120,13 @@ function LoginForm() {
 
               Sign in with Google
             </button>
-            <button
-              type="button"
-              disabled
-              title="ORCID sign-in is coming soon"
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-outline font-body-sm text-base font-medium text-on-surface opacity-50 cursor-not-allowed"
+            <a
+              href="/api/auth/orcid/start"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-outline font-body-sm text-base font-medium text-on-surface hover:bg-surface-container-low transition-colors"
             >
               <span className="material-symbols-outlined text-[18px]">school</span>
               Sign in with ORCID
-              <span className="font-label-caps text-[9px] uppercase tracking-wider text-on-surface-variant">
-                Soon
-              </span>
-            </button>
+            </a>
           </div>
 
           <div className="flex items-center gap-2 mb-lg">

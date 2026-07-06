@@ -119,12 +119,8 @@ Collaboration
 
 ```text
 Google OAuth
-```
 
-Future:
-
-```text
-ORCID Login
+ORCID (custom OAuth2 flow — no built-in Supabase provider)
 ```
 
 ---
@@ -484,6 +480,8 @@ Enable collaborative checklist review.
 
 ```text
 Google Login
+
+ORCID Login
 
 Sharing
 

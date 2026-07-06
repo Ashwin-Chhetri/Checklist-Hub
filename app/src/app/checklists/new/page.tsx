@@ -13,6 +13,7 @@ import {
 } from "@/modules/checklist/utils/speciesFileParser";
 import type { CollaboratorInviteInput, TaxonomicScope } from "@/types/checklist.types";
 import { TaxonomicScopeSelector } from "@/components/checklist-wizard/step1/TaxonomicScopeSelector";
+import { useTaxonomicScopeSuggestion } from "@/modules/taxonomy/hooks/useTaxonomicScopeSuggestion";
 import { RegionInput, type RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
 import { SpeciesDiscoveryPanel } from "@/components/checklist-wizard/step2/discovery/SpeciesDiscoveryPanel";
 import { SpeciesInventoryPanel } from "@/components/checklist-wizard/step2/discovery/SpeciesInventoryPanel";
@@ -98,6 +99,25 @@ export default function NewChecklistPage() {
   const [taxonomicScope, setTaxonomicScope] = useState<TaxonomicScope>({});
   const [deepestTaxonKey, setDeepestTaxonKey] = useState<number | null>(null);
   const [region, setRegion] = useState<RegionValue>(DEFAULT_REGION);
+
+  // Bumped whenever a scope suggestion is applied, forcing TaxonomicScopeSelector
+  // to remount so it re-derives its internal selections (incl. resolving GBIF
+  // keys for each rank) from the freshly-applied `taxonomicScope` value — the
+  // component only reads its `value` prop on mount, not on every re-render.
+  const [scopeVersion, setScopeVersion] = useState(0);
+  const [dismissedSuggestionTerm, setDismissedSuggestionTerm] = useState<string | null>(null);
+  const scopeSuggestion = useTaxonomicScopeSuggestion(title);
+  const suggestedScope =
+    scopeSuggestion.data && Object.keys(taxonomicScope).length === 0 && dismissedSuggestionTerm !== scopeSuggestion.data.matchedTerm
+      ? scopeSuggestion.data
+      : null;
+
+  function applyScopeSuggestion() {
+    if (!suggestedScope) return;
+    setTaxonomicScope(suggestedScope.classification);
+    setDeepestTaxonKey(null);
+    setScopeVersion((v) => v + 1);
+  }
 
   // Step 2 — Import. Kept as one entry per uploaded file (rather than a single
   // pre-merged list) so a file can be individually removed; csvRows/importIssues
@@ -385,10 +405,35 @@ export default function NewChecklistPage() {
                 </div>
 
                 <div className="space-y-xs">
-                  <label className="text-sm font-semibold text-on-surface-variant">
-                    Taxonomic Scope
-                  </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-sm font-semibold text-on-surface-variant">
+                      Taxonomic Scope
+                    </label>
+                    {suggestedScope && (
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="text-on-surface-variant">
+                          Suggested from title: <span className="font-semibold text-primary">{suggestedScope.matchedTerm}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={applyScopeSuggestion}
+                          className="font-label-caps uppercase tracking-wider text-primary hover:underline"
+                        >
+                          Apply
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDismissedSuggestionTerm(suggestedScope.matchedTerm)}
+                          className="material-symbols-outlined text-[14px] text-on-surface-variant hover:text-primary"
+                          aria-label="Dismiss scope suggestion"
+                        >
+                          close
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <TaxonomicScopeSelector
+                    key={scopeVersion}
                     value={taxonomicScope}
                     onChange={(scope, taxonKey) => {
                       setTaxonomicScope(scope);
