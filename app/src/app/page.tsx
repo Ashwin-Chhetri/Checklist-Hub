@@ -58,33 +58,6 @@ const hubSteps = [
   { label: "Publish", detail: "DwC-A package generated and pushed through a GBIF-registered IPT." },
 ];
 
-const faqs = [
-  {
-    q: "What is a species checklist?",
-    a: "A species checklist is the evidence-backed list of species known from a region or taxon group — the reference researchers, park authorities, and conservation planners rely on. Published through a registry like GBIF, it becomes a structured, citable dataset other tools and researchers can query and build on.",
-  },
-  {
-    q: "How is Checklist Hub different from building a checklist in a spreadsheet?",
-    a: "A spreadsheet has no taxonomic authority check, no evidence behind each name, and no reviewer sign-off — synonyms and unsupported names ship silently. Checklist Hub validates every name against the GBIF Backbone and Catalogue of Life, attaches evidence from GBIF, iNaturalist, eBird, and literature, and requires at least one expert reviewer before a species is accepted.",
-  },
-  {
-    q: "Which data sources does Checklist Hub pull evidence from?",
-    a: "GBIF, iNaturalist, eBird (for bird checklists), museum collections, and literature — each occurrence or publication is scored into a Low/Medium/High evidence-strength rating for reviewers to weigh.",
-  },
-  {
-    q: "Can I publish a checklist to GBIF?",
-    a: "Yes. Checklist Hub generates a Darwin Core Archive (DwC-A) package ready to upload to a GBIF-registered IPT installation, and the workflow walks you through picking a publisher org, uploading the package, and recording the published URL.",
-  },
-  {
-    q: "Does Checklist Hub auto-accept species?",
-    a: "No. Evidence and taxonomy checks support the decision, but every accepted species requires at least one expert reviewer to sign off — nothing is added or published automatically.",
-  },
-  {
-    q: "Can I keep a checklist updated over time?",
-    a: "Yes, with the Watcher. It re-fetches GBIF, iNaturalist, and eBird on a weekly or monthly schedule for checklists marked active, and alerts your reviewers to new candidate species or observations for them to confirm.",
-  },
-];
-
 const processSteps = [
   {
     number: "01",
@@ -311,41 +284,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* FAQ */}
-      <section className="py-20 border-t border-outline-variant bg-surface-container-low">
-        <div className="w-full px-xl max-w-3xl mx-auto">
-          <h2 className="font-headline-lg text-[28px] md:text-[32px] uppercase tracking-tight mb-12 text-center">
-            Frequently Asked Questions
-          </h2>
-          <div className="space-y-6">
-            {faqs.map((faq) => (
-              <div key={faq.q} className="border border-outline-variant bg-white p-lg">
-                <h3 className="font-headline-md text-[16px] uppercase tracking-tight mb-2">
-                  {faq.q}
-                </h3>
-                <p className="font-body-sm text-body-sm text-secondary leading-relaxed">
-                  {faq.a}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            mainEntity: faqs.map((faq) => ({
-              "@type": "Question",
-              name: faq.q,
-              acceptedAnswer: { "@type": "Answer", text: faq.a },
-            })),
-          }),
-        }}
-      />
 
       <SiteFooter />
     </>
