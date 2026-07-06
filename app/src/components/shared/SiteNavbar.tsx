@@ -78,7 +78,7 @@ export default function SiteNavbar() {
           <Link className="nav-link" href="/about">
             About
           </Link>
-          <a className="nav-link" href="https://github.com" target="_blank" rel="noreferrer">
+          <a className="nav-link" href="https://github.com/Ashwin-Chhetri/Checklist-Hub" target="_blank" rel="noreferrer">
             GitHub
           </a>
         </div>

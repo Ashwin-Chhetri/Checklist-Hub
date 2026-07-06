@@ -4,6 +4,35 @@ import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import Highlight from "./Highlight";
 
+function LightboxImage({ src, alt, sizes, className }: { src: string; alt: string; sizes: string; className?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className="relative w-full h-full cursor-zoom-in" onClick={() => setOpen(true)}>
+        <Image src={src} alt={alt} fill sizes={sizes} className={className ?? "object-contain"} quality={90} />
+      </div>
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-zoom-out"
+          onClick={() => setOpen(false)}
+        >
+          <div className="relative w-full max-h-[90vh]" style={{ maxWidth: "min(90vw, 1400px)", aspectRatio: "16/10" }}>
+            <Image src={src} alt={alt} fill sizes="90vw" className="object-contain" quality={100} />
+          </div>
+          <button
+            type="button"
+            className="absolute top-4 right-4 text-white bg-black/40 hover:bg-black/70 rounded-full w-10 h-10 flex items-center justify-center text-xl font-bold transition-colors"
+            onClick={() => setOpen(false)}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 interface HighlightImage {
   src: string;
   alt: string;
@@ -128,12 +157,10 @@ export default function ChecklistWizardCarousel() {
 
         {slide.image && (
           <div className="relative w-full aspect-[16/10] border border-outline-variant shrink-0">
-            <Image
+            <LightboxImage
               src={slide.image}
               alt={slide.imageAlt ?? ""}
-              fill
               sizes="(min-width: 768px) 700px, 100vw"
-              className="object-contain"
             />
           </div>
         )}
@@ -150,12 +177,10 @@ export default function ChecklistWizardCarousel() {
             <div className="flex gap-3">
               {slide.highlight.images.map((img) => (
                 <div key={img.src} className="relative flex-1 h-40 border border-outline-variant bg-white">
-                  <Image
+                  <LightboxImage
                     src={img.src}
                     alt={img.alt}
-                    fill
                     sizes="(min-width: 768px) 340px, 45vw"
-                    className="object-contain"
                   />
                 </div>
               ))}
