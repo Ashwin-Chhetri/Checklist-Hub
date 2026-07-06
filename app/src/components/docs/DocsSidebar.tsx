@@ -89,7 +89,7 @@ export default function DocsSidebar() {
   }, []);
 
   return (
-    <aside className="w-full md:w-60 md:shrink-0 md:sticky md:top-24 md:max-h-[calc(100vh-6rem)] md:overflow-y-auto md:pb-8">
+    <aside className="w-full md:w-60 md:shrink-0 md:sticky md:top-24">
       <div>
         {navGroups.map((group, i) => (
           <div key={group.label} className={i > 0 ? "mt-6 pt-4 border-t border-outline-variant" : undefined}>
