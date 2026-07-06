@@ -67,6 +67,27 @@ shared runtime — output is manually verified before any later integration
 into ChecklistHub's evidence model. See
 [`research-pipeline/README.md`](research-pipeline/README.md).
 
+## Citing Checklist Hub
+
+If you published a checklist through GBIF, cite that checklist's own dataset
+DOI. To cite the **platform** itself (methods section, tool comparison, or
+acknowledgment):
+
+> Chhetri, A. (2026). *Checklist Hub: Evidence-based species checklist
+> platform for biodiversity experts* [Computer software]. Checklist Hub.
+> https://checklisthub.in
+
+```bibtex
+@software{checklisthub2026,
+  author  = {Chhetri, Ashwin},
+  title   = {Checklist Hub: Evidence-based species checklist platform for biodiversity experts},
+  year    = {2026},
+  url     = {https://checklisthub.in}
+}
+```
+
+See [checklisthub.in/docs#citing-checklist-hub](https://checklisthub.in/docs#citing-checklist-hub).
+
 ## Principles
 
 - Evidence supports decisions. Experts make decisions.

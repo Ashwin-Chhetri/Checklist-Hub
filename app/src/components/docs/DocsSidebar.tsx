@@ -47,6 +47,7 @@ const navGroups: NavGroup[] = [
         label: "Publish a DwC-A to GBIF",
         icon: "menu_book",
       },
+      { slug: "citing-checklist-hub", label: "Citing Checklist Hub", icon: "format_quote" },
     ],
   },
   {

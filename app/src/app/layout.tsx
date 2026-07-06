@@ -84,6 +84,15 @@ export const metadata: Metadata = {
   verification: {
     google: "siNCXP3nTWA3s8f2IdvJ_yw3jngRTrZF74ve_VqDR74",
   },
+  other: {
+    // Highwire Press / Google Scholar style citation meta tags, so citation
+    // managers, AI crawlers, and answer engines can attribute the platform
+    // correctly by default without a per-page override. See docs#citing-checklist-hub.
+    citation_title: "Checklist Hub",
+    citation_author: "Chhetri, Ashwin",
+    citation_publication_date: "2026/06/29",
+    citation_public_url: SITE_URL,
+  },
 };
 
 const jsonLd = {
@@ -120,6 +129,8 @@ const jsonLd = {
       datePublished: "2026-06-29",
       dateModified: "2026-07-04",
       author: { "@id": `${SITE_URL}/#founder` },
+      citation:
+        "Chhetri, A. (2026). Checklist Hub: Evidence-based species checklist platform for biodiversity experts [Computer software]. https://checklisthub.in",
     },
   ],
 };
