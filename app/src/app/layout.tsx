@@ -40,15 +40,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
-  icons: {
-    icon: [
-      { url: "/res/landing/checklist_hub_logo.png", type: "image/png" },
-    ],
-    apple: [
-      { url: "/res/landing/checklist_hub_logo.png", type: "image/png" },
-    ],
-    shortcut: "/res/landing/checklist_hub_logo.png",
-  },
   openGraph: {
     type: "website",
     url: SITE_URL,
