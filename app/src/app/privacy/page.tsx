@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import SiteNavbar from "@/components/shared/SiteNavbar";
 import SiteFooter from "@/components/shared/SiteFooter";
+import FoldText from "@/components/shared/FoldText";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -61,7 +62,17 @@ export default function PrivacyPage() {
           <div className="w-full px-xl max-w-3xl">
             <div className="w-16 h-1.5 bg-primary mb-lg" />
             <h1 className="font-headline-lg text-headline-lg uppercase tracking-tighter font-bold mb-md">
-              Privacy Policy
+              <FoldText
+                text="Privacy Policy"
+                splitBy="word"
+                hinge="top"
+                trigger="mount"
+                duration={0.6}
+                stagger={0.08}
+                fontSize="inherit"
+                fontWeight="inherit"
+                color="inherit"
+              />
             </h1>
             <p className="font-body-sm text-body-sm text-secondary mb-xl">
               Last updated: 2026-07-04

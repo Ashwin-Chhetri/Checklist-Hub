@@ -3,8 +3,19 @@
 import { useState } from "react";
 import Image from "next/image";
 
-export default function DocsImage({ src, alt }: { src: string; alt: string }) {
+export default function DocsImage({
+  src,
+  alt,
+  aspect = "16 / 10",
+}: {
+  src: string;
+  alt: string;
+  aspect?: string;
+}) {
   const [open, setOpen] = useState(false);
+
+  const [w, h] = aspect.split("/").map((n) => parseFloat(n.trim()));
+  const isPortrait = w && h ? w / h < 1 : false;
 
   return (
     <>
@@ -13,7 +24,7 @@ export default function DocsImage({ src, alt }: { src: string; alt: string }) {
         onClick={() => setOpen(true)}
         title="Click to enlarge"
       >
-        <div className="relative w-full aspect-[16/10]">
+        <div className="relative w-full mx-auto" style={{ aspectRatio: aspect, maxWidth: isPortrait ? 420 : undefined }}>
           <Image
             src={src}
             alt={alt}

@@ -139,6 +139,15 @@ html:has([data-modal="true"]) {
   box-shadow: 6px 6px 0px 0px rgba(164, 31, 36, 1);
 }
 
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .shadow-hard {
   box-shadow: 4px 4px 0px 0px rgba(198, 57, 57, 1);
 }
@@ -280,6 +289,12 @@ html:has([data-modal="true"]) {
 
 .nav-link:hover::after {
   width: 100%;
+}
+
+@keyframes docs-arrow-flow {
+  to {
+    stroke-dashoffset: -26;
+  }
 }
 
 /* =========================================================
