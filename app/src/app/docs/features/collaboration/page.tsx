@@ -6,7 +6,7 @@ import DocsFieldWalkthrough from "@/components/docs/DocsFieldWalkthrough";
 export const metadata: Metadata = {
   title: "Collaboration — Docs",
   description:
-    "Invite reviewers by name or email, manage roles, and resolve conflicts in per-species discussion threads with @ pings and # references.",
+    "Invite reviewers by name or email, and resolve conflicts in per-species discussion threads with @ pings and # references.",
   alternates: { canonical: "/docs/features/collaboration" },
 };
 
@@ -49,11 +49,6 @@ export default function CollaborationPage() {
                   no separate email tool to open.
                 </>
               ),
-            },
-            {
-              title: "Manage roles anytime",
-              target: { x: 47, y: 55 },
-              body: "Pending invites are tracked until accepted; owners can manage roles and remove collaborators at any time.",
             },
             {
               title: "Collaborators get the invite via their email",
