@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
 import DocsStepNav from "@/components/docs/DocsStepNav";
-import DocsStepExplorer from "@/components/docs/DocsStepExplorer";
+import DocsStepWalkthrough from "@/components/docs/DocsStepWalkthrough";
 
 const WORKBENCH_SCREEN = {
   src: "/res/docs/workbench.png",
@@ -41,32 +41,38 @@ export default function GettingStartedWorkbenchPage() {
         Every species from the previous steps lands here as its own row, ready for a
         final pass before you publish.
       </p>
-      <DocsStepExplorer
+      <DocsStepWalkthrough
+        hint="Click a step below to see it highlighted in the screenshot."
         defaultScreen={WORKBENCH_SCREEN}
-        variant="full"
+        variant="flush"
         steps={[
           {
             title: "Review species",
+            target: { x: 28, y: 22 },
             body: "Work through the checklist row by row, starting wherever you like.",
             screen: WORKBENCH_SCREEN,
           },
           {
             title: "Verify with evidence",
+            target: { x: 97, y: 24 },
             body: "Confirm each species actually belongs by checking the occurrence map and source counts behind it.",
             screen: EVIDENCE_SCREEN,
           },
           {
             title: "Review flagged taxonomy issues",
+            target: { x: 12, y: 34 },
             body: "Resolve any row flagged as a synonym or an authority conflict.",
             screen: WORKBENCH_SCREEN,
           },
           {
             title: "Communicate with collaborators",
+            target: { x: 95, y: 27 },
             body: "Leave a comment on the row, tagging a collaborator with @ or a species with # when something needs a second opinion.",
             screen: DISCUSSION_SCREEN,
           },
           {
             title: "Resolve every row",
+            target: { x: 69, y: 19 },
             body: "Accept, reject, or merge each one until nothing is left in Needs Review.",
             screen: WORKBENCH_SCREEN,
           },

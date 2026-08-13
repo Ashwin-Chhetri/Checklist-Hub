@@ -52,6 +52,7 @@ const navGroups: NavGroup[] = [
       { href: "/docs/features/export", label: "Export", icon: "file_download" },
       { href: "/docs/features/history", label: "History", icon: "history" },
       { href: "/docs/features/collaboration", label: "Collaboration", icon: "forum" },
+      { href: "/docs/features/ai-mcp", label: "AI MCP & Chat Box", icon: "smart_toy" },
     ],
   },
   {

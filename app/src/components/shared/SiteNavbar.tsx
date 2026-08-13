@@ -24,7 +24,9 @@ export default function SiteNavbar() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const mobileNavRef = useRef<HTMLDivElement>(null);
 
   const { data: profile } = useProfile(user?.id);
   const signOut = useSignOut();
@@ -53,6 +55,12 @@ export default function SiteNavbar() {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
       }
+      if (
+        mobileNavRef.current &&
+        !mobileNavRef.current.contains(event.target as Node)
+      ) {
+        setIsMobileNavOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -70,7 +78,57 @@ export default function SiteNavbar() {
   return (
     <nav>
       <div className="app-header">
-        <AppHeader />
+        <div className="flex items-center gap-sm" ref={mobileNavRef}>
+          <div className="relative md:hidden">
+            <button
+              onClick={() => setIsMobileNavOpen((open) => !open)}
+              className="app-header-btn"
+              aria-label="Toggle navigation menu"
+              aria-expanded={isMobileNavOpen}
+            >
+              {isMobileNavOpen ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="4" y1="4" x2="20" y2="20" />
+                  <line x1="20" y1="4" x2="4" y2="20" />
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              )}
+            </button>
+            {isMobileNavOpen && (
+              <div className="absolute left-0 mt-sm w-48 bg-white border border-outline-variant shadow-lg z-50">
+                <Link
+                  className="block px-md py-sm font-code-md text-code-md text-on-surface hover:bg-surface-container-low transition-colors"
+                  href="/docs"
+                  onClick={() => setIsMobileNavOpen(false)}
+                >
+                  Docs
+                </Link>
+                <Link
+                  className="block px-md py-sm font-code-md text-code-md text-on-surface hover:bg-surface-container-low transition-colors"
+                  href="/about"
+                  onClick={() => setIsMobileNavOpen(false)}
+                >
+                  About
+                </Link>
+                <a
+                  className="block px-md py-sm font-code-md text-code-md text-on-surface hover:bg-surface-container-low transition-colors"
+                  href="https://github.com/Ashwin-Chhetri/Checklist-Hub"
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setIsMobileNavOpen(false)}
+                >
+                  GitHub
+                </a>
+              </div>
+            )}
+          </div>
+          <AppHeader />
+        </div>
         <div className="hidden md:flex items-center gap-xl">
           <Link className="nav-link" href="/docs">
             Docs

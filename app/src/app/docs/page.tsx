@@ -41,7 +41,7 @@ const groups = [
   },
   {
     title: "Features",
-    body: "Workbench, Evidence, Reconciliation, Watcher, Export, History, and Collaboration.",
+    body: "Workbench, Evidence, Reconciliation, Watcher, Export, History, Collaboration, and AI MCP & Chat Box.",
     href: "/docs/features/workbench",
   },
   {

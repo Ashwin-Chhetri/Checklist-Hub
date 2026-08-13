@@ -162,7 +162,7 @@ html:has([data-modal="true"]) {
 }
 
 .app-header-logo {
-  @apply h-10 w-10 object-contain;
+  @apply h-10 w-10 object-contain overflow-hidden;
 }
 
 .app-header-title {
@@ -291,12 +291,6 @@ html:has([data-modal="true"]) {
   width: 100%;
 }
 
-@keyframes docs-arrow-flow {
-  to {
-    stroke-dashoffset: -26;
-  }
-}
-
 /* =========================================================
    WORKBENCH SIDEBAR
    Matches reference HTML
@@ -362,6 +356,57 @@ html:has([data-modal="true"]) {
 
 .animate-dialog-pop-in {
   animation: dialog-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Docs field-walkthrough arrows: a slow "generating" grow-in from the
+   shaft's own start point, and a slow, gentle vanish on exit. */
+@keyframes docs-arrow-shaft-in {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes docs-arrow-shaft-out {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.94);
+    opacity: 0;
+  }
+}
+
+/* `docs-arrow-head-*` scale only on Y (around the head's own tip, which sits
+   at the transform-origin) — squashed flat it's a line continuing straight
+   back from the tip along the shaft's own incoming direction, so this reads
+   as the line unfurling into a wedge on entry, and folding back into a line
+   before vanishing on exit, rather than a static shape just fading. */
+@keyframes docs-arrow-head-in {
+  from {
+    transform: scaleY(0.06);
+    opacity: 0.8;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes docs-arrow-head-out {
+  from {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  to {
+    transform: scaleY(0.06);
+    opacity: 0;
+  }
 }
 
 .workbench-sidebar-count-alert {

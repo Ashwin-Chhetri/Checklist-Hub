@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import Image from "next/image";
 
 const FRAME_SRC = "/res/docs/placeholder.png";
@@ -11,13 +11,7 @@ const FRAME_ASPECT = "2064 / 1811";
 // light-gray bezel gives way to the white screen.
 const SCREEN = { left: 3.488, top: 4.639, width: 92.83, height: 66.266 };
 
-export default function FramedScreenshot({
-  src,
-  alt,
-  variant = "full",
-  aspect = "16 / 10",
-  scale = 1,
-}: {
+interface FramedScreenshotProps {
   src: string;
   alt: string;
   /**
@@ -36,7 +30,14 @@ export default function FramedScreenshot({
   aspect?: string;
   /** Shrinks a "dialog" screenshot within the cutout, e.g. 0.5 for half size. */
   scale?: number;
-}) {
+  /** Fires once `src` has finished loading — used to time overlays (e.g. annotation arrows) that need the rendered image's final layout. */
+  onImageLoad?: () => void;
+}
+
+const FramedScreenshot = forwardRef<HTMLDivElement, FramedScreenshotProps>(function FramedScreenshot(
+  { src, alt, variant = "full", aspect = "16 / 10", scale = 1, onImageLoad },
+  contentRef,
+) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -66,18 +67,22 @@ export default function FramedScreenshot({
           }}
         >
           {variant === "flush" ? (
-            <Image
-              src={src}
-              alt={alt}
-              fill
-              sizes="(min-width: 1024px) 55vw, 100vw"
-              className="object-cover"
-              quality={100}
-              priority
-            />
+            <div ref={contentRef} className="relative w-full h-full">
+              <Image
+                src={src}
+                alt={alt}
+                fill
+                sizes="(min-width: 1024px) 55vw, 100vw"
+                className="object-cover object-top"
+                quality={100}
+                priority
+                onLoad={onImageLoad}
+              />
+            </div>
           ) : variant === "dialog" ? (
             <div className="relative w-full h-full bg-white flex items-start justify-center p-[4%]">
               <div
+                ref={contentRef}
                 className="relative"
                 style={{
                   aspectRatio: aspect,
@@ -95,11 +100,12 @@ export default function FramedScreenshot({
                   className="object-contain"
                   quality={100}
                   priority
+                  onLoad={onImageLoad}
                 />
               </div>
             </div>
           ) : (
-            <div className="relative w-full h-full bg-white">
+            <div ref={contentRef} className="relative w-full h-full bg-white">
               <Image
                 src={src}
                 alt={alt}
@@ -108,6 +114,7 @@ export default function FramedScreenshot({
                 className="object-contain object-top"
                 quality={100}
                 priority
+                onLoad={onImageLoad}
               />
             </div>
           )}
@@ -137,4 +144,6 @@ export default function FramedScreenshot({
       )}
     </>
   );
-}
+});
+
+export default FramedScreenshot;

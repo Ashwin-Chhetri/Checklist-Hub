@@ -17,6 +17,14 @@ const terms = [
     def: "GBIF's term for a published checklist — a structured, citable snapshot of species occurrence that other tools and researchers can query and build on.",
   },
   {
+    term: "Publisher",
+    def: "The GBIF-endorsed organization or individual credited as a dataset's point of contact — every checklist needs one attached before GBIF will register it.",
+  },
+  {
+    term: "Publishing Partner",
+    def: "A publisher that runs its own IPT and is willing to host datasets it didn't create itself — typically a national GBIF node, museum, or university. Useful if your own organization isn't endorsed or doesn't run an IPT yet.",
+  },
+  {
     term: "Decision record",
     def: "How Checklist Hub treats a species entry — identity, taxonomy, evidence, review history, and discussion all attached to it, rather than a bare spreadsheet row.",
   },
@@ -57,12 +65,19 @@ export default function TerminologyPage() {
         Terminology
       </h2>
       <dl className="space-y-6">
-        {terms.map(({ term, def }) => (
-          <div key={term} className="border border-outline-variant bg-white p-lg">
-            <dt className="font-bold text-on-surface mb-2">{term}</dt>
-            <dd className="font-body-sm text-body-sm text-secondary">{def}</dd>
-          </div>
-        ))}
+        {terms.map(({ term, def }) => {
+          const slug = term
+            .toLowerCase()
+            .replace(/[()]/g, "")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)/g, "");
+          return (
+            <div key={term} id={slug} className="border border-outline-variant bg-white p-lg scroll-mt-24">
+              <dt className="font-bold text-on-surface mb-2">{term}</dt>
+              <dd className="font-body-sm text-body-sm text-secondary">{def}</dd>
+            </div>
+          );
+        })}
       </dl>
     </section>
   );

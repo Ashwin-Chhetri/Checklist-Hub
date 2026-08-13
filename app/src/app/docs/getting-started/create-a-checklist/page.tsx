@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import FramedScreenshot from "@/components/docs/FramedScreenshot";
+import DocsFieldWalkthrough from "@/components/docs/DocsFieldWalkthrough";
 import DocsStepNav from "@/components/docs/DocsStepNav";
 
 export const metadata: Metadata = {
@@ -38,45 +38,33 @@ export default function CreateAChecklistPage() {
             Sign in and create a checklist
           </h3>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-          <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-            <FramedScreenshot
-              src="/res/docs/landing-page-full-2x.png"
-              alt="Checklist Hub landing page, with Sign In in the top right and Create Checklist below the headline"
-            />
-          </div>
-          <ol className="flex flex-col lg:h-full">
-            <li className="flex gap-4 items-baseline pb-6 border-b border-outline-variant">
-              <span className="font-code-md text-code-md text-primary font-bold shrink-0">
-                1
-              </span>
-              <div>
-                <h4 className="font-body-sm text-[15px] font-semibold text-on-surface mb-1.5">
-                  Sign in
-                </h4>
-                <p className="font-body-sm text-body-sm text-secondary">
+        <DocsFieldWalkthrough
+          hint="Click a step below to see it highlighted in the screenshot."
+          screen={{
+            src: "/res/docs/landing-page-full-2x.png",
+            alt: "Checklist Hub landing page, with Sign In in the top right and Create Checklist below the headline",
+            variant: "full",
+            aspect: "8640 / 5400",
+          }}
+          steps={[
+            {
+              title: "Sign in",
+              target: { x: 97, y: 3 },
+              body: (
+                <>
                   Using <span className="font-bold text-on-surface">email</span>,{" "}
                   <span className="font-bold text-on-surface">Google</span>, or{" "}
                   <span className="font-bold text-on-surface">ORCID</span>.
-                </p>
-              </div>
-            </li>
-            <li className="flex gap-4 items-baseline pt-6">
-              <span className="font-code-md text-code-md text-primary font-bold shrink-0">
-                2
-              </span>
-              <div>
-                <h4 className="font-body-sm text-[15px] font-semibold text-on-surface mb-1.5">
-                  Create checklist
-                </h4>
-                <p className="font-body-sm text-body-sm text-secondary">
-                  Click Create Checklist to open the wizard and start the first step,
-                  Define the taxa and region.
-                </p>
-              </div>
-            </li>
-          </ol>
-        </div>
+                </>
+              ),
+            },
+            {
+              title: "Create checklist",
+              target: { x: 17, y: 55 },
+              body: "Click Create Checklist to open the wizard and start the first step, Define the taxa and region.",
+            },
+          ]}
+        />
       </div>
 
       <DocsStepNav

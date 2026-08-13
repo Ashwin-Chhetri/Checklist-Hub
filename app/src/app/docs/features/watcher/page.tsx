@@ -1,12 +1,20 @@
 import type { Metadata } from "next";
 import Highlight from "@/components/docs/Highlight";
-import DocsStepExplorer from "@/components/docs/DocsStepExplorer";
+import DocsStepWalkthrough from "@/components/docs/DocsStepWalkthrough";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
+
+const SIDEBAR_SCREEN = {
+  src: "/res/docs/workbench.png",
+  alt: "The Workbench with the Watcher button highlighted under Status in the left sidebar",
+  aspect: "2562 / 1899",
+  variant: "flush" as const,
+};
 
 const SETUP_SCREEN = {
   src: "/res/docs/watcher-set-up.PNG",
   alt: "The Watcher dialog set to a weekly schedule with a collaborator added to the alert list",
   aspect: "1914 / 950",
+  variant: "flush" as const,
 };
 
 const ALERT_EMAIL_SCREEN = {
@@ -21,18 +29,21 @@ const RUNS_SCREEN = {
   src: "/res/docs/watcher-runs.PNG",
   alt: "The Watcher dialog's Runs list, showing a dated history of new and updated occurrences per run",
   aspect: "1905 / 950",
+  variant: "flush" as const,
 };
 
 const RUN_OCCURRENCES_SCREEN = {
   src: "/res/docs/watcher-run-sample.PNG",
   alt: "A Watcher run showing new occurrences, with previous and new counts side by side for each species",
   aspect: "1903 / 946",
+  variant: "flush" as const,
 };
 
 const RUN_NEW_SPECIES_SCREEN = {
   src: "/res/docs/watcher-run-sample-with-new-species.PNG",
   alt: "A Watcher run showing a new candidate species with a checkbox to add it to the checklist",
   aspect: "1907 / 946",
+  variant: "flush" as const,
 };
 
 export const metadata: Metadata = {
@@ -69,37 +80,50 @@ export default function WatcherPage() {
         </p>
       </div>
 
-      <DocsStepExplorer
+      <DocsStepWalkthrough
+        hint="Click a step below to see it highlighted in the screenshot."
         defaultScreen={SETUP_SCREEN}
         variant="full"
         steps={[
           {
+            title: "Click the button",
+            target: { x: 6.4, y: 70.2 },
+            body: "The Watcher lives under Status in the Workbench's left sidebar. Click it to open the setup dialog.",
+            screen: SIDEBAR_SCREEN,
+          },
+          {
             title: "Turn it on",
-            body: "Open the Watcher from Status in the Workbench sidebar and pick Weekly or Monthly, then save. The dialog shows when it started watching and exactly when the next run happens.",
+            target: { x: 46, y: 38 },
+            body: "Pick Weekly or Monthly, then save. The dialog shows when it started watching and exactly when the next run happens.",
             screen: SETUP_SCREEN,
           },
           {
             title: "Alert collaborators",
+            target: { x: 37, y: 61 },
             body: "Add any collaborator to the alert list. When a run turns up something worth a look, everyone on that list gets an in-app notification and an email like this one.",
             screen: ALERT_EMAIL_SCREEN,
           },
           {
             title: "View Watcher runs",
+            target: { x: 62, y: 66 },
             body: "Every run lands in the Runs list with a date and a count of what it found, so you can tell at a glance whether last week's run was quiet or worth opening. Click any run to see the detail.",
             screen: RUNS_SCREEN,
           },
           {
             title: "New occurrences",
+            target: { x: 65, y: 23 },
             body: "Open a run and species already on the checklist show their previous occurrence count next to the new one, broken down by source. This is exactly what feeds the evidence score, so more occurrences found here can push a species from Low to Medium, or Medium to High.",
             screen: RUN_OCCURRENCES_SCREEN,
           },
           {
             title: "New species",
+            target: { x: 66, y: 53 },
             body: "A species the run found that isn't on the checklist yet shows up on its own tab, with its occurrence count and a checkbox next to it.",
             screen: RUN_NEW_SPECIES_SCREEN,
           },
           {
             title: "Update the species table",
+            target: { x: 66, y: 60 },
             body: (
               <>
                 Check the candidates worth keeping and click Update. New occurrences

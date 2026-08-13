@@ -3,7 +3,7 @@ import Link from "next/link";
 import Highlight from "@/components/docs/Highlight";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
 import DocsStepNav from "@/components/docs/DocsStepNav";
-import DocsStepExplorer from "@/components/docs/DocsStepExplorer";
+import DocsStepWalkthrough from "@/components/docs/DocsStepWalkthrough";
 
 export const metadata: Metadata = {
   title: "Import data — Docs",
@@ -25,7 +25,8 @@ export default function ImportDataPage() {
         stage of the pipeline.
       </p>
 
-      <DocsStepExplorer
+      <DocsStepWalkthrough
+        hint="Click a step below to see it highlighted in the screenshot."
         defaultScreen={{
           src: "/res/docs/checklist-step-2.png",
           alt: "The Import step showing aggregated species counts from GBIF, eBird, and iNaturalist plus a CSV upload area",
@@ -34,11 +35,14 @@ export default function ImportDataPage() {
         steps={[
           {
             title: "Global occurrence data",
+            target: { x: 94, y: 31 },
             body: (
               <>
                 As soon as the taxonomic scope and region are set, evidence is{" "}
-                <Highlight>fetched automatically</Highlight> from GBIF, iNaturalist, and
-                eBird — no upload needed.
+                <Highlight>fetched automatically</Highlight> from{" "}
+                <Highlight>GBIF</Highlight>, <Highlight>iNaturalist</Highlight>, and{" "}
+                <Highlight>eBird</Highlight> — the repositories Checklist Hub currently
+                supports — no upload needed.
               </>
             ),
             screen: {
@@ -49,6 +53,7 @@ export default function ImportDataPage() {
           },
           {
             title: "Field data",
+            target: { x: 94, y: 61 },
             body: (
               <>
                 Manually collected field data can also be uploaded — drop a{" "}
@@ -68,6 +73,7 @@ export default function ImportDataPage() {
           },
           {
             title: "Literature pipeline",
+            target: { x: 94, y: 59 },
             body: "Deep Literature Search finds, ranks, and extracts a species list from published sources, in three stages:",
             screen: {
               src: "/res/docs/checklist-step-2-literature.png",
@@ -77,6 +83,7 @@ export default function ImportDataPage() {
             subSteps: [
               {
                 title: "Discover literature",
+                target: { x: 94, y: 55 },
                 body: (
                   <>
                     Searches the web for documents that are strictly{" "}
@@ -93,6 +100,7 @@ export default function ImportDataPage() {
               },
               {
                 title: "Rank literature",
+                target: { x: 11, y: 31 },
                 body: (
                   <>
                     Every discovered source is scored from{" "}
@@ -108,6 +116,7 @@ export default function ImportDataPage() {
               },
               {
                 title: "Extract species",
+                target: { x: 94, y: 92 },
                 body: (
                   <>
                     Sources scored <Highlight>75 and above</Highlight> are used to extract

@@ -3,7 +3,7 @@ import Link from "next/link";
 import Highlight from "@/components/docs/Highlight";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
 import DocsStepNav from "@/components/docs/DocsStepNav";
-import DocsStepExplorer from "@/components/docs/DocsStepExplorer";
+import DocsStepWalkthrough from "@/components/docs/DocsStepWalkthrough";
 
 export const metadata: Metadata = {
   title: "Collaborate — Docs",
@@ -23,7 +23,8 @@ export default function CollaboratePage() {
         Bring reviewers onto a checklist and resolve conflicts without leaving the
         species panel.
       </p>
-      <DocsStepExplorer
+      <DocsStepWalkthrough
+        hint="Click a step below to see it highlighted in the screenshot."
         defaultScreen={{
           src: "/res/docs/checklist-step-4.png",
           alt: "The Collab step showing the add-collaborator email field with an automatic invite suggestion",
@@ -33,11 +34,29 @@ export default function CollaboratePage() {
         }}
         steps={[
           {
-            title: "Invite a reviewer",
+            title: "Add collaborators",
+            target: { x: 89, y: 61 },
             body: (
               <>
-                Start typing the collaborator&apos;s email address. If they already
-                have a Checklist Hub account,{" "}
+                Type a collaborator&apos;s <Highlight>email address</Highlight> into
+                the field — a dropdown lists it back with the option to invite them,
+                whether or not they already have a Checklist Hub account.
+              </>
+            ),
+            screen: {
+              src: "/res/docs/checklist-step-4.png",
+              alt: "The Collab step's Add Collaborators field with an email typed in and an invite suggestion in the dropdown",
+              variant: "dialog",
+              aspect: "1436 / 753",
+              scale: 0.7,
+            },
+          },
+          {
+            title: "Collaborators get the invite via their email",
+            target: { x: 42, y: 49 },
+            body: (
+              <>
+                If they already have a Checklist Hub account,{" "}
                 <Highlight>they get notified in-app and by email</Highlight>, with a
                 link straight to the checklist — something like{" "}
                 <Highlight>checklisthub.org/checklists/&#123;checklist-id&#125;</Highlight>.
@@ -55,6 +74,7 @@ export default function CollaboratePage() {
           },
           {
             title: "Discuss",
+            target: { x: 95, y: 27 },
             body: (
               <>
                 Every species has its own real-time discussion thread. Type{" "}

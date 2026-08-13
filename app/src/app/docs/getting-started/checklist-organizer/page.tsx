@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Highlight from "@/components/docs/Highlight";
-import FramedScreenshot from "@/components/docs/FramedScreenshot";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
-import DocsStepList from "@/components/docs/DocsStepList";
+import DocsFieldWalkthrough from "@/components/docs/DocsFieldWalkthrough";
 import DocsStepNav from "@/components/docs/DocsStepNav";
 
 export const metadata: Metadata = {
@@ -23,43 +22,44 @@ export default function ChecklistOrganizerPage() {
         Every checklist you own or collaborate on lives in one table — filter by status
         and jump straight back into whatever stage you left off at.
       </p>
-      <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-        <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-          <FramedScreenshot
-            src="/res/docs/checklist-organizer.png"
-            alt="The My Checklists table with status tabs, collaborator avatars, and resume-publish rows"
-            aspect="2512 / 1687"
-          />
-        </div>
-        <DocsStepList
-          interactive
-          items={[
-            {
-              title: "Filter by status",
-              body: "Tabs for All Checklists, Shared with Me, Watching, Published, and Archived — filtered instantly, no reload.",
-            },
-            {
-              title: "See state at a glance",
-              body: "Status pills (Draft, Validating, Reviewing, Published, Archived) and a Watcher badge show a checklist's state at a glance.",
-            },
-            {
-              title: "Manage the team",
-              body: "A collaborator avatar stack shows everyone with access, including pending invites, with one click to manage the team.",
-            },
-            {
-              title: "Resume a publish",
-              body: (
-                <>
-                  Unfinished publish steps — saved metadata, a generated Darwin Core
-                  package, a submission awaiting GBIF registration — surface as inline
-                  rows so you <Highlight>resume exactly where you stopped</Highlight>,
-                  without redoing the wizard.
-                </>
-              ),
-            },
-          ]}
-        />
-      </div>
+      <DocsFieldWalkthrough
+        hint="Click a step below to see it highlighted in the screenshot."
+        screen={{
+          src: "/res/docs/checklist-organizer.png",
+          alt: "The My Checklists table with status tabs, collaborator avatars, and resume-publish rows",
+          variant: "full",
+          aspect: "2512 / 1687",
+        }}
+        steps={[
+          {
+            title: "Filter by status",
+            target: { x: 52, y: 18 },
+            body: "Tabs for All Checklists, Shared with Me, Watching, Published, and Archived — filtered instantly, no reload.",
+          },
+          {
+            title: "See state at a glance",
+            target: { x: 34, y: 41 },
+            body: "Status pills (Draft, Validating, Reviewing, Published, Archived) and a Watcher badge show a checklist's state at a glance.",
+          },
+          {
+            title: "Manage the team",
+            target: { x: 66, y: 41 },
+            body: "A collaborator avatar stack shows everyone with access, including pending invites, with one click to manage the team.",
+          },
+          {
+            title: "Resume a publish",
+            target: { x: 95, y: 67 },
+            body: (
+              <>
+                Unfinished publish steps — saved metadata, a generated Darwin Core
+                package, a submission awaiting GBIF registration — surface as inline
+                rows so you <Highlight>resume exactly where you stopped</Highlight>,
+                without redoing the wizard.
+              </>
+            ),
+          },
+        ]}
+      />
       <DocsStepNav
         back={{ href: "/docs/getting-started/publish-to-gbif", label: "Publish to GBIF" }}
       />

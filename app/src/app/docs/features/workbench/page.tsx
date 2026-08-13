@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Highlight from "@/components/docs/Highlight";
-import FramedScreenshot from "@/components/docs/FramedScreenshot";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
-import DocsStepList from "@/components/docs/DocsStepList";
+import DocsFieldWalkthrough from "@/components/docs/DocsFieldWalkthrough";
 
 const WORKBENCH_SCREEN = {
   src: "/res/docs/workbench.png",
   alt: "The Workbench species table with taxonomy, evidence, and review status columns",
   aspect: "2562 / 1899",
+  variant: "flush" as const,
 };
 
 export const metadata: Metadata = {
@@ -48,42 +48,42 @@ export default function WorkbenchPage() {
           you&apos;ve got everything needed to make a call on it, without opening
           anything.
         </p>
-        <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-          <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-            <FramedScreenshot {...WORKBENCH_SCREEN} />
-          </div>
-          <DocsStepList
-            interactive
-            items={[
-              {
-                title: "Species",
-                body: "The scientific name and author come first, with the common name underneath. The taxon ID below that links straight through to the matching record on the GBIF Backbone, so you can check it against the source of truth in one click.",
-              },
-              {
-                title: "Evidence",
-                body: (
-                  <>
-                    A <Highlight>Low</Highlight>, <Highlight>Medium</Highlight>, or{" "}
-                    <Highlight>High</Highlight> badge, built from a score: literature
-                    and eBird records count for more than GBIF or iNaturalist records,
-                    a source with a lot of occurrences scores higher, and having more
-                    than one independent source counts for extra. Six points or more is
-                    High, three to five is Medium, under three is Low. Click the badge
-                    to see the breakdown.
-                  </>
-                ),
-              },
-              {
-                title: "Taxonomy Resolution",
-                body: 'A row marked "Taxonomy Clean" matched the GBIF Backbone with no issues. Anything else, a synonym, a name two sources classify differently, or a name that never matched, is flagged right there in the row. You see a conflict at a glance, without digging for it.',
-              },
-              {
-                title: "Review Status",
-                body: "Accepted, Rejected, or still open. A row stays open until at least one collaborator makes the call, and every comment or agree/disagree on it is counted right in the column, so you can see which rows still need a voice.",
-              },
-            ]}
-          />
-        </div>
+        <DocsFieldWalkthrough
+          hint="Click a step below to see it highlighted in the screenshot."
+          screen={WORKBENCH_SCREEN}
+          steps={[
+            {
+              title: "Species",
+              target: { x: 28, y: 13 },
+              body: "The scientific name and author come first, with the common name underneath. The taxon ID below that links straight through to the matching record on the GBIF Backbone, so you can check it against the source of truth in one click.",
+            },
+            {
+              title: "Evidence",
+              target: { x: 40, y: 13 },
+              body: (
+                <>
+                  A <Highlight>Low</Highlight>, <Highlight>Medium</Highlight>, or{" "}
+                  <Highlight>High</Highlight> badge, built from a score: literature
+                  and eBird records count for more than GBIF or iNaturalist records,
+                  a source with a lot of occurrences scores higher, and having more
+                  than one independent source counts for extra. Six points or more is
+                  High, three to five is Medium, under three is Low. Click the badge
+                  to see the breakdown.
+                </>
+              ),
+            },
+            {
+              title: "Taxonomy Resolution",
+              target: { x: 54, y: 13 },
+              body: 'A row marked "Taxonomy Clean" matched the GBIF Backbone with no issues. Anything else, a synonym, a name two sources classify differently, or a name that never matched, is flagged right there in the row. You see a conflict at a glance, without digging for it.',
+            },
+            {
+              title: "Review Status",
+              target: { x: 65, y: 13 },
+              body: "Accepted, Rejected, or still open. A row stays open until at least one collaborator makes the call, and every comment or agree/disagree on it is counted right in the column, so you can see which rows still need a voice.",
+            },
+          ]}
+        />
       </section>
 
       <section className="py-10 md:py-12 border-b border-outline-variant">
@@ -94,75 +94,76 @@ export default function WorkbenchPage() {
           The sidebar doesn&apos;t hold extra data. It slices the same table you just
           saw, so you&apos;re always looking at fewer rows, not different ones.
         </p>
-        <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-          <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-            <FramedScreenshot {...WORKBENCH_SCREEN} />
-          </div>
-          <DocsStepList
-            interactive
-            items={[
-              {
-                title: "View mode",
-                body: "All Species, Needs Review, Accepted, and Rejected filter the table by review status. Accept or reject a row and it jumps to the matching view immediately, so there's no separate list to keep in sync by hand.",
-              },
-              {
-                title: "Taxonomy status",
-                body: "Synonyms, Conflicts, Unresolved, and Merged/Hidden filter the table by taxonomy status instead. Each one is there because a row needs a decision: a synonym to confirm, a conflict between sources to settle, a name that didn't resolve, or a past merge to review.",
-              },
-              {
-                title: "Activity",
-                body: (
-                  <>
-                    Recent Changes, Recent Comments, and History Timeline log every
-                    status flip, taxonomy vote, merge, and comment across the whole
-                    checklist, so a decision made months ago is still traceable back to
-                    who made it. See{" "}
-                    <Link
-                      href="/docs/features/history"
-                      className="text-primary underline underline-offset-2 hover:opacity-80"
-                    >
-                      Features → History
-                    </Link>{" "}
-                    for the full breakdown.
-                  </>
-                ),
-              },
-              {
-                title: "Watcher",
-                body: (
-                  <>
-                    Turn on the Watcher and Checklist Hub keeps checking GBIF,
-                    iNaturalist, and eBird for this checklist on a schedule, even after
-                    you&apos;ve moved on. See{" "}
-                    <Link
-                      href="/docs/features/watcher"
-                      className="text-primary underline underline-offset-2 hover:opacity-80"
-                    >
-                      Features → Watcher
-                    </Link>{" "}
-                    for the full walkthrough.
-                  </>
-                ),
-              },
-              {
-                title: "Export",
-                body: (
-                  <>
-                    Pull whatever&apos;s currently visible in the table out as a
-                    spreadsheet, independent of the formal publish flow. See{" "}
-                    <Link
-                      href="/docs/features/export"
-                      className="text-primary underline underline-offset-2 hover:opacity-80"
-                    >
-                      Features → Export
-                    </Link>{" "}
-                    for the full field list.
-                  </>
-                ),
-              },
-            ]}
-          />
-        </div>
+        <DocsFieldWalkthrough
+          hint="Click a step below to see it highlighted in the screenshot."
+          screen={WORKBENCH_SCREEN}
+          steps={[
+            {
+              title: "View mode",
+              target: { x: 13, y: 17 },
+              body: "All Species, Needs Review, Accepted, and Rejected filter the table by review status. Accept or reject a row and it jumps to the matching view immediately, so there's no separate list to keep in sync by hand.",
+            },
+            {
+              title: "Taxonomy status",
+              target: { x: 13, y: 36 },
+              body: "Synonyms, Conflicts, Unresolved, and Merged/Hidden filter the table by taxonomy status instead. Each one is there because a row needs a decision: a synonym to confirm, a conflict between sources to settle, a name that didn't resolve, or a past merge to review.",
+            },
+            {
+              title: "Activity",
+              target: { x: 13, y: 53 },
+              body: (
+                <>
+                  Recent Changes, Recent Comments, and History Timeline log every
+                  status flip, taxonomy vote, merge, and comment across the whole
+                  checklist, so a decision made months ago is still traceable back to
+                  who made it. See{" "}
+                  <Link
+                    href="/docs/features/history"
+                    className="text-primary underline underline-offset-2 hover:opacity-80"
+                  >
+                    Features → History
+                  </Link>{" "}
+                  for the full breakdown.
+                </>
+              ),
+            },
+            {
+              title: "Watcher",
+              target: { x: 13, y: 70 },
+              body: (
+                <>
+                  Turn on the Watcher and Checklist Hub keeps checking GBIF,
+                  iNaturalist, and eBird for this checklist on a schedule, even after
+                  you&apos;ve moved on. See{" "}
+                  <Link
+                    href="/docs/features/watcher"
+                    className="text-primary underline underline-offset-2 hover:opacity-80"
+                  >
+                    Features → Watcher
+                  </Link>{" "}
+                  for the full walkthrough.
+                </>
+              ),
+            },
+            {
+              title: "Export",
+              target: { x: 13, y: 87 },
+              body: (
+                <>
+                  Pull whatever&apos;s currently visible in the table out as a
+                  spreadsheet, independent of the formal publish flow. See{" "}
+                  <Link
+                    href="/docs/features/export"
+                    className="text-primary underline underline-offset-2 hover:opacity-80"
+                  >
+                    Features → Export
+                  </Link>{" "}
+                  for the full field list.
+                </>
+              ),
+            },
+          ]}
+        />
       </section>
 
       <section className="py-10 md:py-12 border-b border-outline-variant">
@@ -173,53 +174,52 @@ export default function WorkbenchPage() {
           Click any row and the right panel opens for that one species, with three
           tabs: Taxonomy, Evidence, and Discussion.
         </p>
-        <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-          <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-            <FramedScreenshot {...WORKBENCH_SCREEN} />
-          </div>
-          <DocsStepList
-            interactive
-            items={[
-              {
-                title: "Taxonomy",
-                body: "The species' photo, when one is available, sits above its full classification, kingdom down to species. Start typing a correction and Checklist Hub suggests matches straight from the GBIF backbone. Pick one and the whole hierarchy updates with it.",
-              },
-              {
-                title: "Evidence",
-                body: (
-                  <>
-                    A map of the checklist&apos;s region with every occurrence point
-                    plotted on it, colored by source. See{" "}
-                    <Link
-                      href="/docs/features/evidence"
-                      className="text-primary underline underline-offset-2 hover:opacity-80"
-                    >
-                      Features → Evidence
-                    </Link>{" "}
-                    for the full breakdown.
-                  </>
-                ),
-              },
-              {
-                title: "Discussion",
-                body: (
-                  <>
-                    A comment thread for this species alone. Tag a collaborator with @
-                    or another species with # when a decision needs a second opinion.
-                    See{" "}
-                    <Link
-                      href="/docs/features/collaboration"
-                      className="text-primary underline underline-offset-2 hover:opacity-80"
-                    >
-                      Features → Collaboration
-                    </Link>{" "}
-                    for the full breakdown.
-                  </>
-                ),
-              },
-            ]}
-          />
-        </div>
+        <DocsFieldWalkthrough
+          hint="Click a step below to see it highlighted in the screenshot."
+          screen={WORKBENCH_SCREEN}
+          steps={[
+            {
+              title: "Taxonomy",
+              target: { x: 80, y: 14 },
+              body: "The species' photo, when one is available, sits above its full classification, kingdom down to species. Start typing a correction and Checklist Hub suggests matches straight from the GBIF backbone. Pick one and the whole hierarchy updates with it.",
+            },
+            {
+              title: "Evidence",
+              target: { x: 88, y: 14 },
+              body: (
+                <>
+                  A map of the checklist&apos;s region with every occurrence point
+                  plotted on it, colored by source. See{" "}
+                  <Link
+                    href="/docs/features/evidence"
+                    className="text-primary underline underline-offset-2 hover:opacity-80"
+                  >
+                    Features → Evidence
+                  </Link>{" "}
+                  for the full breakdown.
+                </>
+              ),
+            },
+            {
+              title: "Discussion",
+              target: { x: 98, y: 14 },
+              body: (
+                <>
+                  A comment thread for this species alone. Tag a collaborator with @
+                  or another species with # when a decision needs a second opinion.
+                  See{" "}
+                  <Link
+                    href="/docs/features/collaboration"
+                    className="text-primary underline underline-offset-2 hover:opacity-80"
+                  >
+                    Features → Collaboration
+                  </Link>{" "}
+                  for the full breakdown.
+                </>
+              ),
+            },
+          ]}
+        />
       </section>
 
       <section className="py-10 md:py-12">
@@ -230,38 +230,38 @@ export default function WorkbenchPage() {
           Two sources can pull in the same species under slightly different names. The
           Workbench catches it before you do the deleting.
         </p>
-        <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-          <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-            <FramedScreenshot
-              src="/res/docs/workbench.png"
-              alt="The Workbench species table, where merged rows move to the Merged / Hidden view"
-              aspect="2562 / 1899"
-            />
-          </div>
-          <DocsStepList
-            interactive
-            items={[
-              {
-                title: "Flagged before you save",
-                body: "When a correction matches a name already in the checklist, Checklist Hub flags it as a duplicate before you save. The fix becomes a merge instead of two separate rows.",
-              },
-              {
-                title: "Non-destructive",
-                body: (
-                  <>
-                    Merging is <Highlight>non-destructive</Highlight>: evidence,
-                    comments, and history from both rows carry over onto the surviving
-                    row, and nothing is deleted outright.
-                  </>
-                ),
-              },
-              {
-                title: "Reversible",
-                body: "Merged rows don't disappear. They move to the Merged/Hidden view, so the decision stays visible and reversible.",
-              },
-            ]}
-          />
-        </div>
+        <DocsFieldWalkthrough
+          hint="Click a step below to see it highlighted in the screenshot."
+          screen={{
+            src: "/res/docs/workbench.png",
+            alt: "The Workbench species table, where merged rows move to the Merged / Hidden view",
+            aspect: "2562 / 1899",
+            variant: "flush",
+          }}
+          steps={[
+            {
+              title: "Flagged before you save",
+              target: { x: 13, y: 42 },
+              body: "When a correction matches a name already in the checklist, Checklist Hub flags it as a duplicate before you save. The fix becomes a merge instead of two separate rows.",
+            },
+            {
+              title: "Non-destructive",
+              target: { x: 13, y: 42 },
+              body: (
+                <>
+                  Merging is <Highlight>non-destructive</Highlight>: evidence,
+                  comments, and history from both rows carry over onto the surviving
+                  row, and nothing is deleted outright.
+                </>
+              ),
+            },
+            {
+              title: "Reversible",
+              target: { x: 13, y: 42 },
+              body: "Merged rows don't disappear. They move to the Merged/Hidden view, so the decision stays visible and reversible.",
+            },
+          ]}
+        />
       </section>
     </>
   );

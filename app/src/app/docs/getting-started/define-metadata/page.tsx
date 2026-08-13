@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Highlight from "@/components/docs/Highlight";
-import FramedScreenshot from "@/components/docs/FramedScreenshot";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
-import DocsStepList from "@/components/docs/DocsStepList";
+import DocsFieldWalkthrough from "@/components/docs/DocsFieldWalkthrough";
 import DocsStepNav from "@/components/docs/DocsStepNav";
 
 export const metadata: Metadata = {
@@ -23,46 +22,46 @@ export default function DefineMetadataPage() {
         Before a checklist can be packaged for GBIF, it needs metadata: the descriptive
         information a reader, or GBIF itself, sees before ever opening the species list.
       </p>
-      <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-        <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-          <FramedScreenshot
-            src="/res/docs/meta-data.PNG"
-            alt="The Checklist Summary screen, listing dataset summary, geographic scope, historical comparison, source summary, and checklist metadata fields"
-            aspect="1888 / 950"
-          />
-        </div>
-        <DocsStepList
-          interactive
-          items={[
-            {
-              title: "What you fill in",
-              body: (
-                <>
-                  Dataset info (title, abstract), temporal coverage, geographic
-                  coverage, taxonomic coverage, methods, contributors, publishing
-                  organization, and funding &amp; support.
-                </>
-              ),
-            },
-            {
-              title: "What's already filled in",
-              body: (
-                <>
-                  Species, family, order, and genera counts, the source-by-source
-                  record totals, and the classification breakdown are pulled straight
-                  from the data you&apos;ve already gathered on the{" "}
-                  <Highlight>Workbench</Highlight> — you&apos;re reviewing them, not
-                  typing them in.
-                </>
-              ),
-            },
-            {
-              title: "Completion tracked live",
-              body: "The sidebar checklist (Title Complete, Abstract Provided, Taxonomy Scope, Geography Set, Temporal Valid, Authors Added) flips to Ready only once every required field is in place.",
-            },
-          ]}
-        />
-      </div>
+      <DocsFieldWalkthrough
+        hint="Click a step below to see it highlighted in the screenshot."
+        screen={{
+          src: "/res/docs/meta-data.PNG",
+          alt: "The Checklist Summary screen, listing dataset summary, geographic scope, historical comparison, source summary, and checklist metadata fields",
+          variant: "full",
+          aspect: "1888 / 950",
+        }}
+        steps={[
+          {
+            title: "What you fill in",
+            target: { x: 11, y: 34 },
+            body: (
+              <>
+                Dataset info (title, abstract), temporal coverage, geographic
+                coverage, taxonomic coverage, methods, contributors, publishing
+                organization, and funding &amp; support.
+              </>
+            ),
+          },
+          {
+            title: "What's already filled in",
+            target: { x: 98, y: 33 },
+            body: (
+              <>
+                Species, family, order, and genera counts, the source-by-source
+                record totals, and the classification breakdown are pulled straight
+                from the data you&apos;ve already gathered on the{" "}
+                <Highlight>Workbench</Highlight> — you&apos;re reviewing them, not
+                typing them in.
+              </>
+            ),
+          },
+          {
+            title: "Completion tracked live",
+            target: { x: 10, y: 93 },
+            body: "The sidebar checklist (Title Complete, Abstract Provided, Taxonomy Scope, Geography Set, Temporal Valid, Authors Added) flips to Ready only once every required field is in place.",
+          },
+        ]}
+      />
       <h3 className="font-label-caps text-[11px] text-on-surface-variant uppercase tracking-widest mb-3 mt-10">
         What each section covers
       </h3>

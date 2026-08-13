@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Highlight from "@/components/docs/Highlight";
-import FramedScreenshot from "@/components/docs/FramedScreenshot";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
-import DocsStepList from "@/components/docs/DocsStepList";
+import DocsFieldWalkthrough from "@/components/docs/DocsFieldWalkthrough";
 import DocsStepNav from "@/components/docs/DocsStepNav";
 
 export const metadata: Metadata = {
@@ -25,41 +24,39 @@ export default function ValidateSpeciesPage() {
         source, switch between list and chart views, and see the taxonomic composition at
         a glance.
       </p>
-      <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-        <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-          <FramedScreenshot
-            src="/res/docs/checklist-step-3.png"
-            alt="The Validate step showing a family breakdown pie chart and a filterable species table"
-            variant="dialog"
-            aspect="703 / 872"
-          />
-        </div>
-        <DocsStepList
-          interactive
-          items={[
-            {
-              title: "Overview",
-              body: (
-                <>
-                  See every species pulled into the checklist so far, merged from all
-                  sources — <Highlight>field data, GBIF, eBird, iNaturalist</Highlight>,
-                  and literature — into one list.
-                </>
-              ),
-            },
-            {
-              title: "Pie chart or table",
-              body: (
-                <>
-                  Switch between a family-breakdown pie chart and a filterable table, and
-                  filter either view by <Highlight>source</Highlight> to see what each one
-                  contributed.
-                </>
-              ),
-            },
-          ]}
-        />
-      </div>
+      <DocsFieldWalkthrough
+        hint="Click a step below to see it highlighted in the screenshot."
+        screen={{
+          src: "/res/docs/checklist-step-3.png",
+          alt: "The Validate step showing a family breakdown pie chart and a filterable species table",
+          variant: "dialog",
+          aspect: "703 / 872",
+        }}
+        steps={[
+          {
+            title: "Overview",
+            target: { x: 25, y: 25 },
+            body: (
+              <>
+                See every species pulled into the checklist so far, merged from all
+                sources — <Highlight>field data, GBIF, eBird, iNaturalist</Highlight>,
+                and literature — into one list.
+              </>
+            ),
+          },
+          {
+            title: "Pie chart or table",
+            target: { x: 92, y: 44 },
+            body: (
+              <>
+                Switch between a family-breakdown pie chart and a filterable table, and
+                filter either view by <Highlight>source</Highlight> to see what each one
+                contributed.
+              </>
+            ),
+          },
+        ]}
+      />
       <h3 className="font-label-caps text-[11px] text-on-surface-variant uppercase tracking-widest mb-3 mt-10">
         Verify each species
       </h3>

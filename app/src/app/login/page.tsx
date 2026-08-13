@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Provider } from "@supabase/supabase-js";
@@ -11,6 +11,7 @@ import {
   useSignUpWithEmail,
 } from "@/modules/auth/hooks/useAuth";
 import { PartyBlast } from "@/components/shared/PartyBlast";
+import { isInAppBrowser } from "@/lib/browser/detectInAppBrowser";
 
 export default function LoginPage() {
   return (
@@ -28,6 +29,18 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [signUpMessage, setSignUpMessage] = useState<string | null>(null);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [inAppBrowser, setInAppBrowser] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  useEffect(() => {
+    setInAppBrowser(isInAppBrowser(window.navigator.userAgent));
+  }, []);
+
+  async function copyCurrentLink() {
+    await navigator.clipboard.writeText(window.location.href);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  }
 
   const signInWithProvider = useSignInWithProvider();
   const signInWithEmail = useSignInWithEmail();
@@ -98,6 +111,25 @@ function LoginForm() {
               {mode === "sign_in" ? "Sign in to your account" : "Create your account"}
             </h1>
           </div>
+
+          {inAppBrowser && (
+            <div className="mb-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <p className="font-semibold mb-1">Google sign-in won&apos;t work here</p>
+              <p className="mb-2">
+                You&apos;re viewing this inside an app&apos;s built-in browser (e.g. Outlook, Facebook,
+                Instagram). Google blocks sign-in from these for security. Open this page in your
+                phone&apos;s regular browser instead &mdash; tap the menu (&#8942; or &#8942;&#65039;) and
+                choose &ldquo;Open in Chrome/Safari,&rdquo; or copy the link below.
+              </p>
+              <button
+                type="button"
+                onClick={copyCurrentLink}
+                className="border border-amber-400 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100 transition-colors"
+              >
+                {linkCopied ? "Link copied!" : "Copy link"}
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2 mb-lg">
             <button

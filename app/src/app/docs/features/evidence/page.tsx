@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Highlight from "@/components/docs/Highlight";
-import FramedScreenshot from "@/components/docs/FramedScreenshot";
-import DocsStepList from "@/components/docs/DocsStepList";
+import DocsFieldWalkthrough from "@/components/docs/DocsFieldWalkthrough";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
 
 export const metadata: Metadata = {
@@ -24,42 +23,43 @@ export default function EvidencePage() {
         claim behind it is mapped and sourced, so &quot;high evidence&quot; is something
         you can see on the map, not just a badge you have to take on faith.
       </p>
-      <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-        <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-          <FramedScreenshot
-            src="/res/docs/evidence.png"
-            alt="The Evidence tab showing an occurrence map, per-source occurrence counts, and discard toggles"
-            aspect="2530 / 1901"
-          />
-        </div>
-        <DocsStepList
-          interactive
-          items={[
-            {
-              title: "The region, drawn to scale",
-              body: "The checklist's boundary is pulled from GADM and drawn on the map. Every occurrence point, from GBIF, eBird, iNaturalist, and literature, is projected onto it and colored by source, with points that fall outside the boundary shown separately so you can spot bad geocoding at a glance.",
-            },
-            {
-              title: "Sources, with counts",
-              body: "GBIF, eBird, iNaturalist, and literature are each listed with an occurrence count, split into inside-region and outside-region totals.",
-            },
-            {
-              title: "Discard a bad source",
-              body: (
-                <>
-                  Found a source that&apos;s wrong for this species? Discard it, the
-                  evidence strength <Highlight>recalculates immediately</Highlight>, and
-                  it can be restored later without losing history.
-                </>
-              ),
-            },
-            {
-              title: "Refresh and trace back",
-              body: "Refresh re-pulls the latest counts on demand, and external IDs, like the GBIF taxon key, link straight back to the source record.",
-            },
-          ]}
-        />
-      </div>
+      <DocsFieldWalkthrough
+        hint="Click a step below to see it highlighted in the screenshot."
+        screen={{
+          src: "/res/docs/evidence.png",
+          alt: "The Evidence tab showing an occurrence map, per-source occurrence counts, and discard toggles",
+          aspect: "2530 / 1901",
+          variant: "flush",
+        }}
+        steps={[
+          {
+            title: "The region, drawn to scale",
+            target: { x: 97, y: 24 },
+            body: "The checklist's boundary is pulled from GADM and drawn on the map. Every occurrence point, from GBIF, eBird, iNaturalist, and literature, is projected onto it and colored by source, with points that fall outside the boundary shown separately so you can spot bad geocoding at a glance.",
+          },
+          {
+            title: "Sources, with counts",
+            target: { x: 97, y: 48 },
+            body: "GBIF, eBird, iNaturalist, and literature are each listed with an occurrence count, split into inside-region and outside-region totals.",
+          },
+          {
+            title: "Discard a bad source",
+            target: { x: 97, y: 41 },
+            body: (
+              <>
+                Found a source that&apos;s wrong for this species? Discard it, the
+                evidence strength <Highlight>recalculates immediately</Highlight>, and
+                it can be restored later without losing history.
+              </>
+            ),
+          },
+          {
+            title: "Refresh and trace back",
+            target: { x: 97, y: 68 },
+            body: "Refresh re-pulls the latest counts on demand, and external IDs, like the GBIF taxon key, link straight back to the source record.",
+          },
+        ]}
+      />
 
       <div className="mt-16 pt-10 border-t border-outline-variant max-w-2xl">
         <h3 className="font-headline-md text-[18px] uppercase tracking-tight mb-2">

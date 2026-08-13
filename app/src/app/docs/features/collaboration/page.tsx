@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Highlight from "@/components/docs/Highlight";
-import FramedScreenshot from "@/components/docs/FramedScreenshot";
-import DocsStepList from "@/components/docs/DocsStepList";
+import DocsFieldWalkthrough from "@/components/docs/DocsFieldWalkthrough";
 
 export const metadata: Metadata = {
   title: "Collaboration — Docs",
@@ -22,43 +21,78 @@ export default function CollaborationPage() {
           How long does it take to get a reviewer onto a checklist? One line, not an
           account-provisioning process.
         </p>
-        <div className="grid grid-cols-1 lg:grid-cols-[42fr_58fr] lg:items-stretch gap-6 lg:gap-8 mt-4">
-          <div className="w-full max-w-[95%] mx-auto lg:mx-0">
-            <FramedScreenshot
-              src="/res/docs/invite-email.png"
-              alt="An email inviting a collaborator to a checklist"
-              aspect="1900 / 1227"
-              variant="dialog"
-              scale={0.7}
-            />
-          </div>
-          <DocsStepList
-            interactive
-            items={[
-              {
-                title: "Search by name",
-                body: "Start typing a name — Checklist Hub searches existing profiles and suggests a match.",
+        <DocsFieldWalkthrough
+          hint="Click a step below to see it highlighted in the screenshot."
+          screen={{
+            src: "/res/docs/invite-new-collborator-workbench.PNG",
+            alt: "The Team dialog in the Workbench, with a search-by-name-or-email field and an Invite button",
+            aspect: "1910 / 948",
+            variant: "flush",
+          }}
+          steps={[
+            {
+              title: "Search by name",
+              target: { x: 42, y: 63 },
+              body: "Start typing a name — Checklist Hub searches existing profiles and suggests a match.",
+            },
+            {
+              title: "No match? Use email",
+              target: { x: 52, y: 63 },
+              body: "Type a full email address to invite someone brand new to Checklist Hub.",
+            },
+            {
+              title: "One click to invite",
+              target: { x: 61, y: 63 },
+              body: (
+                <>
+                  One click <Highlight>sends the invitation automatically</Highlight> —
+                  no separate email tool to open.
+                </>
+              ),
+            },
+            {
+              title: "Manage roles anytime",
+              target: { x: 47, y: 55 },
+              body: "Pending invites are tracked until accepted; owners can manage roles and remove collaborators at any time.",
+            },
+            {
+              title: "Collaborators get the invite via their email",
+              target: { x: 42, y: 49 },
+              body: (
+                <>
+                  They get <Highlight>notified in-app and by email</Highlight>, with a
+                  link straight to the checklist. If they don&apos;t have a Checklist
+                  Hub account yet, the same email lets them create one.
+                </>
+              ),
+              screen: {
+                src: "/res/docs/invite-email.png",
+                alt: "The invitation email a new collaborator receives, with the checklist name and a link to accept",
+                aspect: "1900 / 1227",
+                variant: "dialog",
+                scale: 0.8,
               },
-              {
-                title: "No match? Use email",
-                body: "Type a full email address to invite someone brand new to Checklist Hub.",
+            },
+            {
+              title: "Straight into the Workbench",
+              target: { x: 88, y: 14 },
+              body: (
+                <>
+                  Accepting drops them right into the <Highlight>Workbench</Highlight>,
+                  species panel open and ready — the same place they&apos;ll open a{" "}
+                  <Highlight>Discussion</Highlight> thread when they have something to
+                  add.
+                </>
+              ),
+              screen: {
+                src: "/res/docs/workbench.png",
+                alt: "The Workbench species table with the Discussion tab highlighted in the species detail panel",
+                aspect: "2562 / 1899",
+                variant: "flush",
               },
-              {
-                title: "One click to invite",
-                body: (
-                  <>
-                    One click <Highlight>sends the invitation automatically</Highlight> —
-                    no separate email tool to open.
-                  </>
-                ),
-              },
-              {
-                title: "Manage roles anytime",
-                body: "Pending invites are tracked until accepted; owners can manage roles and remove collaborators at any time.",
-              },
-            ]}
-          />
-        </div>
+            },
+          ]}
+        />
       </section>
 
       <section id="discussion" className="py-10 md:py-12">

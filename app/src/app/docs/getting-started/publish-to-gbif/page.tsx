@@ -3,7 +3,7 @@ import Link from "next/link";
 import Highlight from "@/components/docs/Highlight";
 import DocsBreadcrumb from "@/components/docs/DocsBreadcrumb";
 import DocsStepNav from "@/components/docs/DocsStepNav";
-import DocsStepExplorer from "@/components/docs/DocsStepExplorer";
+import DocsStepWalkthrough from "@/components/docs/DocsStepWalkthrough";
 
 export const metadata: Metadata = {
   title: "Publish to GBIF — Docs",
@@ -25,7 +25,7 @@ export default function PublishToGbifPage() {
         below to see each screen.
       </p>
 
-      <DocsStepExplorer
+      <DocsStepWalkthrough
         defaultScreen={{
           src: "/res/docs/publish/publisher.JPG",
           alt: "The Publisher step, showing the organization and contact that GBIF will credit for the dataset",
@@ -35,7 +35,31 @@ export default function PublishToGbifPage() {
         steps={[
           {
             title: "Publisher",
-            body: "Set the organization or person GBIF will credit and contact about this dataset.",
+            target: { x: 64, y: 30 },
+            body: (
+              <>
+                A <Highlight>publisher</Highlight> is simply whoever GBIF holds
+                accountable for the dataset — the organization or person it credits
+                and contacts. Every checklist needs one attached before GBIF will
+                register it. See{" "}
+                <Link
+                  href="/docs/reference/terminology#publisher"
+                  className="text-primary underline underline-offset-2 hover:opacity-80"
+                >
+                  Publisher
+                </Link>{" "}
+                in the glossary, or{" "}
+                <a
+                  href="https://www.gbif.org/become-a-publisher"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary underline underline-offset-2 hover:opacity-80"
+                >
+                  register directly with GBIF
+                </a>{" "}
+                if your organization isn&apos;t endorsed yet.
+              </>
+            ),
             screen: {
               src: "/res/docs/publish/publisher.JPG",
               alt: "The Publisher step, showing the organization and contact that GBIF will credit for the dataset",
@@ -44,12 +68,20 @@ export default function PublishToGbifPage() {
           },
           {
             title: "Publishing Partner",
+            target: { x: 66, y: 26 },
             body: (
               <>
                 Based on the checklist&apos;s region, Checklist Hub lists the nearby{" "}
                 <Highlight>GBIF-registered publishers</Highlight> that can host it — a
                 national GBIF node, museum, or university running its own IPT — so you
-                don&apos;t have to go hunting for one yourself.
+                don&apos;t have to go hunting for one yourself. See{" "}
+                <Link
+                  href="/docs/reference/terminology#publishing-partner"
+                  className="text-primary underline underline-offset-2 hover:opacity-80"
+                >
+                  Publishing Partner
+                </Link>{" "}
+                for why you&apos;d use one instead of your own IPT.
               </>
             ),
             screen: {
@@ -60,12 +92,23 @@ export default function PublishToGbifPage() {
           },
           {
             title: "Package",
+            target: { x: 49, y: 41 },
             body: (
               <>
                 A readiness checklist — <Highlight>Metadata Complete</Highlight>,{" "}
                 <Highlight>Taxonomy Validated</Highlight>,{" "}
                 <Highlight>Citation Ready</Highlight>, DwC-A and EML generated — then
-                download the package before moving on.
+                download the package before moving on. In plain terms, a{" "}
+                <Highlight>Darwin Core Archive (DwC-A)</Highlight> is just a zip file
+                built the way GBIF expects it: one master species list plus a couple
+                of housekeeping files that tell GBIF how to read the rest. See{" "}
+                <Link
+                  href="/docs/publishing/darwin-core-archive#darwin-core"
+                  className="text-primary underline underline-offset-2 hover:opacity-80"
+                >
+                  Darwin Core Archive
+                </Link>{" "}
+                for what&apos;s inside it.
               </>
             ),
             screen: {
@@ -76,7 +119,23 @@ export default function PublishToGbifPage() {
           },
           {
             title: "Publish",
-            body: "Upload the package to the IPT and publish it there — the IPT is what actually registers the dataset with GBIF.",
+            target: { x: 67, y: 33 },
+            body: (
+              <>
+                Upload the package to the IPT and publish it there — the IPT is what
+                actually registers the dataset with GBIF. An{" "}
+                <Highlight>IPT (Integrated Publishing Toolkit)</Highlight> is GBIF&apos;s
+                own upload software; every dataset has to pass through one, since GBIF
+                doesn&apos;t accept files directly. See{" "}
+                <Link
+                  href="/docs/publishing/darwin-core-archive#ipt"
+                  className="text-primary underline underline-offset-2 hover:opacity-80"
+                >
+                  IPT
+                </Link>{" "}
+                for how to get access to one.
+              </>
+            ),
             screen: {
               src: "/res/docs/publish/publish.JPG",
               alt: "The Publish step, with instructions for uploading the Darwin Core Archive to the IPT and registering it",
@@ -93,6 +152,7 @@ export default function PublishToGbifPage() {
           },
           {
             title: "Register",
+            target: { x: 58, y: 27 },
             body: (
               <>
                 Paste the dataset&apos;s URL back into Checklist Hub — this marks the

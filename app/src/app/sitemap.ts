@@ -32,6 +32,7 @@ const DOCS_ROUTES = [
   "features/export",
   "features/history",
   "features/collaboration",
+  "features/ai-mcp",
   "publishing/darwin-core-archive",
   "publishing/troubleshooting",
   "reference/faq",
