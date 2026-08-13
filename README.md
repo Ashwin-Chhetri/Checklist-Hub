@@ -5,6 +5,7 @@
 Evidence-based species checklist platform for biodiversity experts.
 
 **Live:** [checklisthub.in](https://checklisthub.in)
+**Docs:** [checklisthub.in/docs](https://checklisthub.in/docs)
 
 ## Who is this for?
 
@@ -26,6 +27,42 @@ species backed by evidence — not just a name on a spreadsheet.
 See [`USER_GUIDE.md`](USER_GUIDE.md) for the step-by-step workflow,
 [`checklistHub_architecture.md`](checklistHub_architecture.md) for the full
 architecture spec, and [`SETUP.md`](SETUP.md) to run this locally.
+
+## Documentation
+
+Full product docs live at [checklisthub.in/docs](https://checklisthub.in/docs):
+
+- **Getting Started**
+  - Overview
+  - What is Checklist Hub?
+  - Create your first checklist
+    - Define taxa and region
+    - Import data
+    - Review species
+    - Collaborate
+    - Workbench
+    - Define Metadata
+    - Darwin Core Format
+    - Publish to GBIF
+    - Checklist Organizer
+- **Features**
+  - Workbench
+  - Evidence
+  - Reconciliation
+  - Watcher
+  - Export
+  - History
+  - Collaboration
+  - AI MCP & Chat Box
+- **Publishing**
+  - Darwin Core
+  - IPT
+  - GBIF
+  - Troubleshooting
+- **Reference**
+  - FAQ
+  - Terminology
+  - Citation
 
 ## Architecture
 
