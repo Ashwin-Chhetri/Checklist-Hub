@@ -484,7 +484,21 @@ export function SpeciesInventoryPanel({
     );
   }
 
-  const data = inventory.data!;
+  // Not an assertion: `isLoading` above is the hook's promise that data has
+  // arrived, and a break in that invariant should degrade to a spinner rather
+  // than throw on the first field read and blank the whole step.
+  if (!inventory.data) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="material-symbols-outlined text-primary animate-spin text-[18px]">progress_activity</span>
+        <span className="font-code-md text-[12px] text-on-surface-variant">
+          Discovering species inventory across all evidence sources…
+        </span>
+      </div>
+    );
+  }
+
+  const data = inventory.data;
   const allVisibleSelected =
     visibleSpecies.length > 0 && visibleSpecies.every((s) => selected.has(discoverySpeciesKey(s.acceptedName)));
 

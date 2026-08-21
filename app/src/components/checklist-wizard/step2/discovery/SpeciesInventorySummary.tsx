@@ -65,7 +65,14 @@ export function SpeciesInventorySummary({
     );
   }
 
-  const data = inventory.data!;
+  // Not an assertion: `isLoading` above is the hook's promise that data has
+  // arrived, and a break in that invariant should degrade to the loading panel
+  // rather than throw on the first field read and blank the whole step.
+  if (!inventory.data) {
+    return <DiscoveryLoadingPanel providers={inventory.providers} region={region} />;
+  }
+
+  const data = inventory.data;
 
   return (
     <div className="flex flex-col gap-sm">

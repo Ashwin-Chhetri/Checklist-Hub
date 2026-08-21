@@ -13,7 +13,7 @@ import {
   rankIndex,
   toGbifRank,
 } from "@/lib/taxonomy/ranks";
-import { buildScope, enabledRanksOf, scopeNodes } from "@/lib/taxonomy/scopeNodes";
+import { buildScope, enabledRanksOf, scopeNodes, scopeSignature } from "@/lib/taxonomy/scopeNodes";
 import type { ScopeNode, TaxonomicScope } from "@/types/checklist.types";
 
 // GBIF backbone kingdom usage keys — the only fixed/static level in the chain.
@@ -95,8 +95,28 @@ export function TaxonomicScopeSelector({ value, onChange, compact = false }: Tax
   const [openRank, setOpenRank] = useState<RankName | null>(firstUnset ?? "kingdom");
   const [search, setSearch] = useState("");
 
+  // Distinguishing a scope this component produced from one handed to it —
+  // the wizard applying a title suggestion replaces the whole value from
+  // outside. Both are tracked as state rather than refs so the comparison can
+  // happen during render.
+  const signature = scopeSignature(value);
+  const [seenSignature, setSeenSignature] = useState(signature);
+  const [lastEmitted, setLastEmitted] = useState<string | null>(null);
+
+  if (signature !== seenSignature) {
+    setSeenSignature(signature);
+    // A suggestion replaced the whole scope. Whatever row happened to be open
+    // is now stale — and leaving it open pops a dropdown for a rank the user
+    // never touched, right after they clicked a button somewhere else.
+    if (signature !== lastEmitted) {
+      setOpenRank(null);
+      setSearch("");
+    }
+  }
+
   function emit(nextNodes: ScopeNode[], nextEnabled: RankName[]) {
     const scope = buildScope(nextNodes, nextEnabled);
+    setLastEmitted(scopeSignature(scope));
     const deepest = [...(scope.nodes ?? [])]
       .filter((n) => n.mode === "include" && n.gbifKey)
       .pop();
@@ -441,7 +461,6 @@ function TaxonLevelOptions({
           type="text"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          autoFocus
         />
       </div>
 

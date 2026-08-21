@@ -88,7 +88,19 @@ export function useSpeciesInventory(
   // removing an exclusion changes which species belong without changing that
   // key at all, and cached results would otherwise be served for it.
   const baseKey = [signature, region.region_gadm_id, region.region_name];
-  const enabled = ctx.deepestTaxonKey !== null && !targetsQuery.isLoading;
+
+  // Two distinct conditions that must not be conflated.
+  //
+  // `scopeSelected` means this hook is going to produce an inventory. Callers
+  // render a loading state while `isLoading` is true and then dereference
+  // `data` directly, so it has to stay true across the WHOLE window where
+  // data is absent — including while the scope is still being resolved into
+  // query targets, before any provider has been asked to run. Deriving
+  // `isLoading` from `providersEnabled` instead opens a gap where nothing is
+  // loading and nothing has loaded, which crashes those callers.
+  const scopeSelected = ctx.deepestTaxonKey !== null;
+  // Providers can only run once the scope's query targets are known.
+  const providersEnabled = scopeSelected && !targetsQuery.isLoading;
 
   const activeProviders = enabledSources
     ? EVIDENCE_PROVIDERS.filter((p) => enabledSources.has(p.key))
@@ -98,7 +110,7 @@ export function useSpeciesInventory(
     queries: activeProviders.map((provider) => ({
       queryKey: ["species-inventory-source", provider.key, ...baseKey],
       queryFn: () => runProvider(provider, ctx),
-      enabled,
+      enabled: providersEnabled,
       staleTime: 5 * 60 * 1000,
     })),
   });
@@ -137,13 +149,13 @@ export function useSpeciesInventory(
       literatureRecords?.length ?? 0,
     ],
     queryFn: () => aggregateInventory(ctx, allRuns),
-    enabled: enabled && allSettled,
+    enabled: providersEnabled && allSettled,
     staleTime: 5 * 60 * 1000,
   });
 
   return {
     ...aggregateQuery,
-    isLoading: enabled && !aggregateQuery.data && !aggregateQuery.error,
+    isLoading: scopeSelected && !aggregateQuery.data && !aggregateQuery.error,
     providers,
   };
 }
