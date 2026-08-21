@@ -75,12 +75,19 @@ export interface EbirdSpeciesListItem {
   speciesCode: string;
   comName?: string;
   sciName?: string;
+  /** Scientific family name, e.g. "Muscicapidae" — used to test scope membership. */
+  familySciName?: string;
+  /** Scientific order name, e.g. "Passeriformes". */
+  order?: string;
 }
 
 interface EbirdTaxonomyEntry {
   speciesCode: string;
   comName: string;
   sciName: string;
+  /** Present on /ref/taxonomy/ebird records; the only lineage eBird exposes. */
+  familySciName?: string;
+  order?: string;
 }
 
 /** Returns true if NEXT_PUBLIC_EBIRD_API_KEY is configured. */
@@ -177,7 +184,13 @@ export async function getEbirdSpeciesList(regionCode: string): Promise<EbirdSpec
 
   return speciesCodes.map((code) => {
     const entry = taxonomyByCode.get(code);
-    return { speciesCode: code, comName: entry?.comName, sciName: entry?.sciName };
+    return {
+      speciesCode: code,
+      comName: entry?.comName,
+      sciName: entry?.sciName,
+      familySciName: entry?.familySciName,
+      order: entry?.order,
+    };
   });
 }
 

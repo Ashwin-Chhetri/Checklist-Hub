@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TaxonomicScope } from "@/types/checklist.types";
+import { deepestTaxon } from "@/lib/taxonomy/scopeNodes";
 import type { RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
 import type { ParsedSpeciesRow } from "@/modules/checklist/utils/speciesFileParser";
 import { useSpeciesInventory } from "@/modules/evidence/hooks/useSpeciesInventory";
@@ -810,15 +811,9 @@ export function SpeciesInventoryPanel({
   );
 }
 
-const SCOPE_RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"] as const;
-
 /** Scientific name of the deepest selected taxonomic rank, for display in the prior-checklist banner. */
 export function deepestTaxonName(scope: TaxonomicScope): string | null {
-  for (let i = SCOPE_RANKS.length - 1; i >= 0; i -= 1) {
-    const value = scope[SCOPE_RANKS[i]];
-    if (value) return value;
-  }
-  return null;
+  return deepestTaxon(scope).name;
 }
 
 /**

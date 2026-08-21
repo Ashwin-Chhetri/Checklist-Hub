@@ -5,20 +5,10 @@ import { discoverSpeciesInventory } from "@/modules/evidence/discovery/aggregato
 import { sendEmail } from "@/lib/email";
 import { renderWatcherAlertEmail } from "@/lib/email/templates/watcherAlert";
 import type { TaxonomicScope } from "@/types/checklist.types";
+import { deepestIncludedNode, deepestTaxon, scopeNodes } from "@/lib/taxonomy/scopeNodes";
+import { resolveScopeTargets } from "@/lib/taxonomy/resolveScopeTargets.server";
 import type { RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
 import type { SourceSummary } from "@/modules/evidence/discovery/types";
-
-const RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"] as const;
-
-/** Mirrors `useSpeciesInventory.ts`'s own deepest-rank walk so the headless ETL
- * resolves the exact same taxon the creation wizard would have. */
-function deepestTaxon(scope: TaxonomicScope): { name: string | null; rank: string | null } {
-  for (let i = RANKS.length - 1; i >= 0; i -= 1) {
-    const value = scope[RANKS[i]];
-    if (value) return { name: value, rank: RANKS[i] };
-  }
-  return { name: null, rank: null };
-}
 
 /** Advances from the watcher's own schedule (not "now") so a late cron tick
  * never drifts the cadence forward. */
@@ -255,10 +245,16 @@ export async function runWatcherEtl(
     }
 
     const taxonomicScope = checklistRow.taxonomic_scope ?? {};
+    const nodes = scopeNodes(taxonomicScope);
     const deepest = deepestTaxon(taxonomicScope);
-    const deepestTaxonKey = deepest.name
-      ? (await lookupBackbone({ name: deepest.name }, taxonomicScope.kingdom)).taxonKey
-      : null;
+    // Resolve the scope exactly as the wizard does, so a watcher on a
+    // superfamily or a "minus this group" scope keeps tracking the same set of
+    // species it was created for rather than silently widening to the nearest
+    // rank GBIF happens to have.
+    const scopeTargets = nodes.length ? await resolveScopeTargets(nodes) : null;
+    const deepestTaxonKey =
+      deepestIncludedNode(nodes)?.gbifKey ??
+      (deepest.name ? (await lookupBackbone({ name: deepest.name }, taxonomicScope.kingdom)).taxonKey : null);
 
     const region: RegionValue = {
       region_name: checklistRow.region_name ?? "",
@@ -270,7 +266,7 @@ export async function runWatcherEtl(
       region_osm_id: checklistRow.region_osm_id ?? undefined,
     };
 
-    const ctx = buildDiscoveryContext(taxonomicScope, deepestTaxonKey, region);
+    const ctx = buildDiscoveryContext(taxonomicScope, deepestTaxonKey, region, scopeTargets);
     const inventory = await discoverSpeciesInventory(ctx);
 
     // Candidates already staged as `pending` from a prior run (e.g. one that

@@ -1,6 +1,9 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import type { TaxonomicScope } from "@/types/checklist.types";
 import type { RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
+import type { ScopeTargets } from "@/lib/taxonomy/scopeTargets";
+import { deepestTaxon, scopeNodes, scopeSignature } from "@/lib/taxonomy/scopeNodes";
+import { fetchScopeTargets } from "@/modules/taxonomy/services/scopeTargetsApi";
 import { aggregateInventory, runProvider } from "../discovery/aggregator";
 import { EVIDENCE_PROVIDERS } from "../discovery/registry";
 import type { DiscoveryContext, ProviderRunResult, RawSpeciesRecord, SourceKey } from "../discovery/types";
@@ -14,39 +17,39 @@ export interface ProviderProgress {
   run?: ProviderRunResult;
 }
 
-const RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"] as const;
-
-/** The deepest selected rank value + rank name, used by name-based providers. */
-function deepestTaxon(scope: TaxonomicScope): { name: string | null; rank: string | null } {
-  for (let i = RANKS.length - 1; i >= 0; i -= 1) {
-    const value = scope[RANKS[i]];
-    if (value) return { name: value, rank: RANKS[i] };
-  }
-  return { name: null, rank: null };
-}
-
 export function buildDiscoveryContext(
   taxonomicScope: TaxonomicScope,
   deepestTaxonKey: number | null,
   region: RegionValue,
+  scopeTargets: ScopeTargets | null = null,
 ): DiscoveryContext {
   const deepest = deepestTaxon(taxonomicScope);
   return {
     taxonomicScope,
-    deepestTaxonKey,
-    deepestTaxonName: deepest.name,
-    deepestTaxonRank: deepest.rank,
+    // Prefer the key the resolver settled on: for a scope ending at a rank
+    // GBIF has no taxa at, the caller's `deepestTaxonKey` is null even though
+    // the scope is perfectly queryable once expanded.
+    deepestTaxonKey: scopeTargets?.includeGbifKeys[0] ?? deepestTaxonKey,
+    deepestTaxonName: scopeTargets?.deepestName ?? deepest.name,
+    deepestTaxonRank: scopeTargets?.deepestRank ?? deepest.rank,
     gadmGid: region.region_gadm_id || null,
     region,
+    scopeTargets,
   };
 }
 
 /**
  * Discovers and aggregates the unified species inventory for the selected
- * Region X + Taxon Y across all registered evidence sources. Enabled once a
- * taxonomic scope (deepest taxon key) is set in Step 1.
+ * Region X + Taxon Y across all registered evidence sources.
  *
- * Each evidence provider is fetched as its own query so the UI can show
+ * The scope is first resolved into per-source query targets (see
+ * `/api/taxonomy/scope-targets`), because a scope can name things a source's
+ * API cannot be asked for directly — a superfamily, which GBIF's backbone has
+ * no rank for, or an exclusion, which its occurrence search cannot express.
+ * Discovery waits on that resolution rather than running a broader query and
+ * hoping the aggregator tidies up afterwards.
+ *
+ * Each evidence provider is then fetched as its own query so the UI can show
  * live per-source progress (`providers`) while the final aggregation
  * (normalization + merge) waits for all of them to settle.
  *
@@ -69,9 +72,23 @@ export function useSpeciesInventory(
   enabledSources?: Set<SourceKey>,
   literatureRecords?: RawSpeciesRecord[],
 ) {
-  const ctx = buildDiscoveryContext(taxonomicScope, deepestTaxonKey, region);
-  const baseKey = [deepestTaxonKey, region.region_gadm_id, region.region_name, taxonomicScope.class];
-  const enabled = deepestTaxonKey !== null;
+  const signature = scopeSignature(taxonomicScope);
+
+  const targetsQuery = useQuery({
+    queryKey: ["scope-targets", signature],
+    queryFn: () => fetchScopeTargets(scopeNodes(taxonomicScope)),
+    enabled: signature.length > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const scopeTargets = targetsQuery.data ?? null;
+  const ctx = buildDiscoveryContext(taxonomicScope, deepestTaxonKey, region, scopeTargets);
+
+  // Keyed on the whole scope, not just the deepest GBIF key: adding or
+  // removing an exclusion changes which species belong without changing that
+  // key at all, and cached results would otherwise be served for it.
+  const baseKey = [signature, region.region_gadm_id, region.region_name];
+  const enabled = ctx.deepestTaxonKey !== null && !targetsQuery.isLoading;
 
   const activeProviders = enabledSources
     ? EVIDENCE_PROVIDERS.filter((p) => enabledSources.has(p.key))

@@ -13,9 +13,9 @@ import {
   type ParsedSpeciesRow,
 } from "@/modules/checklist/utils/speciesFileParser";
 import type { CollaboratorInviteInput, TaxonomicScope } from "@/types/checklist.types";
+import { buildScope, formatScopePath, isScopeUsable, scopeNodes, scopeSignature } from "@/lib/taxonomy/scopeNodes";
 import { TaxonomicScopeSelector } from "@/components/checklist-wizard/step1/TaxonomicScopeSelector";
 import { useTaxonomicScopeSuggestion } from "@/modules/taxonomy/hooks/useTaxonomicScopeSuggestion";
-import { matchSpeciesName } from "@/modules/taxonomy/services/taxonomyApi";
 import { RegionInput, type RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
 import { SpeciesDiscoveryPanel } from "@/components/checklist-wizard/step2/discovery/SpeciesDiscoveryPanel";
 import { SpeciesInventoryPanel } from "@/components/checklist-wizard/step2/discovery/SpeciesInventoryPanel";
@@ -38,17 +38,28 @@ const STEPS = [
   { id: 5, label: "Create" },
 ];
 
-const SCOPE_RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"] as const;
-
-/** Renders a scope's ranks as a wrapping breadcrumb (e.g. Animalia › Chordata › Aves) instead of a truncated bracketed string. */
+/**
+ * Renders a scope as a wrapping breadcrumb (e.g. Animalia › Arthropoda ›
+ * Lepidoptera) instead of a truncated bracketed string. Excluded taxa are
+ * appended struck-through, since "Lepidoptera without Papilionoidea" is a
+ * different scope from "Lepidoptera" and the difference has to be visible.
+ */
 function ScopeBreadcrumb({ classification }: { classification: TaxonomicScope }) {
-  const names = SCOPE_RANKS.map((rank) => classification[rank]).filter((name): name is string => Boolean(name));
+  const nodes = scopeNodes(classification);
+  const included = nodes.filter((n) => n.mode === "include");
+  const excluded = nodes.filter((n) => n.mode === "exclude");
   return (
     <span className="flex flex-wrap items-center text-on-surface-variant ">
-      {names.map((name, i) => (
-        <span key={`${name}-${i}`} className="flex items-center">
+      {included.map((node, i) => (
+        <span key={`${node.rank}-${node.name}`} className="flex items-center">
           {i > 0 && <span className="material-symbols-outlined scale-75">chevron_right</span>}
-          {name}
+          {node.name}
+        </span>
+      ))}
+      {excluded.map((node) => (
+        <span key={`x-${node.rank}-${node.name}`} className="flex items-center ml-1 text-red-700">
+          <span className="material-symbols-outlined scale-75">block</span>
+          <span className="line-through">{node.name}</span>
         </span>
       ))}
     </span>
@@ -120,38 +131,26 @@ export default function NewChecklistPage() {
   const [deepestTaxonKey, setDeepestTaxonKey] = useState<number | null>(null);
   const [region, setRegion] = useState<RegionValue>(DEFAULT_REGION);
 
-  // Bumped whenever a scope suggestion is applied, forcing TaxonomicScopeSelector
-  // to remount so it re-derives its internal selections (incl. resolving GBIF
-  // keys for each rank) from the freshly-applied `taxonomicScope` value — the
-  // component only reads its `value` prop on mount, not on every re-render.
-  const [scopeVersion, setScopeVersion] = useState(0);
   const [dismissedSuggestionTerm, setDismissedSuggestionTerm] = useState<string | null>(null);
   const scopeSuggestion = useTaxonomicScopeSuggestion(title);
   const suggestedScope =
-    scopeSuggestion.data && Object.keys(taxonomicScope).length === 0 && dismissedSuggestionTerm !== scopeSuggestion.data.matchedTerm
+    scopeSuggestion.data && !isScopeUsable(taxonomicScope) && dismissedSuggestionTerm !== scopeSuggestion.data.matchedTerm
       ? scopeSuggestion.data
       : null;
 
+  /**
+   * Apply a suggestion wholesale. The route returns fully-formed scope nodes
+   * with their GBIF keys already resolved (see scopeGbifBridge.server.ts), so
+   * unlike the old flat-classification path there is nothing left to look up
+   * here — including for suggestions that reach a rank GBIF has no taxa at,
+   * where no single key exists to look up in the first place.
+   */
   function applyScopeSuggestion() {
-    if (!suggestedScope) return;
-    const classification = suggestedScope.classification;
-    setTaxonomicScope(classification);
-    setScopeVersion((v) => v + 1);
-
-    // TaxonomicScopeSelector only resolves/report GBIF keys for ranks the
-    // user picks by hand (its own children-of-parent walk) — applying a
-    // suggestion bypasses that, so without this the deepest rank's key would
-    // stay null and Step 2's discovery fetching (gated on deepestTaxonKey !==
-    // null) would never trigger. Resolve it directly instead.
-    const deepestName = [...SCOPE_RANKS].reverse().map((rank) => classification[rank]).find(Boolean);
-    if (!deepestName) {
-      setDeepestTaxonKey(null);
-      return;
-    }
-    setDeepestTaxonKey(null);
-    matchSpeciesName(deepestName)
-      .then((match) => setDeepestTaxonKey(match.acceptedUsageKey ?? match.usageKey))
-      .catch(() => {});
+    if (!suggestedScope?.nodes?.length) return;
+    const scope = buildScope(suggestedScope.nodes, suggestedScope.enabledRanks ?? []);
+    setTaxonomicScope(scope);
+    const deepest = [...(scope.nodes ?? [])].filter((n) => n.mode === "include" && n.gbifKey).pop();
+    setDeepestTaxonKey(deepest?.gbifKey ?? null);
   }
 
   // Step 2 — Import. Kept as one entry per uploaded file (rather than a single
@@ -284,7 +283,10 @@ export default function NewChecklistPage() {
 
   // Reset discovery selections when the taxon scope or region changes, so
   // selections from a different scope don't silently carry into Step 3.
-  const scopeKey = `${deepestTaxonKey}|${region.region_gadm_id}`;
+  // Keyed on the whole scope rather than just the deepest GBIF key: adding or
+  // removing an exclusion changes which species belong without changing that
+  // key at all, and stale selections would otherwise survive it.
+  const scopeKey = `${scopeSignature(taxonomicScope)}|${region.region_gadm_id}`;
   const [prevScopeKey, setPrevScopeKey] = useState(scopeKey);
   if (scopeKey !== prevScopeKey) {
     setPrevScopeKey(scopeKey);
@@ -342,7 +344,7 @@ export default function NewChecklistPage() {
     if (step === 1) {
       return (
         title.trim().length > 0 &&
-        Object.keys(taxonomicScope).length > 0 &&
+        isScopeUsable(taxonomicScope) &&
         Boolean(region.region_district || region.region_state || region.region_country) &&
         Boolean(region.region_gadm_id)
       );
@@ -476,10 +478,14 @@ export default function NewChecklistPage() {
                           close
                         </button>
                       </div>
+                      {suggestedScope.note && (
+                        <p className="basis-full text-[11px] text-on-surface-variant/80 italic">
+                          {suggestedScope.note}
+                        </p>
+                      )}
                     </div>
                   )}
                   <TaxonomicScopeSelector
-                    key={scopeVersion}
                     value={taxonomicScope}
                     onChange={(scope, taxonKey) => {
                       setTaxonomicScope(scope);
@@ -678,7 +684,7 @@ export default function NewChecklistPage() {
                         Taxonomic Scope
                       </p>
                       <p className="text-sm">
-                        {Object.values(taxonomicScope).filter(Boolean).join(" > ") || "—"}
+                        {formatScopePath(taxonomicScope, " > ") || "—"}
                       </p>
                     </div>
                   </div>

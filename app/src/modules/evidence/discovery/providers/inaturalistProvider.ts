@@ -8,9 +8,14 @@ import type { DiscoveryContext, EvidenceProvider, RawSpeciesRecord } from "../ty
 
 /**
  * iNaturalist evidence: research-grade-and-other observation counts per
- * species for the deepest selected taxon within the region. Resolves the
- * taxon name → iNat taxon id and the region name → iNat place id, then reads
- * the species_counts breakdown. Public API, no key required.
+ * species for the selected scope within the region. Resolves the region name
+ * → iNat place id, then reads the species_counts breakdown. Public API, no
+ * key required.
+ *
+ * This is the one source that can express the whole scope natively. Its
+ * taxonomy carries the sub-ranks GBIF's backbone lacks, so a superfamily
+ * scope needs no widening, and `without_taxon_id` applies exclusions
+ * server-side — a moth scope is one request, not a filtered bird's-eye query.
  */
 export const inaturalistProvider: EvidenceProvider = {
   key: "inaturalist",
@@ -18,30 +23,36 @@ export const inaturalistProvider: EvidenceProvider = {
   occurrenceLabel: "observations",
 
   isEnabled(ctx: DiscoveryContext) {
-    if (!ctx.deepestTaxonName) {
+    if (!ctx.scopeTargets?.includeInatId && !ctx.deepestTaxonName) {
       return { enabled: false, reason: "Select a taxonomic scope to query iNaturalist." };
     }
     return { enabled: true };
   },
 
   async discover(ctx: DiscoveryContext): Promise<RawSpeciesRecord[]> {
-    const [taxonId, placeId] = await Promise.all([
-      resolveInatTaxonId(ctx.deepestTaxonName as string, ctx.deepestTaxonRank ?? undefined),
+    const [resolvedTaxonId, placeId] = await Promise.all([
+      // The scope usually arrives with its iNat id already resolved; fall back
+      // to a name lookup for scopes saved before ids were stored.
+      ctx.scopeTargets?.includeInatId ??
+        (ctx.deepestTaxonName
+          ? resolveInatTaxonId(ctx.deepestTaxonName, ctx.deepestTaxonRank ?? undefined)
+          : Promise.resolve(null)),
       ctx.region.region_name
         ? resolveInatPlaceId(ctx.region.region_name, ctx.region.region_state, ctx.region.region_country)
         : Promise.resolve(null),
     ]);
 
-    if (taxonId === null) return [];
+    if (resolvedTaxonId === null) return [];
 
     // If a region was specified but we couldn't resolve it to an iNat place, bail out.
     // Falling back to a global (no-place_id) query would return species present anywhere
     // in the world, which produces false positives for the specified region.
     if (ctx.region.region_name && placeId === null) return [];
 
+    const excludeIds = ctx.scopeTargets?.excludeInatIds ?? [];
     const [counts, yearRange] = await Promise.all([
-      getInatSpeciesCounts(taxonId, placeId!),
-      getInatYearRange(taxonId, placeId!),
+      getInatSpeciesCounts(resolvedTaxonId, placeId!, 200, excludeIds),
+      getInatYearRange(resolvedTaxonId, placeId!),
     ]);
     return counts.map((c) => ({
       source: "inaturalist",

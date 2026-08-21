@@ -94,6 +94,38 @@ export async function getChildTaxa(parentKey: number, limit = 50): Promise<GbifT
 }
 
 /**
+ * Resolve a higher-rank name to its GBIF backbone key — the iNaturalist →
+ * GBIF bridge.
+ *
+ * When a scope passes through a rank GBIF doesn't carry (superfamily, tribe,
+ * subgenus…), the levels below it are browsed on iNat and so arrive without a
+ * GBIF key. The import path needs one, so the picked taxon is matched back by
+ * name at a known rank. Constraining `rank` matters: unqualified matching
+ * happily returns a genus for a family name.
+ *
+ * Returns null rather than throwing when GBIF has no confident match, since
+ * plenty of iNat taxa legitimately have no GBIF counterpart.
+ */
+export async function matchTaxonAtRank(name: string, rank: string): Promise<GbifMatchResult | null> {
+  const url = new URL(`${GBIF_API}/species/match`);
+  url.searchParams.set("name", name);
+  url.searchParams.set("rank", rank.toUpperCase());
+  url.searchParams.set("strict", "false");
+
+  const response = await fetch(url.toString());
+  if (!response.ok) return null;
+
+  const match = (await response.json()) as GbifMatchResult & { matchType?: string };
+  // A rank GBIF's backbone lacks doesn't come back as a failure — it answers
+  // HIGHERRANK with whatever ancestor it could reach (family Hedylidae
+  // resolves to kingdom Animalia, usageKey 1, at confidence 95). Checking the
+  // returned rank is the only thing that catches it.
+  if (!match.usageKey || match.matchType === "NONE" || match.matchType === "HIGHERRANK") return null;
+  if (match.rank?.toUpperCase() !== rank.toUpperCase()) return null;
+  return match;
+}
+
+/**
  * Match a name against the GBIF backbone, returning both the currently
  * accepted usage and the originally matched (possibly synonymous) usage.
  * Historical checklists/occurrence data may be filed under the old

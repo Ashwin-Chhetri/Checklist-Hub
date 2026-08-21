@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "build:backbone": "node scripts/build-gbif-backbone.mjs",
-    "build:gadm": "node scripts/build-gadm.mjs"
+    "build:gadm": "node scripts/build-gadm.mjs",
+    "test:scope": "node scripts/test-scope-suggestions.mjs"
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.19.5",

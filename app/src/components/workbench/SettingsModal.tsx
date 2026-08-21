@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Checklist, TaxonomicScope } from "@/types/checklist.types";
+import { formatScopePath } from "@/lib/taxonomy/scopeNodes";
 import { useUpdateChecklist } from "@/modules/checklist/hooks/useChecklist";
 import { RegionInput, type RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
 import { TaxonomicScopeSelector } from "@/components/checklist-wizard/step1/TaxonomicScopeSelector";
@@ -10,12 +11,6 @@ interface SettingsModalProps {
   checklist: Checklist;
   checklistId: string;
   onClose: () => void;
-}
-
-const RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"] as const;
-
-function scopePath(scope: TaxonomicScope): string {
-  return RANKS.map((r) => scope[r]).filter((v): v is string => Boolean(v)).join(" › ");
 }
 
 function regionValueFromChecklist(checklist: Checklist): RegionValue {
@@ -57,7 +52,7 @@ export default function SettingsModal({ checklist, checklistId, onClose }: Setti
     );
   }
 
-  const currentScopePath = scopePath(taxonomicScope);
+  const currentScopePath = formatScopePath(taxonomicScope);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30" onClick={onClose}>

@@ -103,16 +103,23 @@ export interface InatSpeciesCount {
  *
  * placeId is REQUIRED — callers must not pass undefined when a region is set.
  * Filters to verifiable, geolocated, wild observations to reduce regional false positives.
+ *
+ * `withoutTaxonIds` excludes whole sub-trees from the result, which is how a
+ * paraphyletic scope is expressed: moths are taxon_id=Lepidoptera with
+ * without_taxon_id=Papilionoidea. iNaturalist applies this server-side, so
+ * unlike GBIF no post-filtering is needed here.
  */
 export async function getInatSpeciesCounts(
   taxonId: number,
   placeId: number,
   perPage = 200,
+  withoutTaxonIds: number[] = [],
 ): Promise<InatSpeciesCount[]> {
   const url = new URL(`${INAT_API}/observations/species_counts`);
   url.searchParams.set("taxon_id", String(taxonId));
   url.searchParams.set("place_id", String(placeId));
   url.searchParams.set("per_page", String(perPage));
+  if (withoutTaxonIds.length) url.searchParams.set("without_taxon_id", withoutTaxonIds.join(","));
   // Only count verifiable, wild, geolocated observations — prevents globally-present
   // but regionally-absent species from appearing due to stale/captive/unlocated records.
   url.searchParams.set("verifiable", "true");

@@ -1,4 +1,5 @@
 import type { TaxonomicScope } from "@/types/checklist.types";
+import { formatScopePath } from "@/lib/taxonomy/scopeNodes";
 
 export interface CollaboratorInviteTemplateInput {
   inviterName: string;
@@ -22,12 +23,11 @@ export interface RenderedEmail {
   text: string;
 }
 
-const HIERARCHY_LEVELS: (keyof TaxonomicScope)[] = ["kingdom", "phylum", "class", "order", "family", "genus"];
-
 function formatHierarchy(scope?: TaxonomicScope): string | null {
   if (!scope) return null;
-  const levels = HIERARCHY_LEVELS.map((level) => scope[level]).filter((v): v is string => Boolean(v));
-  return levels.length > 0 ? levels.join(" → ") : null;
+  // Every rank the scope carries, sub-ranks and exclusions included — the old
+  // fixed kingdom-to-genus list silently dropped both.
+  return formatScopePath(scope, " → ") || null;
 }
 
 /**

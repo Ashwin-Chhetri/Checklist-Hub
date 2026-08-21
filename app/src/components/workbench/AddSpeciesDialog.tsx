@@ -12,6 +12,7 @@ import { mergeParsedFiles, type ParsedFileResult, type ParsedSpeciesRow } from "
 import { EVIDENCE_PROVIDERS } from "@/modules/evidence/discovery/registry";
 import type { SourceKey } from "@/modules/evidence/discovery/types";
 import { matchSpeciesName } from "@/modules/taxonomy/services/taxonomyApi";
+import { deepestIncludedNode, deepestTaxon, scopeNodes } from "@/lib/taxonomy/scopeNodes";
 import { useAddSpeciesToChecklist } from "@/modules/species/hooks/useAddSpeciesToChecklist";
 
 interface AddSpeciesDialogProps {
@@ -21,17 +22,6 @@ interface AddSpeciesDialogProps {
 }
 
 type Step = "sources" | "review";
-
-const RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"] as const;
-
-function deepestScopeName(checklist: Checklist): string | null {
-  const scope = checklist.taxonomic_scope ?? {};
-  for (let i = RANKS.length - 1; i >= 0; i -= 1) {
-    const value = scope[RANKS[i]];
-    if (value) return value;
-  }
-  return null;
-}
 
 function regionValueFromChecklist(checklist: Checklist): RegionValue {
   return {
@@ -46,7 +36,14 @@ function regionValueFromChecklist(checklist: Checklist): RegionValue {
 
 export default function AddSpeciesDialog({ checklist, existingSpecies, onClose }: AddSpeciesDialogProps) {
   const [step, setStep] = useState<Step>("sources");
-  const [deepestTaxonKey, setDeepestTaxonKey] = useState<number | null>(null);
+  // Scopes saved with their nodes already carry the resolved GBIF key, so it
+  // is read straight off the checklist rather than looked up.
+  const storedTaxonKey = useMemo(
+    () => deepestIncludedNode(scopeNodes(checklist.taxonomic_scope))?.gbifKey ?? null,
+    [checklist],
+  );
+  const [matchedTaxonKey, setMatchedTaxonKey] = useState<number | null>(null);
+  const deepestTaxonKey = storedTaxonKey ?? matchedTaxonKey;
   const [enabledSources, setEnabledSources] = useState<Set<SourceKey>>(
     () => new Set(EVIDENCE_PROVIDERS.map((p) => p.key)),
   );
@@ -58,21 +55,22 @@ export default function AddSpeciesDialog({ checklist, existingSpecies, onClose }
   const region = useMemo(() => regionValueFromChecklist(checklist), [checklist]);
   const taxonomicScope = checklist.taxonomic_scope ?? {};
 
-  // Resolve the checklist's stored deepest taxon name to a GBIF usageKey once on
-  // open — the numeric key used at creation time isn't persisted on Checklist.
+  // Only checklists created before scopes stored their nodes (flat ranks
+  // alone) still have to resolve the deepest name to a key on open.
   useEffect(() => {
-    const name = deepestScopeName(checklist);
+    if (storedTaxonKey) return;
+    const name = deepestTaxon(checklist.taxonomic_scope ?? {}).name;
     if (!name) return;
     let cancelled = false;
     matchSpeciesName(name)
       .then((match) => {
-        if (!cancelled) setDeepestTaxonKey(match.acceptedUsageKey ?? match.usageKey);
+        if (!cancelled) setMatchedTaxonKey(match.acceptedUsageKey ?? match.usageKey);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [checklist]);
+  }, [checklist, storedTaxonKey]);
 
   const existingNames = useMemo(
     () => new Set(existingSpecies.map((s) => s.scientific_name.trim().toLowerCase())),

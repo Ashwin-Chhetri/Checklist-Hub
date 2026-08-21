@@ -1,12 +1,20 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { getChildTaxa, type GbifTaxon } from "@/modules/taxonomy/services/taxonomyApi";
-import type { TaxonomicScope } from "@/types/checklist.types";
-
-const RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"] as const;
-type Rank = (typeof RANKS)[number];
+import { useMemo, useState } from "react";
+import { getChildTaxa, matchTaxonAtRank, type GbifTaxon } from "@/modules/taxonomy/services/taxonomyApi";
+import { getInatChildTaxa, resolveInatTaxon, type InatTaxon } from "@/modules/taxonomy/services/inatTaxonomyApi";
+import {
+  CORE_RANKS,
+  type RankName,
+  compareRanks,
+  isGbifRank,
+  optionalRanksUnder,
+  rankIndex,
+  toGbifRank,
+} from "@/lib/taxonomy/ranks";
+import { buildScope, enabledRanksOf, scopeNodes } from "@/lib/taxonomy/scopeNodes";
+import type { ScopeNode, TaxonomicScope } from "@/types/checklist.types";
 
 // GBIF backbone kingdom usage keys — the only fixed/static level in the chain.
 const KINGDOMS: GbifTaxon[] = [
@@ -20,281 +28,409 @@ const KINGDOMS: GbifTaxon[] = [
   { key: 8, scientificName: "Viruses", canonicalName: "Viruses", rank: "KINGDOM" },
 ];
 
-interface SelectedTaxon {
-  key: number;
+/** A pickable taxon, from whichever backbone supplied this level. */
+interface TaxonOption {
   name: string;
+  gbifKey: number | null;
+  inatId: number | null;
+}
+
+function fromGbif(t: GbifTaxon): TaxonOption {
+  return { name: t.canonicalName ?? t.scientificName, gbifKey: t.key, inatId: null };
+}
+
+function fromInat(t: InatTaxon): TaxonOption {
+  return { name: t.name, gbifKey: null, inatId: t.id };
 }
 
 export interface TaxonomicScopeSelectorProps {
   value: TaxonomicScope;
-  /** Also reports the resolved GBIF taxon key for the deepest selected rank, used for evidence/region verification. */
+  /**
+   * Reports the full scope plus the GBIF key of the deepest included rank.
+   * The key is kept in the signature for callers that still pass it around
+   * separately; it is also stored on the scope's nodes.
+   */
   onChange: (scope: TaxonomicScope, deepestTaxonKey: number | null) => void;
   /** Smaller text/padding for use in compact contexts (e.g. the Settings dialog) instead of the full-page wizard. */
   compact?: boolean;
 }
 
-function matchKingdom(name: string): GbifTaxon | undefined {
-  return KINGDOMS.find((k) => (k.canonicalName ?? k.scientificName).toLowerCase() === name.toLowerCase());
+function includeAt(nodes: ScopeNode[], rank: RankName): ScopeNode | undefined {
+  return nodes.find((n) => n.rank === rank && n.mode === "include");
+}
+
+function excludesAt(nodes: ScopeNode[], rank: RankName): ScopeNode[] {
+  return nodes.filter((n) => n.rank === rank && n.mode === "exclude");
 }
 
 /**
- * Kingdom > Phylum > Class > Order > Family > Genus > Species chain selector,
- * styled as a collapsible hierarchy tree (per UI/code/checklist_creation/step_1_details.html).
- * The user can stop at any level — the deepest selected rank defines the scope.
- * Each level loads its options as children of the previous level's selection
- * from the GBIF backbone, so the chain always reflects a valid taxonomic path.
+ * Kingdom → Species chain selector with optional intermediate ranks.
+ *
+ * The seven principal ranks always get a row. Each one carries toggle chips
+ * for the sub-ranks that sit beneath it (Order → Suborder / Infraorder /
+ * Superfamily, and so on); enabling a chip inserts that rank's row at its
+ * proper depth. The user can stop at any level.
+ *
+ * Any taxon can be **excluded** as well as included, which is the only way to
+ * express a paraphyletic group: moths are order Lepidoptera with superfamily
+ * Papilionoidea excluded, and without that they are indistinguishable from
+ * butterflies.
+ *
+ * Levels are sourced from whichever backbone can answer them — GBIF for the
+ * principal ranks, iNaturalist for the sub-ranks GBIF's backbone has no taxa
+ * at, and iNaturalist for principal ranks once the chain has passed through
+ * one of those (GBIF no longer knows the parent). Keys from the other
+ * backbone are bridged lazily on selection, never for a whole option list.
  */
 export function TaxonomicScopeSelector({ value, onChange, compact = false }: TaxonomicScopeSelectorProps) {
-  // selections[i] = the chosen taxon for RANKS[i], or null if not yet chosen.
-  // `value` only carries names (no GBIF keys), e.g. when restored from a saved
-  // draft or after this component remounts on navigating back to this step —
-  // the kingdom's key is resolved immediately from the static list; deeper
-  // ranks start as an unresolved placeholder (key: -1) and are backfilled by
-  // the effect below, since a real key is required to query their own
-  // children (and to know they aren't locked — see TaxonLevel's isLocked).
-  const [selections, setSelections] = useState<(SelectedTaxon | null)[]>(() =>
-    RANKS.map((rank, i) => {
-      if (!value[rank]) return null;
-      if (i === 0) {
-        const match = matchKingdom(value[rank]!);
-        return { key: match ? match.key : -1, name: value[rank]! };
-      }
-      return { key: -1, name: value[rank]! };
-    }),
-  );
-  // Which rank's option list is currently open for picking (independent of what's selected).
-  const [openRank, setOpenRank] = useState<Rank | null>(
-    () => RANKS[selections.findIndex((s) => !s) === -1 ? RANKS.length - 1 : selections.findIndex((s) => !s)] ?? "kingdom",
-  );
+  const nodes = useMemo(() => scopeNodes(value), [value]);
+  const enabledRanks = useMemo(() => enabledRanksOf(value), [value]);
+
+  const visibleRanks = useMemo(() => {
+    const ranks = new Set<RankName>([...CORE_RANKS, ...enabledRanks]);
+    return [...ranks].sort(compareRanks);
+  }, [enabledRanks]);
+
+  const firstUnset = visibleRanks.find((r) => !includeAt(nodes, r));
+  const [openRank, setOpenRank] = useState<RankName | null>(firstUnset ?? "kingdom");
   const [search, setSearch] = useState("");
 
-  // Backfill real GBIF keys for any restored rank beyond kingdom (key === -1)
-  // by walking the chain via getChildTaxa, matching each level's saved name
-  // against its resolved parent's children. Runs once on mount; intentionally
-  // reads the initial `selections` via a ref rather than the reactive state so
-  // it doesn't re-run as it patches each level in.
-  const initialSelections = useRef(selections);
-  useEffect(() => {
-    let cancelled = false;
-    async function resolveChain() {
-      let parentKey = initialSelections.current[0]?.key ?? null;
-      if (parentKey === null || parentKey < 0) return;
-      for (let i = 1; i < RANKS.length; i++) {
-        const sel = initialSelections.current[i];
-        if (!sel) return;
-        if (sel.key > 0) {
-          parentKey = sel.key;
-          continue;
-        }
-        try {
-          const children = await getChildTaxa(parentKey);
-          if (cancelled) return;
-          const match = children.find((c) => (c.canonicalName ?? c.scientificName).toLowerCase() === sel.name.toLowerCase());
-          if (!match) return;
-          parentKey = match.key;
-          setSelections((prev) => {
-            const next = [...prev];
-            next[i] = { key: match.key, name: sel.name };
-            return next;
-          });
-        } catch {
-          return;
-        }
-      }
-    }
-    void resolveChain();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  function applySelections(next: (SelectedTaxon | null)[]) {
-    setSelections(next);
-    const scope: TaxonomicScope = {};
-    next.forEach((sel, i) => {
-      if (sel) scope[RANKS[i]] = sel.name;
-    });
-    const deepest = [...next].reverse().find((s) => s && s.key > 0);
-    onChange(scope, deepest ? deepest.key : null);
+  function emit(nextNodes: ScopeNode[], nextEnabled: RankName[]) {
+    const scope = buildScope(nextNodes, nextEnabled);
+    const deepest = [...(scope.nodes ?? [])]
+      .filter((n) => n.mode === "include" && n.gbifKey)
+      .pop();
+    onChange(scope, deepest?.gbifKey ?? null);
   }
 
-  function selectTaxon(levelIdx: number, taxon: GbifTaxon) {
-    const next = selections.slice(0, levelIdx);
-    next[levelIdx] = { key: taxon.key, name: taxon.canonicalName ?? taxon.scientificName };
-    while (next.length < RANKS.length) next.push(null);
+  /** Selecting at a rank replaces its include and drops everything deeper. */
+  function selectTaxon(rank: RankName, option: TaxonOption) {
+    const kept = nodes.filter((n) => rankIndex(n.rank) < rankIndex(rank));
+    const next: ScopeNode[] = [
+      ...kept,
+      { rank, name: option.name, gbifKey: option.gbifKey, inatId: option.inatId, mode: "include" },
+    ];
     setSearch("");
+    const following = visibleRanks[visibleRanks.indexOf(rank) + 1];
+    setOpenRank(following ?? null);
+    emit(next, enabledRanks);
 
-    const nextRank = RANKS[levelIdx + 1];
-    setOpenRank(nextRank ?? null);
-    applySelections(next);
+    // An option that came from iNat has no GBIF key. The import path needs
+    // one for every principal rank, so bridge it in the background and emit
+    // again — the selection is usable immediately either way.
+    if (!option.gbifKey && isGbifRank(rank)) {
+      void matchTaxonAtRank(option.name, toGbifRank(rank))
+        .then((match) => {
+          if (!match) return;
+          emit(
+            next.map((n) =>
+              n.rank === rank && n.name === option.name
+                ? { ...n, gbifKey: match.acceptedUsageKey ?? match.usageKey }
+                : n,
+            ),
+            enabledRanks,
+          );
+        })
+        .catch(() => undefined);
+    }
   }
 
-  function clearFrom(levelIdx: number) {
-    const next = selections.slice(0, levelIdx);
-    while (next.length < RANKS.length) next.push(null);
-    setOpenRank(RANKS[levelIdx]);
-    applySelections(next);
+  /** Excluding is additive and independent of the include at the same rank. */
+  function toggleExclude(rank: RankName, option: TaxonOption) {
+    const already = excludesAt(nodes, rank).some((n) => n.name === option.name);
+    const next = already
+      ? nodes.filter((n) => !(n.rank === rank && n.mode === "exclude" && n.name === option.name))
+      : [
+          ...nodes,
+          { rank, name: option.name, gbifKey: option.gbifKey, inatId: option.inatId, mode: "exclude" as const },
+        ];
+    emit(next, enabledRanks);
+  }
+
+  function clearNode(target: ScopeNode) {
+    const next =
+      target.mode === "include"
+        ? nodes.filter((n) => rankIndex(n.rank) < rankIndex(target.rank))
+        : nodes.filter((n) => n !== target);
+    setOpenRank(target.rank);
+    emit(next, enabledRanks);
+  }
+
+  function toggleOptionalRank(rank: RankName) {
+    if (enabledRanks.includes(rank)) {
+      emit(
+        nodes.filter((n) => n.rank !== rank),
+        enabledRanks.filter((r) => r !== rank),
+      );
+    } else {
+      emit(nodes, [...enabledRanks, rank]);
+      setOpenRank(rank);
+    }
   }
 
   return (
     <div className={`border border-outline-variant bg-white ${compact ? "p-2" : "p-3"}`}>
-      <TaxonLevel
-        rankIdx={0}
-        selections={selections}
-        openRank={openRank}
-        search={search}
-        onSearchChange={setSearch}
-        onToggle={(rank) => setOpenRank((cur) => (cur === rank ? null : rank))}
-        onSelect={selectTaxon}
-        onClear={clearFrom}
-        compact={compact}
-      />
+      {visibleRanks.map((rank, i) => {
+        const previous = i === 0 ? null : visibleRanks[i - 1];
+        const parent = previous ? includeAt(nodes, previous) : null;
+        const isLocked = i > 0 && !parent;
+        const selected = includeAt(nodes, rank);
+        const excluded = excludesAt(nodes, rank);
+
+        // Render down to the first unfilled rank and stop. Deeper rows would
+        // only read "select the level above first", which is noise.
+        const firstUnfilled = visibleRanks.findIndex((r) => !includeAt(nodes, r));
+        if (firstUnfilled !== -1 && i > firstUnfilled) return null;
+
+        return (
+          <TaxonLevelRow
+            key={rank}
+            rank={rank}
+            depth={i}
+            parent={parent ?? null}
+            ancestorNames={nodes
+              .filter((n) => n.mode === "include" && rankIndex(n.rank) < rankIndex(rank))
+              .map((n) => n.name)}
+            selected={selected}
+            excluded={excluded}
+            isLocked={isLocked}
+            previousRank={previous}
+            isOpen={openRank === rank}
+            enabledRanks={enabledRanks}
+            search={search}
+            onSearchChange={setSearch}
+            onToggleOpen={() => setOpenRank((cur) => (cur === rank ? null : rank))}
+            onSelect={(option) => selectTaxon(rank, option)}
+            onToggleExclude={(option) => toggleExclude(rank, option)}
+            onClear={clearNode}
+            onToggleOptionalRank={toggleOptionalRank}
+            compact={compact}
+          />
+        );
+      })}
     </div>
   );
 }
 
-function TaxonLevel({
-  rankIdx,
-  selections,
-  openRank,
+function TaxonLevelRow({
+  rank,
+  depth,
+  parent,
+  ancestorNames,
+  selected,
+  excluded,
+  isLocked,
+  previousRank,
+  isOpen,
+  enabledRanks,
   search,
   onSearchChange,
-  onToggle,
+  onToggleOpen,
   onSelect,
+  onToggleExclude,
   onClear,
-  compact = false,
+  onToggleOptionalRank,
+  compact,
 }: {
-  rankIdx: number;
-  selections: (SelectedTaxon | null)[];
-  openRank: Rank | null;
+  rank: RankName;
+  depth: number;
+  parent: ScopeNode | null;
+  ancestorNames: string[];
+  selected: ScopeNode | undefined;
+  excluded: ScopeNode[];
+  isLocked: boolean;
+  previousRank: RankName | null;
+  isOpen: boolean;
+  enabledRanks: RankName[];
   search: string;
   onSearchChange: (v: string) => void;
-  onToggle: (rank: Rank) => void;
-  onSelect: (levelIdx: number, taxon: GbifTaxon) => void;
-  onClear: (levelIdx: number) => void;
-  compact?: boolean;
+  onToggleOpen: () => void;
+  onSelect: (option: TaxonOption) => void;
+  onToggleExclude: (option: TaxonOption) => void;
+  onClear: (node: ScopeNode) => void;
+  onToggleOptionalRank: (rank: RankName) => void;
+  compact: boolean;
 }) {
-  if (rankIdx >= RANKS.length) return null;
-
-  const rank = RANKS[rankIdx];
-  const selected = selections[rankIdx];
-  const parent = rankIdx === 0 ? null : selections[rankIdx - 1];
-  const isLocked = rankIdx > 0 && (!parent || parent.key < 0);
-  const isOpen = openRank === rank;
   const textSize = compact ? "text-xs" : "text-sm";
-  const indent = compact ? "ml-2 pl-2" : "ml-3 pl-3";
+  const chips = optionalRanksUnder(rank);
+  // Indent is per-depth and unbounded (18 ranks), so it goes through an
+  // inline style rather than a Tailwind class — Tailwind v4 can only emit
+  // classes it can see as literal strings at build time.
+  const indentStyle = depth > 0 ? { marginLeft: `${depth * (compact ? 8 : 12)}px` } : undefined;
 
   return (
-    <div className={rankIdx > 0 ? `${indent} border-l border-outline-variant/40 mt-1` : undefined}>
+    <div
+      style={indentStyle}
+      className={depth > 0 ? `${compact ? "pl-2" : "pl-3"} border-l border-outline-variant/40 mt-1` : undefined}
+    >
       <div
         role="button"
         tabIndex={isLocked ? -1 : 0}
-        onClick={() => !isLocked && onToggle(rank)}
+        onClick={() => !isLocked && onToggleOpen()}
         onKeyDown={(e) => {
           if (!isLocked && (e.key === "Enter" || e.key === " ")) {
             e.preventDefault();
-            onToggle(rank);
+            onToggleOpen();
           }
         }}
-        className={`w-full flex items-center gap-2 py-1 text-left transition-colors group rounded-sm ${isLocked ? "opacity-40 cursor-not-allowed" : "hover:bg-surface-container-low cursor-pointer"
-          }`}
+        className={`w-full flex items-center gap-2 py-1 text-left transition-colors group rounded-sm ${
+          isLocked ? "opacity-40 cursor-not-allowed" : "hover:bg-surface-container-low cursor-pointer"
+        }`}
         aria-disabled={isLocked}
       >
         <span
-          className={`material-symbols-outlined ${compact ? "text-[14px]" : "text-[16px]"} text-on-surface-variant transition-transform ${isOpen ? "rotate-90" : ""
-            }`}
+          className={`material-symbols-outlined ${compact ? "text-[14px]" : "text-[16px]"} text-on-surface-variant transition-transform ${
+            isOpen ? "rotate-90" : ""
+          }`}
         >
           {selected ? "folder_open" : "chevron_right"}
         </span>
-        <span className={`font-bold text-primary ${textSize} capitalize ${compact ? "w-12" : "w-16"} shrink-0`}>{rank}:</span>
+        <span className={`font-bold text-primary ${textSize} capitalize ${compact ? "w-16" : "w-20"} shrink-0`}>
+          {rank}:
+        </span>
+
         {selected ? (
-          <span className={`${textSize} text-on-surface bg-primary-container/30 px-2 py-0.5 rounded-sm`}>
-            {selected.name}
-          </span>
+          <SelectedPill node={selected} onClear={onClear} textSize={textSize} />
         ) : (
           <span className={`${textSize} italic text-surface-dim`}>
-            {isLocked ? `Select ${RANKS[rankIdx - 1]} first…` : `Select ${rank}…`}
+            {isLocked ? `Select ${previousRank} first…` : `Select ${rank}…`}
           </span>
         )}
-        {selected && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClear(rankIdx);
-            }}
-            className="ml-auto text-on-surface-variant hover:text-primary transition-colors opacity-0 group-hover:opacity-100"
-            aria-label={`Clear ${rank}`}
-          >
-            <span className="material-symbols-outlined text-[16px]">close</span>
-          </button>
+
+        {excluded.map((node) => (
+          <SelectedPill key={`x-${node.name}`} node={node} onClear={onClear} textSize={textSize} />
+        ))}
+
+        {chips.length > 0 && (
+          <span className="ml-auto flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            {chips.map((optional) => {
+              const on = enabledRanks.includes(optional);
+              return (
+                <button
+                  key={optional}
+                  type="button"
+                  onClick={() => onToggleOptionalRank(optional)}
+                  aria-pressed={on}
+                  title={on ? `Remove the ${optional} level` : `Add a ${optional} level`}
+                  className={`px-1.5 py-0.5 rounded-sm border text-[10px] capitalize transition-colors ${
+                    on
+                      ? "border-primary bg-primary-container/40 text-primary font-bold"
+                      : "border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {on ? "−" : "+"} {optional}
+                </button>
+              );
+            })}
+          </span>
         )}
       </div>
 
       {isOpen && !isLocked && (
         <TaxonLevelOptions
           rank={rank}
-          parentKey={parent?.key ?? null}
+          parent={parent}
+          ancestorNames={ancestorNames}
+          selectedName={selected?.name ?? null}
+          excludedNames={excluded.map((n) => n.name)}
           search={search}
           onSearchChange={onSearchChange}
-          onSelect={(taxon) => onSelect(rankIdx, taxon)}
-          compact={compact}
-        />
-      )}
-
-      {selected && (
-        <TaxonLevel
-          rankIdx={rankIdx + 1}
-          selections={selections}
-          openRank={openRank}
-          search={search}
-          onSearchChange={onSearchChange}
-          onToggle={onToggle}
           onSelect={onSelect}
-          onClear={onClear}
+          onToggleExclude={onToggleExclude}
           compact={compact}
         />
-      )}
-
-      {selected && rankIdx === RANKS.length - 1 && (
-        <div className={`${indent} border-l border-outline-variant/40 mt-1 flex items-center gap-2 py-1 text-surface-dim`}>
-          <span className="material-symbols-outlined text-[16px]">subdirectory_arrow_right</span>
-          <span className={`italic ${textSize}`}>Scope set to species level.</span>
-        </div>
       )}
     </div>
   );
 }
 
+function SelectedPill({
+  node,
+  onClear,
+  textSize,
+}: {
+  node: ScopeNode;
+  onClear: (node: ScopeNode) => void;
+  textSize: string;
+}) {
+  const isExclude = node.mode === "exclude";
+  return (
+    <span
+      className={`${textSize} px-2 py-0.5 rounded-sm inline-flex items-center gap-1 ${
+        isExclude ? "bg-red-50 text-red-700 line-through" : "text-on-surface bg-primary-container/30"
+      }`}
+      title={isExclude ? `${node.name} is excluded from this scope` : undefined}
+    >
+      {isExclude && <span className="material-symbols-outlined text-[12px] no-underline">block</span>}
+      {node.name}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClear(node);
+        }}
+        className="text-on-surface-variant hover:text-primary transition-colors"
+        aria-label={`Clear ${node.name}`}
+      >
+        <span className="material-symbols-outlined text-[14px]">close</span>
+      </button>
+    </span>
+  );
+}
+
 function TaxonLevelOptions({
   rank,
-  parentKey,
+  parent,
+  ancestorNames,
+  selectedName,
+  excludedNames,
   search,
   onSearchChange,
   onSelect,
-  compact = false,
+  onToggleExclude,
+  compact,
 }: {
-  rank: Rank;
-  parentKey: number | null;
+  rank: RankName;
+  parent: ScopeNode | null;
+  ancestorNames: string[];
+  selectedName: string | null;
+  excludedNames: string[];
   search: string;
   onSearchChange: (v: string) => void;
-  onSelect: (taxon: GbifTaxon) => void;
-  compact?: boolean;
+  onSelect: (option: TaxonOption) => void;
+  onToggleExclude: (option: TaxonOption) => void;
+  compact: boolean;
 }) {
+  // GBIF can answer a principal rank only while the chain above it is still
+  // GBIF-resolved. Once the scope passes through a rank GBIF has no taxa at,
+  // the parent has no GBIF key and the rest of the chain comes from iNat.
+  const useGbif = rank === "kingdom" || (isGbifRank(rank) && Boolean(parent?.gbifKey));
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["gbif-children", rank, parentKey],
-    queryFn: () => (rank === "kingdom" ? KINGDOMS : getChildTaxa(parentKey as number)),
-    enabled: rank === "kingdom" || parentKey !== null,
+    queryKey: ["scope-options", rank, useGbif ? `g:${parent?.gbifKey ?? 0}` : `i:${parent?.inatId ?? parent?.name ?? ""}`],
+    queryFn: async (): Promise<TaxonOption[]> => {
+      if (rank === "kingdom") return KINGDOMS.map(fromGbif);
+      if (useGbif) return (await getChildTaxa(parent!.gbifKey!)).map(fromGbif);
+
+      // Bridge the parent into iNat if it was picked from GBIF and has no
+      // iNat id yet. Ancestor names disambiguate homonyms across kingdoms.
+      let ancestorId = parent?.inatId ?? null;
+      if (!ancestorId && parent) {
+        const bridged = await resolveInatTaxon(parent.name, parent.rank, ancestorNames);
+        ancestorId = bridged?.id ?? null;
+      }
+      if (!ancestorId) return [];
+      return (await getInatChildTaxa(ancestorId, rank)).map(fromInat);
+    },
+    enabled: rank === "kingdom" || Boolean(parent),
+    staleTime: 30 * 60 * 1000,
   });
 
-  const options = (data ?? []).filter((t) =>
-    (t.canonicalName ?? t.scientificName).toLowerCase().includes(search.toLowerCase()),
-  );
+  const options = (data ?? []).filter((t) => t.name.toLowerCase().includes(search.toLowerCase()));
   const textSize = compact ? "text-xs" : "text-sm";
-  const indent = compact ? "ml-2 pl-2" : "ml-3 pl-3";
 
   return (
-    <div className={`${indent} border-l border-outline-variant/40 mt-1 mb-1 flex flex-col gap-2`}>
+    <div className={`${compact ? "ml-2 pl-2" : "ml-3 pl-3"} border-l border-outline-variant/40 mt-1 mb-1 flex flex-col gap-2`}>
       <div className="relative">
         <span className="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-on-surface-variant text-[16px]">
           search
@@ -311,21 +447,44 @@ function TaxonLevelOptions({
 
       {isLoading && <p className={`${textSize} text-on-surface-variant px-1`}>Loading…</p>}
       {error && <p className={`${textSize} text-red-600 px-1`}>Failed to load {rank} options.</p>}
+      {!isLoading && !error && !options.length && (
+        <p className={`${textSize} text-on-surface-variant/60 italic px-2 py-1.5`}>
+          {data?.length ? "No matches." : `No ${rank} level recorded below ${parent?.name ?? "this taxon"}.`}
+        </p>
+      )}
 
       <div className={`${compact ? "max-h-36" : "max-h-48"} overflow-y-auto flex flex-col`}>
-        {options.map((taxon) => (
-          <button
-            key={taxon.key}
-            type="button"
-            onClick={() => onSelect(taxon)}
-            className={`text-left px-2 ${compact ? "py-1" : "py-1.5"} ${textSize} hover:bg-surface-container-low transition-colors flex items-center gap-2 italic`}
-          >
-            {taxon.canonicalName ?? taxon.scientificName}
-          </button>
-        ))}
-        {!isLoading && options.length === 0 && (
-          <p className={`${textSize} text-on-surface-variant/60 italic px-2 py-1.5`}>No matches.</p>
-        )}
+        {options.map((taxon) => {
+          const isSelected = taxon.name === selectedName;
+          const isExcluded = excludedNames.includes(taxon.name);
+          return (
+            <div
+              key={`${taxon.gbifKey ?? "i"}-${taxon.inatId ?? "g"}-${taxon.name}`}
+              className="flex items-center group hover:bg-surface-container-low transition-colors"
+            >
+              <button
+                type="button"
+                onClick={() => onSelect(taxon)}
+                className={`flex-1 text-left px-2 ${compact ? "py-1" : "py-1.5"} ${textSize} italic ${
+                  isSelected ? "text-primary font-bold" : ""
+                } ${isExcluded ? "line-through text-on-surface-variant/50" : ""}`}
+              >
+                {taxon.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggleExclude(taxon)}
+                aria-pressed={isExcluded}
+                title={isExcluded ? `Stop excluding ${taxon.name}` : `Exclude ${taxon.name} from this scope`}
+                className={`px-2 shrink-0 transition-opacity ${
+                  isExcluded ? "text-red-600 opacity-100" : "text-on-surface-variant opacity-0 group-hover:opacity-100 hover:text-red-600"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">block</span>
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

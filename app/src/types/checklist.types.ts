@@ -6,6 +6,7 @@ import type {
   TaxonomySynonymEvent,
 } from "@/types/species.types";
 import type { Profile } from "@/types/collaboration.types";
+import type { RankName } from "@/lib/taxonomy/ranks";
 
 export type ChecklistStatus =
   | "draft"
@@ -15,6 +16,36 @@ export type ChecklistStatus =
   | "published"
   | "archived";
 
+/**
+ * One selected taxon in a checklist's scope, at any rank (core or optional).
+ *
+ * `mode: "exclude"` carves the taxon back out of the scope established by the
+ * nodes above it — moths are order Lepidoptera with superfamily Papilionoidea
+ * excluded, which is the only way to express a paraphyletic group.
+ */
+export interface ScopeNode {
+  rank: RankName;
+  name: string;
+  /** GBIF backbone key. Present for core ranks + subspecies; null for iNat-only ranks. */
+  gbifKey?: number | null;
+  /** iNaturalist taxon id. Always present for optional ranks; bridged on demand for core ranks. */
+  inatId?: number | null;
+  mode: "include" | "exclude";
+}
+
+/**
+ * A checklist's taxonomic scope.
+ *
+ * The seven flat rank keys are the original shape and are still what most
+ * consumers read (the eBird Aves gate, EML export, collaborator invites,
+ * `kingdomHint`, validation). They are now **derived** from `nodes` by
+ * `deriveFlatScope()` and should never be written by hand.
+ *
+ * `nodes` is the full picture: every rank the user selected including the
+ * optional ones, each carrying its resolved keys and include/exclude mode.
+ * It is absent on rows created before deep scopes existed — call
+ * `nodesFromFlatScope()` to reconstruct an equivalent node list for those.
+ */
 export interface TaxonomicScope {
   kingdom?: string;
   phylum?: string;
@@ -23,6 +54,10 @@ export interface TaxonomicScope {
   family?: string;
   genus?: string;
   species?: string;
+  /** Full scope, ordered shallow → deep. Absent on pre-deep-scope rows. */
+  nodes?: ScopeNode[];
+  /** Which optional rank rows the user has toggled on in the selector. */
+  enabledRanks?: RankName[];
 }
 
 export interface Checklist {

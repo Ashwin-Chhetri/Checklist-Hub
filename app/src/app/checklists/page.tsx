@@ -19,6 +19,7 @@ import { useClearPublicationPackage, useDeleteChecklistMetadata } from "@/module
 import { downloadPublicationPackageBlob } from "@/modules/publication/services/publicationDraftService";
 import { downloadBlob } from "@/modules/publication/utils/darwinCore";
 import type { ChecklistStatus, TaxonomicScope } from "@/types/checklist.types";
+import { formatScopePath } from "@/lib/taxonomy/scopeNodes";
 import type { AppNotification } from "@/types/collaboration.types";
 
 type Tab = "all" | "shared" | "watching" | "published" | "archived";
@@ -47,10 +48,10 @@ function formatRelativeTime(dateString: string): string {
 }
 
 function formatScope(taxonomicScope: TaxonomicScope): string {
-  const parts = [taxonomicScope.kingdom, taxonomicScope.phylum, taxonomicScope.class].filter(
-    Boolean,
-  );
-  return parts.join(" > ") || "—";
+  // Deliberately the whole path, not just the top three ranks: two checklists
+  // can share kingdom/phylum/class and still be entirely different scopes —
+  // butterflies and moths differ only at superfamily.
+  return formatScopePath(taxonomicScope, " > ") || "—";
 }
 
 // 'reviewing' is repurposed (see supabase/migrations/0045) to mean

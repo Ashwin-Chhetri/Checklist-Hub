@@ -1,4 +1,5 @@
 import type { TaxonomicScope } from "@/types/checklist.types";
+import type { ScopeTargets } from "@/lib/taxonomy/scopeTargets";
 import type { RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
 import type { LiteratureDocument } from "./literature/types";
 
@@ -27,6 +28,17 @@ export interface DiscoveryContext {
   /** GADM id of the region, when known (narrows GBIF occurrence queries). */
   gadmGid: string | null;
   region: RegionValue;
+  /**
+   * The scope's include/exclude nodes translated into per-source query
+   * targets. Null while still resolving, or for a scope with nothing
+   * selected; providers fall back to `deepestTaxonKey`/`deepestTaxonName`
+   * when it is absent, which is what they did before deep scopes existed.
+   *
+   * This is what lets a scope express something GBIF cannot be asked
+   * directly — a superfamily (no such rank in its backbone), or "Lepidoptera
+   * but not Papilionoidea" (no negation in its occurrence API).
+   */
+  scopeTargets: ScopeTargets | null;
 }
 
 /** A single raw species record as reported by one source, pre-normalization. */

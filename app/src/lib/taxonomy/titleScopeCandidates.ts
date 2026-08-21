@@ -41,14 +41,10 @@ export function extractScopeCandidates(title: string): string[] {
   // The portion before the first locative preposition ("... of/in/near ...")
   // is usually the taxonomic subject; the rest is a place name.
   const subject = trimmed.split(LOCATIVE_SPLIT_RE)[0];
-  add(subject);
-
-  // "Reptiles and Amphibians of Sikkim" -> try each coordinated group too.
-  const groups = subject.split(GROUP_SPLIT_RE);
-  for (const group of groups) add(group);
 
   // "Small Mammals"/"Large Mammals" -> also try the bare group name.
-  for (const group of [subject, ...groups]) {
+  function addWithStripped(group: string) {
+    add(group);
     let stripped = group;
     let prev = "";
     while (prev !== stripped) {
@@ -58,14 +54,32 @@ export function extractScopeCandidates(title: string): string[] {
     if (stripped !== group) add(stripped);
   }
 
+  // "Reptiles and Amphibians of Sikkim" -> try each coordinated group too.
+  // Each group's stripped form is queued immediately after the group itself,
+  // so a title like "Common Birds and Mammals of Assam" resolves to the first
+  // group named ("Birds") rather than skipping past it to the second one
+  // merely because the first carried a descriptor.
+  const groups = subject.split(GROUP_SPLIT_RE);
+  addWithStripped(subject);
+  for (const group of groups) addWithStripped(group);
+
   // Last resort: individual content words, dropping generic function words.
+  //
+  // Tried last word first, because English compound group names are
+  // head-final — the group is the last noun ("sea slugs" are slugs, "tiger
+  // beetles" are beetles, "hover flies" are flies). Going left to right
+  // instead matches the modifier, and modifiers are frequently real taxon
+  // names in their own right: "Sea Slugs" resolved to the genus *Sea*, and
+  // "Tiger Beetles" would resolve to *Panthera tigris* if the full phrase
+  // ever missed.
   const words = subject.split(/\s+/).filter((w) => !STOPWORDS.has(w.toLowerCase()));
-  for (const word of words) add(word);
+  const headFirst = [...words].reverse();
+  for (const word of headFirst) add(word);
 
   // Plural forms rarely match a species/genus vernacular name verbatim (e.g.
   // "Tigers" vs. "Tiger") — append naive singularizations as lower-priority
   // fallbacks, tried only once every exact/plural candidate above has missed.
-  for (const word of words) {
+  for (const word of headFirst) {
     const singular = singularize(word);
     if (singular) add(singular);
   }
