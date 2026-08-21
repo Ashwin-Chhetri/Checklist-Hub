@@ -49,15 +49,14 @@ export async function matchGbifAtRank(name: string, rank: RankName): Promise<Gbi
     url.searchParams.set("strict", "false");
 
     const res = await fetch(url.toString(), { signal: AbortSignal.timeout(TIMEOUT_MS) });
-    if (!res.ok) {
-      matchCache.set(cacheKey, null);
-      return null;
-    }
+    // Only a response we actually got back is worth remembering — see the note
+    // on transient failures in inat.server.ts.
+    if (!res.ok) return null;
     const data = (await res.json()) as GbifMatch;
-    matchCache.set(cacheKey, isUsableMatch(data, rank) ? data : null);
-    return matchCache.get(cacheKey) ?? null;
+    const usable = isUsableMatch(data, rank) ? data : null;
+    matchCache.set(cacheKey, usable);
+    return usable;
   } catch {
-    matchCache.set(cacheKey, null);
     return null;
   }
 }
@@ -122,6 +121,7 @@ export async function lookupGbifKeyByName(
   if (usageCache.has(cacheKey)) return usageCache.get(cacheKey) ?? null;
 
   let resolved: number | null = null;
+  let answered = false;
   try {
     const url = new URL(`${GBIF_API}/species`);
     url.searchParams.set("name", name);
@@ -130,6 +130,7 @@ export async function lookupGbifKeyByName(
 
     const res = await fetch(url.toString(), { signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (res.ok) {
+      answered = true;
       const data = (await res.json()) as { results?: GbifNameUsage[] };
       const wantedRank = toGbifRank(rank);
       const atRank = (data.results ?? []).filter(
@@ -153,10 +154,12 @@ export async function lookupGbifKeyByName(
       if (chosen) resolved = chosen.acceptedKey ?? chosen.key;
     }
   } catch {
-    resolved = null;
+    return null;
   }
 
-  usageCache.set(cacheKey, resolved);
+  // A name GBIF answered about but doesn't have is a real negative; a request
+  // that never landed is not, and caching it would be permanent.
+  if (answered) usageCache.set(cacheKey, resolved);
   return resolved;
 }
 

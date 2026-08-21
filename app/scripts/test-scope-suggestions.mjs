@@ -26,6 +26,7 @@ const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
  * @property {[string,string][]} [expect.includes] include nodes that must be present
  * @property {[string,string][]} [expect.excludes] exclude nodes that must be present
  * @property {string[]} [expect.anyDeepestName]   accept any one of these as the deepest name
+ * @property {string[]} [expect.absentRanks]     ranks that must NOT appear (redundant sub-ranks)
  * @property {boolean} [expectNoMatch]
  */
 
@@ -34,17 +35,28 @@ const CASES = [
   {
     title: "Butterflies of Darjeeling",
     why: "Butterflies are a superfamily, a rank GBIF's backbone does not have. Stopping at order Lepidoptera would include every moth.",
-    expect: { deepest: ["superfamily", "Papilionoidea"], includes: [["order", "Lepidoptera"]] },
+    expect: {
+      deepest: ["superfamily", "Papilionoidea"],
+      includes: [["order", "Lepidoptera"]],
+      // Hexapoda and Pterygota are in iNaturalist's ancestry but say nothing
+      // that class Insecta doesn't; a butterfly checklist's scope shouldn't
+      // carry them.
+      absentRanks: ["subphylum", "subclass", "infraclass"],
+    },
   },
   {
     title: "Moths of Darjeeling",
     why: "Moths are not a clade. iNaturalist reports 'Moths' as a common name of Lepidoptera, which also contains every butterfly.",
-    expect: { deepest: ["order", "Lepidoptera"], excludes: [["superfamily", "Papilionoidea"]] },
+    expect: {
+      deepest: ["order", "Lepidoptera"],
+      excludes: [["superfamily", "Papilionoidea"]],
+      absentRanks: ["subphylum", "subclass"],
+    },
   },
   {
     title: "Snakes of Australia",
     why: "Snakes are suborder Serpentes; GBIF can only reach order Squamata, which is snakes plus every lizard.",
-    expect: { deepest: ["suborder", "Serpentes"] },
+    expect: { deepest: ["suborder", "Serpentes"], absentRanks: ["subphylum"] },
   },
   {
     title: "Tiger Beetles of India",
@@ -84,7 +96,10 @@ const CASES = [
   {
     title: "Bumblebees of Colorado",
     why: "Genus-level vernacular that a fuzzy match would happily resolve to the whole bee superfamily.",
-    expect: { deepest: ["genus", "Bombus"] },
+    expect: {
+      deepest: ["genus", "Bombus"],
+      absentRanks: ["subphylum", "subclass", "suborder", "infraorder", "superfamily", "subfamily", "tribe"],
+    },
   },
   {
     title: "Hoverflies of the UK",
@@ -114,7 +129,10 @@ const CASES = [
   {
     title: "Tiger",
     why: "A bare species vernacular with no region, which must resolve the full chain down to species.",
-    expect: { deepest: ["species", "Panthera tigris"] },
+    expect: {
+      deepest: ["species", "Panthera tigris"],
+      absentRanks: ["subphylum", "subclass", "infraclass", "subfamily", "subgenus"],
+    },
   },
   {
     title: "Papilionidae of Nepal",
@@ -182,6 +200,10 @@ function check(testCase, data) {
     if (!excludes.some((n) => n.rank === rank && n.name === name)) {
       failures.push(`missing exclude ${rank}:${name}`);
     }
+  }
+  for (const rank of e.absentRanks ?? []) {
+    const found = nodes.find((n) => n.rank === rank);
+    if (found) failures.push(`redundant ${rank}:${found.name} should have been pruned`);
   }
   return failures;
 }

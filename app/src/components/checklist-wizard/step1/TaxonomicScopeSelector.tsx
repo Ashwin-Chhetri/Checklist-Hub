@@ -228,6 +228,62 @@ export function TaxonomicScopeSelector({ value, onChange, compact = false }: Tax
           />
         );
       })}
+
+      <ScopeSummaryNote nodes={nodes} compact={compact} />
+    </div>
+  );
+}
+
+/**
+ * Plain-language read-out of what the current scope actually covers.
+ *
+ * The rank tree shows which taxa are picked but not what that *means* for the
+ * import, and the two come apart as soon as an exclusion is involved — a row
+ * reading "Lepidoptera" with a struck-through "Papilionoidea" underneath is a
+ * moth checklist, which is not obvious from the rows alone. This also carries
+ * the only mention of the exclude control, which is otherwise hidden until
+ * hover.
+ */
+function ScopeSummaryNote({ nodes, compact }: { nodes: ScopeNode[]; compact: boolean }) {
+  const included = nodes.filter((n) => n.mode === "include");
+  const excluded = nodes.filter((n) => n.mode === "exclude");
+  const deepest = included[included.length - 1];
+
+  return (
+    <div
+      className={`mt-2 pt-2 border-t border-outline-variant/40 flex gap-1.5 ${
+        compact ? "text-[10px]" : "text-[11px]"
+      } text-on-surface-variant/80 leading-relaxed`}
+    >
+      <span className="material-symbols-outlined text-[13px] shrink-0 mt-px opacity-70">info</span>
+      <div className="space-y-0.5">
+        {deepest ? (
+          <p>
+            <span className="font-semibold text-on-surface-variant">Included:</span> every species under{" "}
+            {deepest.rank} <span className="italic">{deepest.name}</span>.
+          </p>
+        ) : (
+          <p>
+            Choose a level to set what this checklist covers. Everything under your deepest choice is
+            included — stop wherever the scope should stop.
+          </p>
+        )}
+
+        {excluded.length > 0 && (
+          <p>
+            <span className="font-semibold text-on-surface-variant">Excluded:</span>{" "}
+            {excluded.map((n) => n.name).join(", ")} — and everything beneath{" "}
+            {excluded.length > 1 ? "those" : "that"}.
+          </p>
+        )}
+
+        {excluded.length === 0 && (
+          <p className="opacity-80">
+            To leave a group out, hover any option and choose <span className="font-semibold">exclude</span>.
+            Moths, for instance, are all Lepidoptera <em>except</em> the butterflies.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -376,12 +432,16 @@ function SelectedPill({
   const isExclude = node.mode === "exclude";
   return (
     <span
-      className={`${textSize} px-2 py-0.5 rounded-sm inline-flex items-center gap-1 ${
-        isExclude ? "bg-red-50 text-red-700 line-through" : "text-on-surface bg-primary-container/30"
+      className={`${textSize} group/pill px-2 py-0.5 rounded-sm inline-flex items-center gap-1 ${
+        isExclude
+          ? "bg-surface-container-low text-on-surface-variant line-through decoration-1 decoration-on-surface-variant/40"
+          : "text-on-surface bg-primary-container/30"
       }`}
       title={isExclude ? `${node.name} is excluded from this scope` : undefined}
     >
-      {isExclude && <span className="material-symbols-outlined text-[12px] no-underline">block</span>}
+      {/* A plain minus rather than a filled "block" glyph: at pill size the
+          icon read as an error state, which excluding a group is not. */}
+      {isExclude && <span className="no-underline text-on-surface-variant/70">−</span>}
       {node.name}
       <button
         type="button"
@@ -389,10 +449,12 @@ function SelectedPill({
           e.stopPropagation();
           onClear(node);
         }}
-        className="text-on-surface-variant hover:text-primary transition-colors"
+        // Revealed on hover/focus. Always-visible clear buttons put an ✕ next
+        // to every rank at once, which reads louder than the scope itself.
+        className="ml-0.5 text-on-surface-variant/50 hover:text-on-surface transition-all opacity-0 group-hover/pill:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
         aria-label={`Clear ${node.name}`}
       >
-        <span className="material-symbols-outlined text-[14px]">close</span>
+        <span className="material-symbols-outlined text-[12px] leading-none no-underline">close</span>
       </button>
     </span>
   );
@@ -486,7 +548,7 @@ function TaxonLevelOptions({
                 onClick={() => onSelect(taxon)}
                 className={`flex-1 text-left px-2 ${compact ? "py-1" : "py-1.5"} ${textSize} italic ${
                   isSelected ? "text-primary font-bold" : ""
-                } ${isExcluded ? "line-through text-on-surface-variant/50" : ""}`}
+                } ${isExcluded ? "line-through decoration-1 decoration-on-surface-variant/40 text-on-surface-variant/60" : ""}`}
               >
                 {taxon.name}
               </button>
@@ -495,11 +557,16 @@ function TaxonLevelOptions({
                 onClick={() => onToggleExclude(taxon)}
                 aria-pressed={isExcluded}
                 title={isExcluded ? `Stop excluding ${taxon.name}` : `Exclude ${taxon.name} from this scope`}
-                className={`px-2 shrink-0 transition-opacity ${
-                  isExcluded ? "text-red-600 opacity-100" : "text-on-surface-variant opacity-0 group-hover:opacity-100 hover:text-red-600"
+                // Quiet by default and only on hover: this sits beside every
+                // option in a long list, so a always-lit icon per row competes
+                // with the names the user is actually reading.
+                className={`px-2 shrink-0 text-[10px] font-label-caps uppercase tracking-wider transition-all ${
+                  isExcluded
+                    ? "opacity-100 text-on-surface-variant"
+                    : "opacity-0 group-hover:opacity-60 hover:!opacity-100 text-on-surface-variant focus-visible:opacity-100"
                 }`}
               >
-                <span className="material-symbols-outlined text-[16px]">block</span>
+                {isExcluded ? "excluded" : "exclude"}
               </button>
             </div>
           );

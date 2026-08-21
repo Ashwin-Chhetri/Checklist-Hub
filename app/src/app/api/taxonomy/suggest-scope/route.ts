@@ -5,7 +5,14 @@ import { extractScopeCandidates } from "@/lib/taxonomy/titleScopeCandidates";
 import { getInatLineage, getInatTaxaByIds, searchInatTaxa, type InatTaxon } from "@/lib/taxonomy/inat.server";
 import { matchParaphyleticScope, type ParaphyleticScope } from "@/lib/taxonomy/paraphyleticScopes";
 import { attachGbifKeys } from "@/lib/taxonomy/scopeGbifBridge.server";
-import { CORE_RANKS, type CoreRankName, type RankName, isCoreRank, isRankName } from "@/lib/taxonomy/ranks";
+import {
+  CORE_RANKS,
+  type CoreRankName,
+  type RankName,
+  isCoreRank,
+  isRankName,
+  rankIndex,
+} from "@/lib/taxonomy/ranks";
 import { deriveFlatScope, sortNodes } from "@/lib/taxonomy/scopeNodes";
 import type { ScopeNode } from "@/types/checklist.types";
 
@@ -59,10 +66,9 @@ async function fetchGbifClassification(taxonId: number): Promise<GbifSpeciesReco
   if (classificationCache.has(taxonId)) return classificationCache.get(taxonId) ?? null;
   try {
     const res = await fetch(`https://api.gbif.org/v1/species/${taxonId}`);
-    if (!res.ok) {
-      classificationCache.set(taxonId, null);
-      return null;
-    }
+    // Not cached on failure: this map never expires, so a transient error
+    // would permanently blank this taxon's classification for the instance.
+    if (!res.ok) return null;
     const data = (await res.json()) as GbifSpeciesRecord;
     const resolved =
       data.taxonomicStatus === "SYNONYM" && data.acceptedKey
@@ -71,7 +77,6 @@ async function fetchGbifClassification(taxonId: number): Promise<GbifSpeciesReco
     classificationCache.set(taxonId, resolved);
     return resolved;
   } catch {
-    classificationCache.set(taxonId, null);
     return null;
   }
 }
@@ -154,7 +159,41 @@ function nodesFromClassification(classification: Partial<Record<CoreRankName, st
   return nodes;
 }
 
-function respond(matchedTerm: string, nodes: ScopeNode[], note?: string) {
+/**
+ * Drop sub-ranks that sit above the taxon the title actually named.
+ *
+ * iNaturalist's ancestry carries every rank it recognises, so resolving
+ * "butterflies" walks back through subphylum Hexapoda and subclass Pterygota
+ * on the way to superfamily Papilionoidea. Those two are real, but they say
+ * nothing that class Insecta doesn't already say, and a checklist's scope is
+ * conventionally the principal ranks plus whatever extra rank the group
+ * genuinely needs. Carrying them turns a four-line scope into a seven-line one
+ * and puts rows in front of the user that they then have to reason about.
+ *
+ * What survives:
+ *  - every principal rank, which is the conventional backbone of a checklist;
+ *  - the matched taxon itself, even when it sits at a sub-rank — that is the
+ *    whole point of the match (superfamily Papilionoidea, suborder Serpentes);
+ *  - every exclusion, at any rank, since an exclusion is definitional: drop
+ *    Papilionoidea from a moth scope and it silently becomes all Lepidoptera.
+ *
+ * A rank the user enables by hand is never touched by this — only the ranks a
+ * suggestion would have turned on for them.
+ */
+function pruneRedundantRanks(nodes: ScopeNode[]): ScopeNode[] {
+  const includes = nodes.filter((n) => n.mode === "include");
+  const deepest = includes[includes.length - 1];
+  if (!deepest) return nodes;
+
+  return nodes.filter((node) => {
+    if (node.mode === "exclude") return true;
+    if (isCoreRank(node.rank)) return true;
+    return rankIndex(node.rank) >= rankIndex(deepest.rank);
+  });
+}
+
+function respond(matchedTerm: string, rawNodes: ScopeNode[], note?: string) {
+  const nodes = pruneRedundantRanks(rawNodes);
   const flat = deriveFlatScope(nodes);
   return NextResponse.json({
     matchedTerm,

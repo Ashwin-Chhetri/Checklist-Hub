@@ -27,6 +27,8 @@ const TIMEOUT_MS = 8000;
  * limiter — a shared cache would be needed for that.
  */
 const MIN_REQUEST_GAP_MS = 1000;
+/** Backoff before the single retry, on top of the queue's own pacing. */
+const RETRY_DELAY_MS = 1500;
 
 export interface InatTaxon {
   id: number;
@@ -103,21 +105,33 @@ async function inatFetch<T>(path: string, params: Record<string, string | number
 
   if (responseCache.has(cacheKey)) return responseCache.get(cacheKey) as T;
 
-  try {
-    const data = await enqueue(async () => {
-      const res = await fetch(cacheKey, {
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-        headers: { "User-Agent": "checklist-hub/1.0 (biodiversity checklist taxonomy lookup)" },
+  // One retry, because the alternative to a failed taxonomy lookup is a rank
+  // that renders as "no options" — indistinguishable, to the user, from a
+  // taxon that genuinely has no children. Under burst (many scopes resolved
+  // back to back) iNaturalist throttles, and a single retry clears it.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const data = await enqueue(async () => {
+        const res = await fetch(cacheKey, {
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+          headers: { "User-Agent": "checklist-hub/1.0 (biodiversity checklist taxonomy lookup)" },
+        });
+        // Thrown rather than returned so the caller can tell a genuine "no
+        // such taxon" (a 200 with no results, worth caching) apart from a
+        // request that simply didn't land.
+        if (!res.ok) throw new Error(`iNaturalist ${path} responded ${res.status}`);
+        return (await res.json()) as T;
       });
-      if (!res.ok) return null;
-      return (await res.json()) as T;
-    });
-    responseCache.set(cacheKey, data);
-    return data;
-  } catch {
-    responseCache.set(cacheKey, null);
-    return null;
+      responseCache.set(cacheKey, data);
+      return data;
+    } catch {
+      // Deliberately NOT cached. A timeout or a rate-limit blip is transient,
+      // and this cache has no expiry — storing the failure would make one bad
+      // second permanently silent for this instance. Retrying self-heals.
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
   }
+  return null;
 }
 
 /**
