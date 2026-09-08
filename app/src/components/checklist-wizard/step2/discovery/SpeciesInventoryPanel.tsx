@@ -80,6 +80,8 @@ export interface SpeciesInventoryPanelProps {
   uploadedRows?: ParsedSpeciesRow[];
   /** Species "Added" from the Deep Search dialog — merged into the same aggregation pass as discovered evidence (see useSpeciesInventory), so synonym/conflict detection applies to literature exactly like any other source. */
   literatureRecords?: RawSpeciesRecord[];
+  /** Which view the inventory opens in. Defaults to "list". */
+  defaultViewMode?: ViewMode;
 }
 
 // "literature" is appended explicitly rather than derived from
@@ -240,11 +242,12 @@ export function SpeciesInventoryPanel({
   excludeNames,
   uploadedRows = [],
   literatureRecords = [],
+  defaultViewMode = "list",
 }: SpeciesInventoryPanelProps) {
   const [familyFilter, setFamilyFilter] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode);
   const [sortMode, setSortMode] = useState<SortMode>("default");
   const [sourceFilter, setSourceFilter] = useState<Set<SourceKey>>(new Set());
   const [selectedOnly, setSelectedOnly] = useState(false);

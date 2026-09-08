@@ -730,6 +730,7 @@ export default function NewChecklistPage() {
                   onInventoryLoaded={setDiscoveryTotals}
                   uploadedRows={csvRows}
                   literatureRecords={literatureRecords}
+                  defaultViewMode="chart"
                 />
               </div>
             )}
