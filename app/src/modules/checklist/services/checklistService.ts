@@ -17,6 +17,46 @@ const SPECIES_BATCH_SIZE = 300;
 // connections at once that we trip a different rate limit.
 const BATCH_CONCURRENCY = 4;
 
+// Each batch does taxonomy resolution server-side before inserting, but that
+// work is now batched too (see buildSpeciesPayload.server.ts) — a batch
+// hanging well past this is a stuck connection, not real work in progress.
+// Without a client-side cap, a killed/reset connection just leaves the user
+// staring at "Creating..." indefinitely instead of surfacing an error.
+const REQUEST_TIMEOUT_MS = 45_000;
+
+async function fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("The server took too long to respond. Please try again.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Thrown when the checklist itself was created but appending some of its
+ * species afterward failed partway through — the checklist is NOT lost (it
+ * already exists with `completedAtLeast` species), so callers should offer a
+ * retry that resumes rather than telling the user the whole operation failed.
+ */
+export class PartialChecklistCreationError extends Error {
+  constructor(
+    message: string,
+    public readonly checklistId: string,
+    public readonly completedAtLeast: number,
+    public readonly total: number,
+  ) {
+    super(message);
+    this.name = "PartialChecklistCreationError";
+  }
+}
+
 async function runInBatches<T>(items: T[], batchSize: number, concurrency: number, run: (batch: T[]) => Promise<void>) {
   const batches: T[][] = [];
   for (let i = 0; i < items.length; i += batchSize) batches.push(items.slice(i, i + batchSize));
@@ -126,6 +166,10 @@ export interface CreateChecklistProgress {
   completed: number;
   /** Total species this call was asked to create — same for every progress callback within one call. */
   total: number;
+  /** The checklist's id, known from the very first progress callback onward (once the initial POST has
+   *  returned) — lets callers persist "checklist X exists, resume its import" before the whole call finishes,
+   *  so a page refresh/lost connection partway through doesn't strand an unfinished checklist with no way back. */
+  checklistId: string;
 }
 
 export async function createChecklist(
@@ -137,7 +181,7 @@ export async function createChecklist(
   const remaining = allSpecies.slice(SPECIES_BATCH_SIZE);
   const total = allSpecies.length;
 
-  const response = await fetch("/api/checklists", {
+  const response = await fetchWithTimeout("/api/checklists", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...input, species: firstBatch, totalSpeciesCount: total }),
@@ -145,23 +189,57 @@ export async function createChecklist(
 
   const body = await parseJsonResponse<{ checklist: Checklist }>(response, "Failed to create checklist.");
   const checklist = body.checklist;
-  onProgress?.({ completed: firstBatch.length, total });
+  onProgress?.({ completed: firstBatch.length, total, checklistId: checklist.id });
 
   // The checklist now exists with its first batch of species — append the
   // rest in further size-capped requests instead of one all-or-nothing POST,
   // reporting progress after each batch so the UI can show real feedback
   // instead of a bare spinner for what can be a multi-minute operation on
   // very large (10k+) species lists.
+  //
+  // If an append batch fails partway (timeout, dropped connection, server
+  // error), the checklist itself is NOT lost — it already exists with
+  // whatever species made it in. Surface that as a PartialChecklistCreationError
+  // instead of a plain failure, so the caller can offer "retry remaining"
+  // (see resumeChecklistSpeciesImport) instead of implying total failure.
   if (remaining.length > 0) {
     let completed = firstBatch.length;
-    await runInBatches(remaining, SPECIES_BATCH_SIZE, BATCH_CONCURRENCY, async (batch) => {
-      await addSpeciesToChecklist(checklist.id, batch);
-      completed += batch.length;
-      onProgress?.({ completed, total });
-    });
+    try {
+      await runInBatches(remaining, SPECIES_BATCH_SIZE, BATCH_CONCURRENCY, async (batch) => {
+        await addSpeciesToChecklist(checklist.id, batch);
+        completed += batch.length;
+        onProgress?.({ completed, total, checklistId: checklist.id });
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to add all species to the checklist.";
+      throw new PartialChecklistCreationError(message, checklist.id, completed, total);
+    }
   }
 
   return checklist;
+}
+
+/**
+ * Resumes an interrupted import by re-sending the FULL original species list
+ * against an already-created checklist — the append endpoint dedupes against
+ * species already present (by scientific name / GBIF key), so already-added
+ * rows are skipped server-side rather than needing the caller to know exactly
+ * which ones made it in (batches run concurrently, so a failure doesn't imply
+ * a clean prefix was completed).
+ */
+export async function resumeChecklistSpeciesImport(
+  checklistId: string,
+  allSpecies: CreateChecklistInput["species"],
+  onProgress?: (progress: CreateChecklistProgress) => void,
+): Promise<void> {
+  const species = allSpecies ?? [];
+  const total = species.length;
+  let scanned = 0;
+  await runInBatches(species, SPECIES_BATCH_SIZE, BATCH_CONCURRENCY, async (batch) => {
+    await addSpeciesToChecklist(checklistId, batch);
+    scanned += batch.length;
+    onProgress?.({ completed: scanned, total, checklistId });
+  });
 }
 
 export async function getChecklistCollaborators(checklistId: string): Promise<Collaborator[]> {

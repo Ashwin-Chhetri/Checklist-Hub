@@ -28,6 +28,17 @@ export interface DraftMeta {
   discoverySelection: Array<[string, DraftSpeciesRow]>;
   /** The Deep Search dialog's in-flight/completed run id, so a reload reattaches to the same detached server-side run instead of losing track of it. Absent on older drafts saved before this field existed. */
   deepSearchRunId?: string | null;
+  /**
+   * Set as soon as "Create Checklist" has created the checklist row itself
+   * (before all its species have necessarily been appended) and cleared once
+   * every species has been confirmed added. Lets a reload/reconnect after the
+   * checklist was created but before the import finished resume that import
+   * against the SAME checklist, instead of either losing track of it (an
+   * orphaned near-empty checklist with no way back to it) or creating a
+   * second duplicate checklist. Absent on older drafts saved before this
+   * field existed.
+   */
+  pendingCreation?: { checklistId: string; total: number } | null;
 }
 
 interface DraftSchema {

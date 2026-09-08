@@ -491,6 +491,20 @@ function lookupBackboneExhaustive(candidates) {
   return best ?? NO_MATCH;
 }
 
+/**
+ * Batched form of lookupBackboneExhaustive — runs each item's full
+ * gbifKey → names → commonNames fallback chain against the same open
+ * DB handle in one request instead of one HTTP round trip per item.
+ * `items`: [{ id, gbifKey?, names?, commonNames?, kingdomHint? }].
+ */
+function lookupBackboneExhaustiveBatch(items) {
+  const out = {};
+  for (const item of items) {
+    out[item.id] = lookupBackboneExhaustive(item);
+  }
+  return out;
+}
+
 function getSubspecies(taxonId) {
   const db = getDb();
   const cols = db.prepare("PRAGMA table_info(gbif_taxa)").all().map((r) => r.name);
@@ -644,6 +658,7 @@ module.exports = {
   lookupBackbone,
   lookupBackboneBatch,
   lookupBackboneExhaustive,
+  lookupBackboneExhaustiveBatch,
   lookupByVernacularName,
   matchVernacularTaxonId,
   normalizeVernacularName,

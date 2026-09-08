@@ -4,7 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCreateChecklist } from "@/modules/checklist/hooks/useCreateChecklist";
-import type { CreateChecklistProgress } from "@/modules/checklist/services/checklistService";
+import {
+  PartialChecklistCreationError,
+  resumeChecklistSpeciesImport,
+  type CreateChecklistProgress,
+} from "@/modules/checklist/services/checklistService";
 import { useEmailLookup, useProfileSearch } from "@/modules/checklist/hooks/useChecklist";
 import { isValidEmailFormat } from "@/lib/validation/email";
 import {
@@ -79,6 +83,31 @@ export default function NewChecklistPage() {
   const router = useRouter();
   const createChecklist = useCreateChecklist();
   const [creationProgress, setCreationProgress] = useState<CreateChecklistProgress | null>(null);
+  // Set when the checklist itself was created but appending its species failed
+  // partway — the checklist is NOT lost, so the UI offers a resume instead of
+  // implying the whole thing failed and needs to be redone from scratch.
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  // Mirrors DraftMeta.pendingCreation — persisted so that a hard refresh or a
+  // dropped connection mid-import doesn't strand the user on a near-empty
+  // checklist with no way back: on reload we detect this and resume the same
+  // import instead of restarting the wizard or losing track of it.
+  const [pendingCreation, setPendingCreation] = useState<{ checklistId: string; total: number } | null>(null);
+  const [resuming, setResuming] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  // True ONLY when pendingCreation came from a draft restored on mount (i.e.
+  // a previous attempt was interrupted by a reload/closed tab/dropped
+  // connection) — NOT when pendingCreation is set live during this session's
+  // own handleCreate (which updates it on every progress tick so it can be
+  // persisted). Without this separate flag, the auto-resume effect below
+  // would also fire right after an in-session partial failure — the moment
+  // createChecklist.isPending flips back to false — racing with the manual
+  // "RETRY REMAINING SPECIES" button and forcing the user to Step 5.
+  const [autoResumePending, setAutoResumePending] = useState(false);
+  // Snapshot of the persisted species list as of the last reload — see the
+  // comment where this is populated (in the draft-restore effect) for why the
+  // resume path uses this instead of live mergedRows.
+  const restoredSpeciesRef = useRef<ParsedSpeciesRow[] | null>(null);
 
   // Whether the IndexedDB draft has finished loading. Persistence is skipped
   // until then, so we don't overwrite a saved draft with initial defaults.
@@ -217,6 +246,10 @@ export default function NewChecklistPage() {
         setDiscoveryTotals(meta.discoveryTotals);
         setDiscoverySelection(new Map(meta.discoverySelection));
         setDeepSearchRunId(meta.deepSearchRunId ?? null);
+        if (meta.pendingCreation) {
+          setPendingCreation(meta.pendingCreation);
+          setAutoResumePending(true);
+        }
       }
       // The draft only persists the already-merged rows/issues, not the
       // original per-file breakdown — restore as one removable entry rather
@@ -226,7 +259,16 @@ export default function NewChecklistPage() {
           { fileName: meta?.csvFileName || "Restored upload", rows: storedCsvRows, issues: storedIssues },
         ]);
       }
-      void species; // mergedRows is recomputed from csvRows + discoverySelection
+      // mergedRows is normally recomputed from csvRows + discoverySelection, but
+      // the restored `species` snapshot (persisted whenever mergedRows last
+      // changed, pre-reload) is kept here as the source of truth for a pending
+      // resume specifically: the scope/region-change effect further down resets
+      // discoverySelection back to empty the moment a restored scope/region
+      // first differs from the wizard's defaults (true for any real draft past
+      // Step 1), which would otherwise make a recomputed mergedRows silently
+      // miss anything sourced from Step 2/3's discovery panel right when the
+      // auto-resume effect needs the complete list.
+      restoredSpeciesRef.current = species;
       setDraftLoaded(true);
     });
     return () => {
@@ -253,6 +295,7 @@ export default function NewChecklistPage() {
       discoveryTotals,
       discoverySelection: Array.from(discoverySelection.entries()),
       deepSearchRunId,
+      pendingCreation,
     };
     void saveDraftMeta(meta);
   }, [
@@ -267,6 +310,7 @@ export default function NewChecklistPage() {
     discoveryTotals,
     discoverySelection,
     deepSearchRunId,
+    pendingCreation,
   ]);
 
   // CSV rows and import issues are persisted separately since they can be
@@ -360,8 +404,96 @@ export default function NewChecklistPage() {
     if (step > 1) setStep(step - 1);
   }
 
+  const partialError =
+    createChecklist.error instanceof PartialChecklistCreationError ? createChecklist.error : null;
+  // True the moment the checklist row exists but its species import hasn't
+  // been confirmed complete yet — covers the initial attempt, a manual retry
+  // after a partial failure, and an auto-resume after reload.
+  const importInFlight = createChecklist.isPending || retrying || resuming;
+
+  // Warn before an accidental refresh/close while species are actively being
+  // imported — most browsers ignore the custom message and show their own
+  // generic prompt, but the prompt itself is the point here.
+  useEffect(() => {
+    if (!importInFlight) return;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [importInFlight]);
+
+  // If a previous attempt left the checklist created but its import
+  // unfinished (reload, dropped connection, closed tab), resume it
+  // automatically once the draft has loaded, instead of leaving the user
+  // stuck on a near-empty checklist with no path forward.
+  useEffect(() => {
+    if (!draftLoaded || !autoResumePending || !pendingCreation || resuming) return;
+    const checklistId = pendingCreation.checklistId;
+    // Use the species snapshot captured at restore time, not live mergedRows
+    // — see restoredSpeciesRef's declaration for why (the scope/region-reset
+    // effect below can otherwise wipe discoverySelection, and therefore
+    // mergedRows, right after a restore).
+    const speciesToResume = restoredSpeciesRef.current ?? mergedRows;
+    // Deferred to a microtask so this effect's synchronous body never calls
+    // setState directly (avoids cascading-render churn) — the resume itself
+    // is still kicked off as soon as this effect runs. Clearing
+    // autoResumePending here (not after the resume settles) ensures this
+    // effect can never fire a second time for the same restored draft, even
+    // if pendingCreation's object identity changes again later for other
+    // reasons (e.g. a subsequent live handleCreate call this session).
+    void Promise.resolve()
+      .then(() => {
+        setAutoResumePending(false);
+        setStep(5);
+        setResuming(true);
+        setResumeError(null);
+        return resumeChecklistSpeciesImport(checklistId, speciesToResume, setCreationProgress);
+      })
+      .then(() => {
+        setPendingCreation(null);
+        void clearDraft();
+        router.push(`/checklists/${checklistId}`);
+      })
+      .catch((err: unknown) => {
+        setResumeError(err instanceof Error ? err.message : "Failed to finish adding species.");
+      })
+      .finally(() => setResuming(false));
+    // mergedRows deliberately excluded — speciesToResume is captured once
+    // above from the ref, so recomputes of mergedRows itself (e.g. as
+    // discoverySelection/csvRows settle after restore) must not restart the
+    // resume mid-flight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftLoaded, autoResumePending, pendingCreation, resuming]);
+
+  async function handleRetryRemaining() {
+    const target = partialError ?? pendingCreation;
+    if (!target) return;
+    // A live in-session partial failure (partialError set) has an intact,
+    // up-to-date mergedRows — use it directly. A retry after a FAILED
+    // auto-resume (partialError absent, falling back to pendingCreation) is
+    // only reachable post-reload, where mergedRows may have been recomputed
+    // from a discoverySelection the scope/region-reset effect already wiped
+    // — prefer the stable restore-time snapshot there instead.
+    const speciesToRetry = partialError ? mergedRows : restoredSpeciesRef.current ?? mergedRows;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      await resumeChecklistSpeciesImport(target.checklistId, speciesToRetry, setCreationProgress);
+      setPendingCreation(null);
+      void clearDraft();
+      router.push(`/checklists/${target.checklistId}`);
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : "Failed to add the remaining species.");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   function handleCreate() {
     setCreationProgress(null);
+    setRetryError(null);
     createChecklist.mutate(
       {
         input: {
@@ -378,10 +510,16 @@ export default function NewChecklistPage() {
           species: mergedRows,
           invites: collaboratorInvites,
         },
-        onProgress: setCreationProgress,
+        // Persist the checklist id the moment it exists (first progress
+        // callback), before the whole call resolves — see pendingCreation.
+        onProgress: (progress) => {
+          setCreationProgress(progress);
+          setPendingCreation({ checklistId: progress.checklistId, total: progress.total });
+        },
       },
       {
         onSuccess: (checklist) => {
+          setPendingCreation(null);
           void clearDraft();
           router.push(`/checklists/${checklist.id}`);
         },
@@ -401,8 +539,15 @@ export default function NewChecklistPage() {
             </h2>
             <Link
               href="/checklists"
-              onClick={() => void clearDraft()}
-              className="material-symbols-outlined text-[18px] text-on-surface-variant hover:text-primary absolute right-0 top-0"
+              onClick={(e) => {
+                if (importInFlight) {
+                  e.preventDefault();
+                  return;
+                }
+                void clearDraft();
+              }}
+              aria-disabled={importInFlight}
+              className="material-symbols-outlined text-[18px] text-on-surface-variant hover:text-primary absolute right-0 top-0 aria-disabled:opacity-50 aria-disabled:pointer-events-none"
             >
               close
             </Link>
@@ -718,30 +863,106 @@ export default function NewChecklistPage() {
                   </div>
                 </div>
 
-                {createChecklist.isPending && creationProgress && creationProgress.total > 0 && (
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between text-xs text-on-surface-variant">
-                      <span>
-                        {creationProgress.completed < creationProgress.total
-                          ? `Adding species to checklist… ${creationProgress.completed.toLocaleString()} / ${creationProgress.total.toLocaleString()}`
-                          : "Finalizing checklist…"}
-                      </span>
-                      <span className="mono-text">
-                        {Math.round((creationProgress.completed / creationProgress.total) * 100)}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 w-full bg-outline-variant/40 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary transition-all duration-300"
-                        style={{
-                          width: `${Math.min(100, (creationProgress.completed / creationProgress.total) * 100)}%`,
-                        }}
-                      />
+                {importInFlight && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs font-bold text-[#c63939]">
+                      {resuming
+                        ? "Resuming your checklist — please don't close or refresh this tab."
+                        : "Please don't close or refresh this tab while your checklist is being created."}
+                    </p>
+
+                    {!creationProgress ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between text-xs text-on-surface-variant">
+                          <span>Resolving taxonomy and creating checklist…</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-outline-variant/40 rounded-full overflow-hidden">
+                          <div className="h-full w-1/3 bg-primary animate-pulse" />
+                        </div>
+                      </div>
+                    ) : (
+                      creationProgress.total > 0 && (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center justify-between text-xs text-on-surface-variant">
+                            <span>
+                              {creationProgress.completed < creationProgress.total
+                                ? `Adding species to checklist… ${creationProgress.completed.toLocaleString()} / ${creationProgress.total.toLocaleString()}`
+                                : "Finalizing checklist…"}
+                            </span>
+                            <span className="mono-text">
+                              {Math.round((creationProgress.completed / creationProgress.total) * 100)}%
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full bg-outline-variant/40 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary transition-all duration-300"
+                              style={{
+                                width: `${Math.min(100, (creationProgress.completed / creationProgress.total) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {!importInFlight && resumeError && (
+                  <div className="flex flex-col gap-2 rounded border border-red-200 bg-red-50 p-3">
+                    <p className="text-xs text-red-700">
+                      Resuming your checklist failed: {resumeError}. It still exists with{" "}
+                      {creationProgress?.completed.toLocaleString() ?? 0} of{" "}
+                      {(pendingCreation?.total ?? creationProgress?.total ?? 0).toLocaleString()} species added so far.
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void handleRetryRemaining()}
+                        className="self-start bg-[#c63939] text-on-primary px-4 py-1.5 font-label-caps text-[11px] hard-shadow hover:translate-y-[-2px] transition-transform active:translate-y-[2px]"
+                      >
+                        RETRY REMAINING SPECIES
+                      </button>
+                      {pendingCreation && (
+                        <Link
+                          href={`/checklists/${pendingCreation.checklistId}`}
+                          onClick={() => void clearDraft()}
+                          className="text-xs text-on-surface-variant hover:text-primary underline"
+                        >
+                          Go to checklist as-is
+                        </Link>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {createChecklist.isError && (
+                {createChecklist.isError && partialError && (
+                  <div className="flex flex-col gap-2 rounded border border-red-200 bg-red-50 p-3">
+                    <p className="text-xs text-red-700">
+                      The checklist was created, but adding species stopped partway ({partialError.completedAtLeast.toLocaleString()}
+                      {" "}of {partialError.total.toLocaleString()} confirmed so far): {partialError.message}
+                    </p>
+                    {retryError && <p className="text-xs text-red-700">Retry failed: {retryError}</p>}
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void handleRetryRemaining()}
+                        disabled={retrying}
+                        className="self-start bg-[#c63939] text-on-primary px-4 py-1.5 font-label-caps text-[11px] hard-shadow disabled:opacity-50 hover:translate-y-[-2px] transition-transform active:translate-y-[2px]"
+                      >
+                        {retrying ? "RETRYING..." : "RETRY REMAINING SPECIES"}
+                      </button>
+                      <Link
+                        href={`/checklists/${partialError.checklistId}`}
+                        onClick={() => void clearDraft()}
+                        className="text-xs text-on-surface-variant hover:text-primary underline"
+                      >
+                        Go to checklist as-is
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
+                {createChecklist.isError && !partialError && (
                   <p className="text-xs text-red-600">
                     {(createChecklist.error as Error).message}
                   </p>
@@ -756,8 +977,15 @@ export default function NewChecklistPage() {
           {step === 1 ? (
             <Link
               href="/checklists"
-              onClick={() => void clearDraft()}
-              className="px-5 py-1.5 font-label-caps text-[11px] text-on-surface-variant hover:text-primary transition-colors"
+              onClick={(e) => {
+                if (importInFlight) {
+                  e.preventDefault();
+                  return;
+                }
+                void clearDraft();
+              }}
+              aria-disabled={importInFlight}
+              className="px-5 py-1.5 font-label-caps text-[11px] text-on-surface-variant hover:text-primary transition-colors aria-disabled:opacity-50 aria-disabled:pointer-events-none"
             >
               CANCEL
             </Link>
@@ -765,7 +993,8 @@ export default function NewChecklistPage() {
             <button
               type="button"
               onClick={goBack}
-              className="px-5 py-1.5 font-label-caps text-[11px] text-on-surface-variant hover:text-primary transition-colors"
+              disabled={importInFlight}
+              className="px-5 py-1.5 font-label-caps text-[11px] text-on-surface-variant hover:text-primary transition-colors disabled:opacity-50"
             >
               BACK
             </button>
@@ -784,13 +1013,20 @@ export default function NewChecklistPage() {
             <button
               type="button"
               onClick={handleCreate}
-              disabled={createChecklist.isPending}
+              // pendingCreation alone (beyond importInFlight) blocks this once a
+              // checklist already exists un-confirmed-complete (a live partial
+              // failure or a failed auto-resume) — otherwise clicking it here
+              // would POST a brand-new checklist, leaving a duplicate alongside
+              // the stuck one instead of retrying/finishing it via the banner above.
+              disabled={importInFlight || !!pendingCreation}
               className="bg-[#c63939] text-on-primary px-5 py-2 font-label-caps text-[11px] hard-shadow disabled:opacity-50 hover:translate-y-[-2px] transition-transform active:translate-y-[2px]"
             >
-              {createChecklist.isPending
+              {importInFlight
                 ? creationProgress && creationProgress.total > 0
-                  ? `CREATING… (${creationProgress.completed}/${creationProgress.total})`
-                  : "CREATING..."
+                  ? `${resuming ? "RESUMING" : "CREATING"}… (${creationProgress.completed}/${creationProgress.total})`
+                  : resuming
+                    ? "RESUMING..."
+                    : "CREATING..."
                 : "CREATE CHECKLIST"}
             </button>
           )}

@@ -2,9 +2,10 @@ import type { CreateChecklistSpeciesInput } from "@/types/checklist.types";
 import {
   lookupBackbone,
   lookupBackboneBatch,
-  lookupBackboneExhaustive,
-  lookupByVernacularName,
+  lookupBackboneExhaustiveBatch,
   normalizeVernacularName,
+  type BackboneResult,
+  type ExhaustiveLookupCandidates,
 } from "@/lib/taxonomy/backbone.server";
 import { resolveViaGbifLiveBatch } from "@/lib/taxonomy/gbif-live.server";
 
@@ -325,11 +326,17 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
   // ─── Pass 4: Vernacular-name fuzzy lookup for still-unresolved rows ─────────
   // Rescues rows like "Eastern Cattle-Egret" that don't match the backbone by
   // scientific name but whose common name unambiguously maps to one backbone taxon.
-  const unresolvedWithCommonName = (rawSpecies as CreateChecklistSpeciesInput[]).filter(
-    (s) => !s.gbif_taxon_key && s.common_name?.trim(),
-  );
-  for (const s of unresolvedWithCommonName) {
-    const norm = await lookupByVernacularName(s.common_name!);
+  const unresolvedWithCommonName = (rawSpecies as CreateChecklistSpeciesInput[])
+    .map((s, index) => ({ s, index }))
+    .filter(({ s }) => !s.gbif_taxon_key && s.common_name?.trim());
+  const vernacularResults =
+    unresolvedWithCommonName.length > 0
+      ? await lookupBackboneBatch(
+          unresolvedWithCommonName.map(({ index, s }) => ({ id: String(index), commonName: s.common_name! })),
+        )
+      : new Map();
+  for (const { s, index } of unresolvedWithCommonName) {
+    const norm = vernacularResults.get(String(index));
     if (!norm || norm.matchType === "none") continue;
 
     s.gbif_taxon_key = norm.taxonKey;
@@ -510,30 +517,46 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
   // When evidence providers (iNat/eBird) reported a synonym name, sourceSynonyms
   // is populated on the incoming species object. Inject taxonomy_synonyms entries
   // so the workbench surfaces the fact that a source used an outdated name.
-  for (const s of rawSpecies as CreateChecklistSpeciesInput[]) {
-    const sourceSynonyms = (s as { sourceSynonyms?: Array<{ source: string; synonymName: string; acceptedName: string }> })
-      .sourceSynonyms;
+  type SourceSynonym = { source: string; synonymName: string; acceptedName: string };
+  const crossSourceEntries: Array<{ s: CreateChecklistSpeciesInput; ss: SourceSynonym; key: string }> = [];
+  for (const [rowIndex, s] of (rawSpecies as CreateChecklistSpeciesInput[]).entries()) {
+    const sourceSynonyms = (s as { sourceSynonyms?: SourceSynonym[] }).sourceSynonyms;
     if (!sourceSynonyms?.length) continue;
-    for (const ss of sourceSynonyms) {
-      // `ss.synonymName` is a real scientific name reported by another source —
-      // look it up directly so its own hierarchy/year isn't left empty just
-      // because this pass never otherwise queries the backbone.
-      const synLookup = await lookupBackbone({ name: ss.synonymName });
-      const hasMatch = synLookup.matchType !== "none";
-      s.taxonomy_synonyms = [
-        ...(s.taxonomy_synonyms ?? []),
-        {
-          event_type: "source_synonym",
-          name: ss.synonymName,
-          // Keep `authority` as the source label (existing convention for this
-          // event type) rather than overwriting it with a taxonomic authorship.
-          authority: ss.source,
-          taxon_id: hasMatch ? synLookup.ownTaxonId ?? undefined : undefined,
-          year: hasMatch ? synLookup.ownNamePublishedInYear ?? undefined : undefined,
-          classification: hasMatch ? synLookup.ownClassification : undefined,
-        },
-      ];
-    }
+    sourceSynonyms.forEach((ss, ssIndex) => {
+      crossSourceEntries.push({ s, ss, key: `${rowIndex}:${ssIndex}` });
+    });
+  }
+  const crossSourceResults =
+    crossSourceEntries.length > 0
+      ? await lookupBackboneBatch(crossSourceEntries.map(({ ss, key }) => ({ id: key, name: ss.synonymName })))
+      : new Map();
+  for (const { s, ss, key } of crossSourceEntries) {
+    // `ss.synonymName` is a real scientific name reported by another source —
+    // look it up directly so its own hierarchy/year isn't left empty just
+    // because this pass never otherwise queries the backbone.
+    // lookupBackboneBatch always populates every requested id, even on
+    // failure (falls back to a "none" match per id) — this fallback only
+    // guards the type, it's not expected to be hit.
+    const synLookup = crossSourceResults.get(key) ?? {
+      matchType: "none" as const,
+      ownTaxonId: null,
+      ownNamePublishedInYear: null,
+      ownClassification: null,
+    };
+    const hasMatch = synLookup.matchType !== "none";
+    s.taxonomy_synonyms = [
+      ...(s.taxonomy_synonyms ?? []),
+      {
+        event_type: "source_synonym",
+        name: ss.synonymName,
+        // Keep `authority` as the source label (existing convention for this
+        // event type) rather than overwriting it with a taxonomic authorship.
+        authority: ss.source,
+        taxon_id: hasMatch ? synLookup.ownTaxonId ?? undefined : undefined,
+        year: hasMatch ? synLookup.ownNamePublishedInYear ?? undefined : undefined,
+        classification: hasMatch ? synLookup.ownClassification : undefined,
+      },
+    ];
   }
 
   // ─── Pass 7: Exhaustive fallback enrichment ──────────────────────────────────
@@ -546,7 +569,15 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
   // the same taxon). This pass tries ALL of them, in priority order, via
   // `lookupBackboneExhaustive`, for whatever is still missing hierarchy/
   // authority/year. Never overwrites data a cheaper pass already found.
-  for (const s of rawSpecies as CreateChecklistSpeciesInput[]) {
+  // Collect every lookup this pass needs (row + each synonym + each conflict,
+  // across ALL rows) into one list with unique keys, resolve them in a single
+  // batch request, then apply the results — instead of one `await` per
+  // lookup, which is what made this pass alone issue hundreds of sequential
+  // round trips for a several-hundred-species import.
+  type Pass7Task = { key: string; candidates: ExhaustiveLookupCandidates; apply: (found: BackboneResult) => void };
+  const pass7Tasks: Pass7Task[] = [];
+
+  for (const [rowIndex, s] of (rawSpecies as CreateChecklistSpeciesInput[]).entries()) {
     const rowCommonNames = [s.common_name, ...(s.alternate_common_names ?? [])];
     const hasOpenConflicts = (s.taxonomy_conflicts?.length ?? 0) > 0;
 
@@ -565,67 +596,77 @@ export async function buildSpeciesPayload(rawSpecies: CreateChecklistSpeciesInpu
         s.scientific_name,
         ...(s.taxonomy_synonyms ?? []).map((syn) => syn.name),
       ];
-      const found = await lookupBackboneExhaustive({
-        gbifKey: s.gbif_taxon_key ?? undefined,
-        names: rowNames,
-        commonNames: rowCommonNames,
-        kingdomHint,
+      pass7Tasks.push({
+        key: `row:${rowIndex}`,
+        candidates: { gbifKey: s.gbif_taxon_key ?? undefined, names: rowNames, commonNames: rowCommonNames, kingdomHint },
+        apply: (found) => {
+          if (found.matchType === "none") return;
+          if (!s.gbif_taxon_key) s.gbif_taxon_key = found.taxonKey;
+          if (!s.canonical_name) s.canonical_name = found.canonicalName ?? undefined;
+          if (isEmptyClassification(s.classification) && !isEmptyClassification(found.classification)) {
+            s.classification = mergeClassification(s.classification, found.classification);
+          }
+          if (!s.current_authorship && found.authorship) s.current_authorship = found.authorship;
+          if (s.current_name_published_in_year == null && found.namePublishedInYear != null) {
+            s.current_name_published_in_year = found.namePublishedInYear;
+          }
+        },
       });
-      if (found.matchType !== "none") {
-        if (!s.gbif_taxon_key) s.gbif_taxon_key = found.taxonKey;
-        if (!s.canonical_name) s.canonical_name = found.canonicalName ?? undefined;
-        if (isEmptyClassification(s.classification) && !isEmptyClassification(found.classification)) {
-          s.classification = mergeClassification(s.classification, found.classification);
-        }
-        if (!s.current_authorship && found.authorship) s.current_authorship = found.authorship;
-        if (s.current_name_published_in_year == null && found.namePublishedInYear != null) {
-          s.current_name_published_in_year = found.namePublishedInYear;
-        }
-      }
     }
 
-    for (const syn of s.taxonomy_synonyms ?? []) {
-      if (!isEmptyClassification(syn.classification) && syn.authority && syn.year != null) continue;
-      const found = await lookupBackboneExhaustive({
-        gbifKey: syn.taxon_id ?? undefined,
-        names: [syn.name],
-        commonNames: rowCommonNames,
-        kingdomHint,
+    (s.taxonomy_synonyms ?? []).forEach((syn, synIndex) => {
+      if (!isEmptyClassification(syn.classification) && syn.authority && syn.year != null) return;
+      pass7Tasks.push({
+        key: `syn:${rowIndex}:${synIndex}`,
+        candidates: { gbifKey: syn.taxon_id ?? undefined, names: [syn.name], commonNames: rowCommonNames, kingdomHint },
+        apply: (found) => {
+          if (found.matchType === "none") return;
+          if (isEmptyClassification(syn.classification) && !isEmptyClassification(found.ownClassification)) {
+            syn.classification = found.ownClassification;
+          }
+          if (!syn.taxon_id && found.ownTaxonId) syn.taxon_id = found.ownTaxonId;
+          if (!syn.year && found.ownNamePublishedInYear) syn.year = found.ownNamePublishedInYear;
+          // source_synonym entries keep `authority` as a provenance label — never
+          // overwrite it with a taxonomic authorship string.
+          if (syn.event_type !== "source_synonym" && !syn.authority && found.ownAuthorship) {
+            syn.authority = found.ownAuthorship;
+          }
+        },
       });
-      if (found.matchType === "none") continue;
-      if (isEmptyClassification(syn.classification) && !isEmptyClassification(found.ownClassification)) {
-        syn.classification = found.ownClassification;
-      }
-      if (!syn.taxon_id && found.ownTaxonId) syn.taxon_id = found.ownTaxonId;
-      if (!syn.year && found.ownNamePublishedInYear) syn.year = found.ownNamePublishedInYear;
-      // source_synonym entries keep `authority` as a provenance label — never
-      // overwrite it with a taxonomic authorship string.
-      if (syn.event_type !== "source_synonym" && !syn.authority && found.ownAuthorship) {
-        syn.authority = found.ownAuthorship;
-      }
-    }
+    });
 
-    for (const conflict of s.taxonomy_conflicts ?? []) {
-      if (!isEmptyClassification(conflict.classification) && conflict.authorship && conflict.year != null) continue;
-      // No commonNames fallback here, unlike the synonym loop above: a conflict
-      // entry's `suggested_name` is a candidate identity DIFFERENT from this
-      // row's own, specifically because direct evidence (exact name match) was
-      // ambiguous or didn't fully agree — falling back to the row's common
-      // name would resolve via the same weak convergence Pass 5 already used
-      // to flag the conflict, risking giving this option whichever taxon a
-      // DIFFERENT option already legitimately owns.
-      const found = await lookupBackboneExhaustive({
-        gbifKey: conflict.taxon_id ?? undefined,
-        names: [conflict.suggested_name],
-        kingdomHint,
+    (s.taxonomy_conflicts ?? []).forEach((conflict, conflictIndex) => {
+      if (!isEmptyClassification(conflict.classification) && conflict.authorship && conflict.year != null) return;
+      pass7Tasks.push({
+        key: `conflict:${rowIndex}:${conflictIndex}`,
+        // No commonNames fallback here, unlike the synonym loop above: a conflict
+        // entry's `suggested_name` is a candidate identity DIFFERENT from this
+        // row's own, specifically because direct evidence (exact name match) was
+        // ambiguous or didn't fully agree — falling back to the row's common
+        // name would resolve via the same weak convergence Pass 5 already used
+        // to flag the conflict, risking giving this option whichever taxon a
+        // DIFFERENT option already legitimately owns.
+        candidates: { gbifKey: conflict.taxon_id ?? undefined, names: [conflict.suggested_name], kingdomHint },
+        apply: (found) => {
+          if (found.matchType === "none") return;
+          if (isEmptyClassification(conflict.classification) && !isEmptyClassification(found.ownClassification)) {
+            conflict.classification = found.ownClassification;
+          }
+          if (!conflict.taxon_id && found.ownTaxonId) conflict.taxon_id = found.ownTaxonId;
+          if (!conflict.year && found.ownNamePublishedInYear) conflict.year = found.ownNamePublishedInYear;
+          if (!conflict.authorship && found.ownAuthorship) conflict.authorship = found.ownAuthorship;
+        },
       });
-      if (found.matchType === "none") continue;
-      if (isEmptyClassification(conflict.classification) && !isEmptyClassification(found.ownClassification)) {
-        conflict.classification = found.ownClassification;
-      }
-      if (!conflict.taxon_id && found.ownTaxonId) conflict.taxon_id = found.ownTaxonId;
-      if (!conflict.year && found.ownNamePublishedInYear) conflict.year = found.ownNamePublishedInYear;
-      if (!conflict.authorship && found.ownAuthorship) conflict.authorship = found.ownAuthorship;
+    });
+  }
+
+  if (pass7Tasks.length > 0) {
+    const pass7Results = await lookupBackboneExhaustiveBatch(
+      pass7Tasks.map((t) => ({ id: t.key, ...t.candidates })),
+    );
+    for (const task of pass7Tasks) {
+      const found = pass7Results.get(task.key);
+      if (found) task.apply(found);
     }
   }
 

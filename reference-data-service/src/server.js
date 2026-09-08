@@ -49,6 +49,11 @@ app.post("/backbone/lookup-exhaustive", safe((req, res) => {
   res.json(backbone.lookupBackboneExhaustive(req.body ?? {}));
 }));
 
+app.post("/backbone/lookup-exhaustive-batch", safe((req, res) => {
+  const { items } = req.body;
+  res.json(backbone.lookupBackboneExhaustiveBatch(items ?? []));
+}));
+
 app.get("/backbone/subspecies", safe((req, res) => {
   const taxonId = Number(req.query.taxonId);
   res.json(backbone.getSubspecies(taxonId));

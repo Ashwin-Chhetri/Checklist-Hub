@@ -190,6 +190,29 @@ export async function lookupBackboneExhaustive(candidates: ExhaustiveLookupCandi
 }
 
 /**
+ * Batched form of `lookupBackboneExhaustive` — runs many candidate chains in
+ * one request to the data service instead of one round trip per row/synonym/
+ * conflict entry (the previous per-item `await` loop is what made large CSV
+ * imports take minutes: each round trip is cheap on its own, but hundreds of
+ * them in serial adds up).
+ */
+export async function lookupBackboneExhaustiveBatch(
+  items: Array<{ id: string } & ExhaustiveLookupCandidates>,
+): Promise<Map<string, BackboneResult>> {
+  if (items.length === 0) return new Map();
+  try {
+    const out = await callDataService<Record<string, BackboneResult>>("/backbone/lookup-exhaustive-batch", {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    });
+    return new Map(Object.entries(out));
+  } catch (err) {
+    onServiceError("lookupBackboneExhaustiveBatch", err);
+    return new Map(items.map((item) => [item.id, NO_MATCH]));
+  }
+}
+
+/**
  * Fetch subspecies, varieties, and forms whose parent is the given taxon.
  */
 export async function getSubspecies(

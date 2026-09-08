@@ -46,14 +46,33 @@ export interface AddSpeciesResult {
   species: Species[];
 }
 
+// Taxonomy resolution for a batch happens server-side before insert (see
+// buildSpeciesPayload.server.ts) but is itself batched now, so a batch
+// hanging well past this is a stuck connection, not real work — without a
+// cap, a killed/reset connection just leaves the caller waiting forever.
+const REQUEST_TIMEOUT_MS = 45_000;
+
 export async function addSpeciesToChecklist(
   checklistId: string,
   species: CreateChecklistSpeciesInput[],
 ): Promise<AddSpeciesResult> {
-  const res = await fetch(`/api/checklists/${checklistId}/species`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ species }),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`/api/checklists/${checklistId}/species`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ species }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("The server took too long to respond. Please try again.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   return parseJsonResponse<AddSpeciesResult>(res, "Failed to add species.");
 }
