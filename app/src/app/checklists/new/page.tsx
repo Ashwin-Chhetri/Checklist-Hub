@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCreateChecklist } from "@/modules/checklist/hooks/useCreateChecklist";
+import { useCurrentUser } from "@/modules/auth/hooks/useCurrentUser";
+import { useProfile, useUpdateProfile } from "@/modules/auth/hooks/useProfile";
+import { ChecklistTour, type TourStop } from "@/components/checklist-wizard/ChecklistTour";
 import {
   PartialChecklistCreationError,
   resumeChecklistSpeciesImport,
@@ -40,6 +43,34 @@ const STEPS = [
   { id: 3, label: "Validate" },
   { id: 4, label: "Collab" },
   { id: 5, label: "Create" },
+];
+
+const TOUR_STOPS: TourStop[] = [
+  {
+    step: 1,
+    title: "Start here",
+    body: "Give your checklist a title, then set its taxonomic scope and region — e.g. “Birds of Darjeeling”.",
+  },
+  {
+    step: 2,
+    title: "Add species",
+    body: "Search automatically for species matching your scope, or upload your own CSV file.",
+  },
+  {
+    step: 3,
+    title: "Review & validate",
+    body: "Check the discovered species and pick which ones you want to include in the checklist.",
+  },
+  {
+    step: 4,
+    title: "Bring in your team",
+    body: "Invite collaborators by email — they get access right away, or an invite if they're new here.",
+  },
+  {
+    step: 5,
+    title: "You're ready",
+    body: "Review the summary, then hit Create Checklist to publish your species list and start collaborating.",
+  },
 ];
 
 /**
@@ -82,6 +113,23 @@ const DEFAULT_REGION: RegionValue = {
 export default function NewChecklistPage() {
   const router = useRouter();
   const createChecklist = useCreateChecklist();
+  const { data: currentUser } = useCurrentUser();
+  const { data: profile } = useProfile(currentUser?.id);
+  const updateProfile = useUpdateProfile(currentUser?.id);
+  // Optimistic local flag so the tour disappears the instant the user skips
+  // or finishes it, without waiting on the profile refetch that follows the
+  // mutation below.
+  const [tourDismissedLocally, setTourDismissedLocally] = useState(false);
+  const showTour = Boolean(profile) && !profile?.has_seen_checklist_tour && !tourDismissedLocally;
+  function endTour() {
+    setTourDismissedLocally(true);
+    if (currentUser?.id) updateProfile.mutate({ has_seen_checklist_tour: true });
+  }
+  const tourStep1Ref = useRef<HTMLDivElement>(null);
+  const tourStep2Ref = useRef<HTMLDivElement>(null);
+  const tourStep3Ref = useRef<HTMLDivElement>(null);
+  const tourStep4Ref = useRef<HTMLDivElement>(null);
+  const tourCreateButtonRef = useRef<HTMLButtonElement>(null);
   const [creationProgress, setCreationProgress] = useState<CreateChecklistProgress | null>(null);
   // Set when the checklist itself was created but appending its species failed
   // partway — the checklist is NOT lost, so the UI offers a resume instead of
@@ -579,7 +627,7 @@ export default function NewChecklistPage() {
         <div className="p-6 flex flex-col gap-4">
           <div className="flex flex-col gap-3">
             {step === 1 && (
-              <div className="flex flex-col gap-3">
+              <div ref={tourStep1Ref} className="flex flex-col gap-3">
                 <div className="space-y-xs">
                   <label
                     className="text-sm font-semibold text-on-surface-variant"
@@ -655,23 +703,25 @@ export default function NewChecklistPage() {
             )}
 
             {step === 2 && (
-              <SpeciesDiscoveryPanel
-                taxonomicScope={taxonomicScope}
-                deepestTaxonKey={deepestTaxonKey}
-                region={region}
-                uploadedFiles={uploadedFiles}
-                onFilesAdded={(files) => setUploadedFiles((prev) => [...prev, ...files])}
-                onRemoveFile={(index) => setUploadedFiles((prev) => prev.filter((_, i) => i !== index))}
-                importIssues={importIssues}
-                literatureRecords={literatureRecords}
-                onAddLiterature={(records) => setLiteratureRecords((prev) => [...prev, ...records])}
-                deepSearchRunId={deepSearchRunId}
-                onDeepSearchRunIdChange={setDeepSearchRunId}
-              />
+              <div ref={tourStep2Ref}>
+                <SpeciesDiscoveryPanel
+                  taxonomicScope={taxonomicScope}
+                  deepestTaxonKey={deepestTaxonKey}
+                  region={region}
+                  uploadedFiles={uploadedFiles}
+                  onFilesAdded={(files) => setUploadedFiles((prev) => [...prev, ...files])}
+                  onRemoveFile={(index) => setUploadedFiles((prev) => prev.filter((_, i) => i !== index))}
+                  importIssues={importIssues}
+                  literatureRecords={literatureRecords}
+                  onAddLiterature={(records) => setLiteratureRecords((prev) => [...prev, ...records])}
+                  deepSearchRunId={deepSearchRunId}
+                  onDeepSearchRunIdChange={setDeepSearchRunId}
+                />
+              </div>
             )}
 
             {step === 3 && (
-              <div className="flex flex-col gap-3">                <SpeciesInventoryPanel
+              <div ref={tourStep3Ref} className="flex flex-col gap-3">                <SpeciesInventoryPanel
                   taxonomicScope={taxonomicScope}
                   deepestTaxonKey={deepestTaxonKey}
                   region={region}
@@ -685,7 +735,7 @@ export default function NewChecklistPage() {
             )}
 
             {step === 4 && (
-              <div className="flex flex-col gap-3">
+              <div ref={tourStep4Ref} className="flex flex-col gap-3">
                 <h2 className="text-sm font-bold text-on-surface">
                   Add Collaborators
                 </h2>
@@ -1011,6 +1061,7 @@ export default function NewChecklistPage() {
             </button>
           ) : (
             <button
+              ref={tourCreateButtonRef}
               type="button"
               onClick={handleCreate}
               // pendingCreation alone (beyond importInFlight) blocks this once a
@@ -1049,6 +1100,22 @@ export default function NewChecklistPage() {
           <span className="material-symbols-outlined text-[20px]">mouse</span>
           <span className="material-symbols-outlined text-[14px] -mt-1">keyboard_arrow_down</span>
         </button>
+      )}
+
+      {showTour && (
+        <ChecklistTour
+          step={step}
+          stops={TOUR_STOPS}
+          targets={{
+            1: tourStep1Ref,
+            2: tourStep2Ref,
+            3: tourStep3Ref,
+            4: tourStep4Ref,
+            5: tourCreateButtonRef,
+          }}
+          onSkip={endTour}
+          onFinish={endTour}
+        />
       )}
     </>
   );

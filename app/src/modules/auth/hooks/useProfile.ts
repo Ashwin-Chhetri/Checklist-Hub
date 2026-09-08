@@ -17,7 +17,10 @@ export function useUpdateProfile(userId: string | undefined) {
   return useMutation({
     mutationFn: (
       updates: Partial<
-        Pick<Profile, "full_name" | "profession" | "location" | "institution" | "designation">
+        Pick<
+          Profile,
+          "full_name" | "profession" | "location" | "institution" | "designation" | "has_seen_checklist_tour"
+        >
       >,
     ) => updateProfile(userId as string, updates),
     onSuccess: () => {

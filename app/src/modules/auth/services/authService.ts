@@ -95,7 +95,10 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 export async function updateProfile(
   userId: string,
   updates: Partial<
-    Pick<Profile, "full_name" | "profession" | "location" | "institution" | "designation">
+    Pick<
+      Profile,
+      "full_name" | "profession" | "location" | "institution" | "designation" | "has_seen_checklist_tour"
+    >
   >,
 ): Promise<Profile> {
   const supabase = createClient();

@@ -9,6 +9,7 @@ export interface Profile {
   location: string | null;
   institution: string | null;
   designation: string | null;
+  has_seen_checklist_tour: boolean;
 }
 
 export interface Collaborator {
