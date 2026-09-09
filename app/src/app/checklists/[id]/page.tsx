@@ -123,6 +123,7 @@ const WORKBENCH_TOUR_STOPS: TourStop[] = [
     step: 1,
     icon: "🔎",
     secondaryId: "panel",
+    centerCard: true,
     title: "How strong is the evidence?",
     body: (
       <>
@@ -146,6 +147,7 @@ const WORKBENCH_TOUR_STOPS: TourStop[] = [
     step: 1,
     icon: "🪜",
     secondaryId: "panel",
+    centerCard: true,
     title: "Resolve taxonomy conflicts",
     body: (
       <p>
@@ -160,6 +162,7 @@ const WORKBENCH_TOUR_STOPS: TourStop[] = [
     step: 1,
     icon: "✅",
     secondaryId: "panel",
+    centerCard: true,
     title: "Review status & consensus",
     body: (
       <p>
@@ -1131,7 +1134,7 @@ export default function WorkbenchPage() {
               <button
                 type="button"
                 onClick={startWorkbenchTour}
-                className="group flex items-center gap-2 px-2 w-full"
+                className="group flex flex-col items-center gap-1 px-2 w-full"
               >
                 <style>{`
                   @keyframes workbench-tour-icon-wiggle {

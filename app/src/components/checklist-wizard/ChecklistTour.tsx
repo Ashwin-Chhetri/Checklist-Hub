@@ -32,6 +32,15 @@ export interface TourStop {
    * for a closing or summary stop that isn't anchored to any one element.
    */
   center?: boolean;
+  /**
+   * Keeps the spotlight(s) anchored to the real target(s) as usual, but
+   * always renders the card centered on screen instead of positioned near
+   * them. For a stop whose target sits inside a long virtualized/scrollable
+   * area (a table row, say) — anchoring the card to it can put the card
+   * somewhere awkward or make it hard to predict; centering keeps the card
+   * reliably visible regardless of where the target ends up on screen.
+   */
+  centerCard?: boolean;
   /** External docs link surfaced as a "More details" action under the body. */
   docsHref?: string;
 }
@@ -158,52 +167,85 @@ export function ChecklistTour({
     // wherever rect/secondaryRect are read below), so any rect state left
     // over from a previous stop is simply unused rather than needing to be
     // cleared here.
-    if (isCenterStop) return;
-
-    const el = targetRef?.current;
-    const secondaryEl = secondaryTargetRef?.current;
-    const containerEl = containerRef?.current;
-    if (!el) {
-      setRect(null);
-      setSecondaryRect(null);
-      setContainerRect(null);
+    if (isCenterStop) {
       return;
     }
 
-    function update() {
-      const union = measureUnion(el!);
-      const container = containerEl ? measure(containerEl) : null;
-      setRect(container ? clampRect(union, container) : union);
-      setContainerRect(container);
-      setSecondaryRect(secondaryEl ? measureUnion(secondaryEl) : null);
+    let resizeObserver: ResizeObserver | null = null;
+    let mutationObserver: MutationObserver | null = null;
+    let pendingFrame: number | null = null;
+    let updateFn: (() => void) | null = null;
+
+    function attach() {
+      pendingFrame = null;
+      const el = targetRef?.current;
+      if (!el) {
+        // The target hasn't mounted yet — typically a virtualized table row
+        // that hasn't scrolled into view, or one whose ref only just got
+        // attached to a DOM node React is reusing (which involves no DOM
+        // mutation a MutationObserver could catch). Rather than giving up (a
+        // ref that starts out null would otherwise never get measured once
+        // it does resolve, since nothing else would re-trigger this effect),
+        // poll every frame until it appears.
+        setRect(null);
+        setSecondaryRect(null);
+        setContainerRect(null);
+        pendingFrame = requestAnimationFrame(attach);
+        return;
+      }
+
+      const secondaryEl = secondaryTargetRef?.current;
+      const containerEl = containerRef?.current;
+
+      function update() {
+        const union = measureUnion(el!);
+        const container = containerEl ? measure(containerEl) : null;
+        setRect(container ? clampRect(union, container) : union);
+        setContainerRect(container);
+        setSecondaryRect(secondaryEl ? measureUnion(secondaryEl) : null);
+      }
+      updateFn = update;
+
+      update();
+      resizeObserver = new ResizeObserver(update);
+      resizeObserver.observe(el);
+      if (secondaryEl) resizeObserver.observe(secondaryEl);
+      if (containerEl) resizeObserver.observe(containerEl);
+      // A popover like the region field's suggestion dropdown mounts/unmounts
+      // without changing the target's own size, so ResizeObserver alone won't
+      // catch it — watch the subtree for DOM changes too.
+      mutationObserver = new MutationObserver(update);
+      mutationObserver.observe(el, { childList: true, subtree: true, attributes: true });
+      if (secondaryEl) mutationObserver.observe(secondaryEl, { childList: true, subtree: true, attributes: true });
+      window.addEventListener("resize", update);
+      // capture:true so scroll from any nested scrollable ancestor (the
+      // wizard dialog, the species table, etc.) is picked up — plain
+      // 'scroll' doesn't bubble to window/document on its own.
+      document.addEventListener("scroll", update, true);
     }
 
-    update();
-    const resizeObserver = new ResizeObserver(update);
-    resizeObserver.observe(el);
-    if (secondaryEl) resizeObserver.observe(secondaryEl);
-    if (containerEl) resizeObserver.observe(containerEl);
-    // A popover like the region field's suggestion dropdown mounts/unmounts
-    // without changing the target's own size, so ResizeObserver alone won't
-    // catch it — watch the subtree for DOM changes too.
-    const mutationObserver = new MutationObserver(update);
-    mutationObserver.observe(el, { childList: true, subtree: true, attributes: true });
-    if (secondaryEl) mutationObserver.observe(secondaryEl, { childList: true, subtree: true, attributes: true });
-    window.addEventListener("resize", update);
-    // capture:true so scroll from any nested scrollable ancestor (the wizard
-    // dialog, the species table, etc.) is picked up — plain 'scroll' doesn't
-    // bubble to window/document on its own.
-    document.addEventListener("scroll", update, true);
+    attach();
+
     return () => {
-      resizeObserver.disconnect();
-      mutationObserver.disconnect();
-      window.removeEventListener("resize", update);
-      document.removeEventListener("scroll", update, true);
+      if (pendingFrame !== null) cancelAnimationFrame(pendingFrame);
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+      if (updateFn) {
+        window.removeEventListener("resize", updateFn);
+        document.removeEventListener("scroll", updateFn, true);
+      }
     };
   }, [targetRef, secondaryTargetRef, containerRef, activeStop?.step, activeStop?.id, isCenterStop]);
 
+  // Stops that opt into `centerCard` keep their spotlight(s) anchored to the
+  // real target(s) (still gated by `isCenterStop` below) but never anchor the
+  // *card* to them — so the card renders immediately and stays put even
+  // while the target is still being found (e.g. a virtualized row that
+  // hasn't mounted yet) or ends up somewhere the anchor math handles badly.
+  const cardCentered = isCenterStop || !!activeStop?.centerCard;
+
   if (!activeStop) return null;
-  if (!isCenterStop && !rect) return null;
+  if (!cardCentered && !rect) return null;
 
   function dismiss() {
     setAcknowledged((prev) => new Set(prev).add(activeStop!.id));
@@ -229,7 +271,7 @@ export function ChecklistTour({
   let left = 0;
   let placeAbove = false;
 
-  if (!isCenterStop && rect) {
+  if (!cardCentered && rect) {
     // Position relative to whichever of the primary/secondary targets sits
     // further right — usually the newly-opened panel — so the card doesn't
     // end up floating over content it's meant to be pointing past.
@@ -268,12 +310,12 @@ export function ChecklistTour({
   const card = (
     <div
       className={
-        isCenterStop
+        cardCentered
           ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface border border-outline-variant hard-shadow pointer-events-auto transition-all duration-200"
           : "absolute bg-surface border border-outline-variant hard-shadow pointer-events-auto transition-all duration-200"
       }
       style={
-        isCenterStop
+        cardCentered
           ? { width: cardWidth }
           : {
               top,

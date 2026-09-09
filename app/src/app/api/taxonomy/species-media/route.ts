@@ -9,7 +9,7 @@ export interface SpeciesMediaItem {
 }
 
 const GBIF_API = "https://api.gbif.org/v1";
-const TIMEOUT_MS = 5000;
+const TIMEOUT_MS = 6000;
 
 function gbifFetch(path: string): Promise<Response> {
   return fetch(`${GBIF_API}${path}`, {
@@ -18,88 +18,95 @@ function gbifFetch(path: string): Promise<Response> {
   });
 }
 
-function parseMedia(data: { results?: Array<Record<string, unknown>> }): SpeciesMediaItem[] {
-  return (data.results ?? [])
-    .filter((r) => r.type === "StillImage" && typeof r.identifier === "string")
-    .slice(0, 5)
-    .map((r) => ({
-      url: r.identifier as string,
-      creator: (r.creator as string) || undefined,
-      license: (r.license as string) || undefined,
-      rightsHolder: (r.rightsHolder as string) || undefined,
-      publisher: (r.publisher as string) || undefined,
-    }));
+function toMediaItem(r: Record<string, unknown>): SpeciesMediaItem | null {
+  if (r.type !== "StillImage" || typeof r.identifier !== "string") return null;
+  return {
+    url: r.identifier,
+    creator: (r.creator as string) || undefined,
+    license: (r.license as string) || undefined,
+    rightsHolder: (r.rightsHolder as string) || undefined,
+    publisher: (r.publisher as string) || undefined,
+  };
 }
 
-// ── Per-warm-instance caches ────────────────────────────────────────────────
-// Same approach as the iNat taxonomy cache (see inat.server.ts): media and
-// synonym→accepted mappings are effectively static at runtime, so entries
-// never need invalidating. Keyed on the RESOLVED (accepted) taxon key so a
-// synonym and its accepted usage share one media cache entry.
-const mediaCache = new Map<string, SpeciesMediaItem[]>();
-// The caller's raw taxonKey -> the accepted key it resolves to.
-const resolvedKeyCache = new Map<string, string>();
-// Coalesces concurrent requests for the same taxon — several rows/panels can
-// ask for the same species within the same tick (duplicate rows, or several
-// users with the same checklist open on one warm instance).
-const inFlight = new Map<string, Promise<SpeciesMediaItem[]>>();
-
-async function fetchMedia(taxonKey: string): Promise<SpeciesMediaItem[]> {
-  const cached = mediaCache.get(taxonKey);
-  if (cached) return cached;
+/**
+ * Curated reference images attached directly to the taxon record (e.g. a
+ * source checklist's own photo library). Good quality when present, but a
+ * great many taxa — especially anything not a well-known bird/plant, moths
+ * included — simply have none here even though GBIF has plenty of
+ * observation photos for the same species (see fetchOccurrenceMedia below).
+ */
+async function fetchDirectMedia(taxonKey: string): Promise<SpeciesMediaItem[]> {
   try {
     const res = await gbifFetch(`/species/${taxonKey}/media`);
     if (!res.ok) return [];
-    const media = parseMedia(await res.json());
-    // Only cache a non-empty result — an empty one may just mean this key
-    // still needs the accepted-key fallback, and caching that would poison
-    // the lookup permanently for this instance.
-    if (media.length > 0) mediaCache.set(taxonKey, media);
-    return media;
+    const data = await res.json();
+    const results: Array<Record<string, unknown>> = data.results ?? [];
+    return results.map(toMediaItem).filter((m): m is SpeciesMediaItem => m !== null).slice(0, 5);
   } catch {
     return [];
   }
 }
 
 /**
- * A synonym/doubtful taxon key almost never carries its own media even when
- * the accepted usage it resolves to has plenty — GBIF's own species page
- * silently follows this same redirect before showing an image. `acceptedKey`
- * is the one field that reliably points at the usage GBIF actually attaches
- * media to (a synonym's own `nubKey` stays equal to its own key, so that
- * doesn't help).
+ * Photos attached to citizen-science/museum OCCURRENCE records for this
+ * taxon (iNaturalist, etc). This is what GBIF's own species page falls back
+ * to and is why it always seems to have an image even for taxa with no
+ * curated reference photo. The `taxonKey` filter already rolls synonyms up
+ * to their accepted usage, so no separate accepted-key resolution is needed
+ * here — confirmed by testing: searching by a known synonym key returns the
+ * same records as searching by its accepted key.
  */
-async function resolveAcceptedKey(taxonKey: string): Promise<string> {
+async function fetchOccurrenceMedia(taxonKey: string): Promise<SpeciesMediaItem[]> {
   try {
-    const res = await gbifFetch(`/species/${taxonKey}`);
-    if (!res.ok) return taxonKey;
-    const record = await res.json();
-    const resolved = record.acceptedKey ? String(record.acceptedKey) : taxonKey;
-    resolvedKeyCache.set(taxonKey, resolved);
-    return resolved;
+    const res = await gbifFetch(`/occurrence/search?taxonKey=${taxonKey}&mediaType=StillImage&limit=10`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const occurrences: Array<{ media?: Array<Record<string, unknown>> }> = data.results ?? [];
+    const items: SpeciesMediaItem[] = [];
+    for (const occ of occurrences) {
+      for (const raw of occ.media ?? []) {
+        const item = toMediaItem(raw);
+        if (item) items.push(item);
+      }
+      if (items.length >= 5) break;
+    }
+    return items.slice(0, 5);
   } catch {
-    return taxonKey;
+    return [];
   }
 }
 
-async function lookupMedia(taxonKey: string): Promise<SpeciesMediaItem[]> {
-  // Once we've resolved this key before, skip straight to its media — no
-  // record fetch needed. This is what makes every repeat lookup (the common
-  // case: the same species viewed by many rows/users) effectively free.
-  const knownResolved = resolvedKeyCache.get(taxonKey);
-  if (knownResolved) return fetchMedia(knownResolved);
+// ── Per-warm-instance cache ─────────────────────────────────────────────────
+// Same approach as the iNat taxonomy cache (see inat.server.ts): media is
+// effectively static at runtime, so a resolved (non-empty) entry never needs
+// invalidating. Empty results are deliberately never cached — for a taxon
+// that genuinely has none, retrying costs one cheap round trip; caching a
+// transient blip as "no image" would make it permanently silent instead.
+const mediaCache = new Map<string, SpeciesMediaItem[]>();
+// Coalesces concurrent requests for the same taxon — several rows/panels can
+// ask for the same species within the same tick (duplicate rows, or several
+// users with the same checklist open on one warm instance).
+const inFlight = new Map<string, Promise<SpeciesMediaItem[]>>();
 
-  // First time seeing this key: fetch its own media and resolve its accepted
-  // key IN PARALLEL rather than sequentially. For the common case — the key
-  // is already the accepted one — both calls land around the same time and
-  // the record fetch turns out to have cost nothing extra. Only a genuine
-  // synonym pays for a second, sequential media fetch (for its accepted key).
-  const [directMedia, resolvedKey] = await Promise.all([
-    fetchMedia(taxonKey),
-    resolveAcceptedKey(taxonKey),
+async function lookupMedia(taxonKey: string): Promise<SpeciesMediaItem[]> {
+  const cached = mediaCache.get(taxonKey);
+  if (cached) return cached;
+
+  // Run both sources in parallel rather than trying direct-then-fallback:
+  // for a checklist dominated by poorly-documented taxa (moths, etc) the
+  // fallback is the common case, not the exception, so a sequential
+  // try-then-fallback would pay full latency twice for most rows. Direct
+  // media wins when present (better-curated), otherwise occurrence photos
+  // fill in — bounding total latency to whichever source is slower, not
+  // their sum.
+  const [direct, occurrence] = await Promise.all([
+    fetchDirectMedia(taxonKey),
+    fetchOccurrenceMedia(taxonKey),
   ]);
-  if (resolvedKey === taxonKey) return directMedia;
-  return fetchMedia(resolvedKey);
+  const media = direct.length > 0 ? direct : occurrence;
+  if (media.length > 0) mediaCache.set(taxonKey, media);
+  return media;
 }
 
 export async function GET(request: Request) {
@@ -121,8 +128,8 @@ export async function GET(request: Request) {
     return NextResponse.json(
       { media },
       // Species media is effectively static — let Vercel's edge cache serve
-      // repeat lookups (e.g. the same popular species across many
-      // checklists/instances) without hitting this route at all.
+      // repeat lookups (the same species across many checklists/instances)
+      // without hitting this route at all.
       { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } },
     );
   } catch {
