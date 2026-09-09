@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCreateChecklist } from "@/modules/checklist/hooks/useCreateChecklist";
@@ -45,31 +46,212 @@ const STEPS = [
   { id: 5, label: "Create" },
 ];
 
+/** Bold inline emphasis for tour copy — keeps the highlighted-term look consistent across stops. */
+function B({ children }: { children: ReactNode }) {
+  return <strong className="text-on-surface">{children}</strong>;
+}
+
 const TOUR_STOPS: TourStop[] = [
   {
+    id: "title",
     step: 1,
-    title: "Start here",
-    body: "Give your checklist a title, then set its taxonomic scope and region — e.g. “Birds of Darjeeling”.",
+    icon: "👋",
+    iconAnimate: true,
+    title: "Welcome, start with a title",
+    body: (
+      <>
+        <p>
+          Give your checklist a title, then set its taxonomic scope and region — e.g. <B>“Birds of Darjeeling.”</B>
+        </p>
+        <p>
+          The pattern is <B>common/vernacular group</B> + <B>region</B>, like “Birds of Darjeeling town.”
+        </p>
+      </>
+    ),
+    checkKey: "title",
   },
   {
+    id: "hierarchy-suggest",
+    step: 1,
+    icon: "🪜",
+    title: "We'll suggest a hierarchy",
+    body: (
+      <>
+        <p>Based on the common/vernacular group in your title, Checklist Hub suggests a matching taxonomic hierarchy here.</p>
+        <p>
+          Click <B>Select</B> to accept it.
+        </p>
+      </>
+    ),
+    checkKey: "scope",
+  },
+  {
+    id: "scope",
+    step: 1,
+    icon: "☂️",
+    title: "Fine-tune the scope",
+    body: (
+      <>
+        <p>The selected hierarchy shows up here.</p>
+        <p>
+          If it needs adjusting — a different <B>rank</B>, an <B>excluded group</B> — change it right in this section.
+        </p>
+      </>
+    ),
+    checkKey: "scope",
+  },
+  {
+    id: "region",
+    step: 1,
+    icon: "📍",
+    title: "Set the region",
+    body: (
+      <>
+        <p>
+          Type in the region or town — e.g. <B>Darjeeling town</B> — and wait while we fetch its metadata.
+        </p>
+        <p>
+          That's its <B>GADM code</B> and <B>boundary shapefile</B>. Once that's set, hit <B>Continue</B>.
+        </p>
+      </>
+    ),
+    checkKey: "region",
+  },
+  {
+    id: "continue",
+    step: 1,
+    icon: "✅",
+    title: "You're set",
+    body: (
+      <p>
+        Once the <B>title</B>, <B>hierarchy</B> and <B>region</B> are all filled in, hit <B>Continue</B> below to
+        move on to adding species.
+      </p>
+    ),
+    checkKey: "continue",
+  },
+  {
+    id: "discovery-summary",
     step: 2,
-    title: "Add species",
-    body: "Search automatically for species matching your scope, or upload your own CSV file.",
+    icon: "📊",
+    title: "Your species summary",
+    body: (
+      <>
+        <p>
+          Checklist Hub automatically searches <B>GBIF</B> and other evidence sources for species matching your
+          scope and region.
+        </p>
+        <p>This summary tracks the running total and how many sources back each one.</p>
+      </>
+    ),
   },
   {
+    id: "deep-search",
+    step: 2,
+    icon: "🔬",
+    title: "Run a literature search",
+    body: (
+      <>
+        <p>
+          Click <B>Run Deep Literature Search</B> to have Checklist Hub scan scientific literature for species
+          records from your region and taxonomic group.
+        </p>
+        <p>Anything it finds gets added to your candidate species pool alongside the automatic search.</p>
+      </>
+    ),
+  },
+  {
+    id: "upload",
+    step: 2,
+    icon: "📤",
+    title: "Or upload your own list",
+    body: (
+      <p>
+        Already have a species list? Drop in a <B>CSV file</B> here instead of — or alongside — automatic
+        discovery.
+      </p>
+    ),
+  },
+  {
+    id: "continue-2",
+    step: 2,
+    icon: "✅",
+    title: "Ready to review",
+    body: (
+      <p>
+        Once you're happy with your species sources, hit <B>Continue</B> to review them.
+      </p>
+    ),
+    checkKey: "continue2",
+  },
+  {
+    id: "review-species",
     step: 3,
+    icon: "🐾",
     title: "Review & validate",
-    body: "Check the discovered species and pick which ones you want to include in the checklist.",
+    body: (
+      <p>
+        Check the <B>discovered species</B> and pick which ones you want to include in the checklist.
+      </p>
+    ),
   },
   {
+    id: "continue-3",
+    step: 3,
+    icon: "✅",
+    title: "Ready for your team",
+    body: (
+      <p>
+        Happy with the list? Hit <B>Continue</B> to invite collaborators.
+      </p>
+    ),
+    checkKey: "continue3",
+  },
+  {
+    id: "invite",
     step: 4,
+    icon: "🤝",
     title: "Bring in your team",
-    body: "Invite collaborators by email — they get access right away, or an invite if they're new here.",
+    body: (
+      <p>
+        Invite collaborators by <B>email</B> — they get access right away, or an <B>invite</B> if they're new here.
+      </p>
+    ),
   },
   {
+    id: "continue-4",
+    step: 4,
+    icon: "✅",
+    title: "Almost there",
+    body: (
+      <p>
+        Invited everyone you need? Hit <B>Continue</B> to review the summary and create your checklist.
+      </p>
+    ),
+    checkKey: "continue4",
+  },
+  {
+    id: "review-summary",
     step: 5,
+    icon: "🧾",
+    title: "Review the summary",
+    body: (
+      <p>
+        Double-check the <B>project overview</B> and <B>data &amp; team</B> panels — title, region, scope, species
+        count, and invited collaborators.
+      </p>
+    ),
+  },
+  {
+    id: "step-5",
+    step: 5,
+    icon: "🎉",
     title: "You're ready",
-    body: "Review the summary, then hit Create Checklist to publish your species list and start collaborating.",
+    body: (
+      <p>
+        Hit <B>Create Checklist</B> to publish your species list and start collaborating.
+      </p>
+    ),
   },
 ];
 
@@ -121,11 +303,27 @@ export default function NewChecklistPage() {
   // mutation below.
   const [tourDismissedLocally, setTourDismissedLocally] = useState(false);
   const showTour = Boolean(profile) && !profile?.has_seen_checklist_tour && !tourDismissedLocally;
+  // Lets a returning user re-open the tour on demand via the guide icon next
+  // to the dialog, independent of the has-seen-tour gating above.
+  const [manualTourOpen, setManualTourOpen] = useState(false);
+  const tourActive = showTour || manualTourOpen;
   function endTour() {
     setTourDismissedLocally(true);
-    if (currentUser?.id) updateProfile.mutate({ has_seen_checklist_tour: true });
+    setManualTourOpen(false);
+    if (currentUser?.id) {
+      updateProfile.mutate({ has_seen_checklist_tour: true });
+    }
   }
-  const tourStep1Ref = useRef<HTMLDivElement>(null);
+  const dialogBoxRef = useRef<HTMLDivElement>(null);
+  const tourTitleRef = useRef<HTMLDivElement>(null);
+  const tourHierarchySuggestRef = useRef<HTMLDivElement>(null);
+  const tourScopeSelectorRef = useRef<HTMLDivElement>(null);
+  const tourRegionRef = useRef<HTMLDivElement>(null);
+  const tourContinueButtonRef = useRef<HTMLButtonElement>(null);
+  const tourDiscoverySummaryRef = useRef<HTMLDivElement>(null);
+  const tourDeepSearchRef = useRef<HTMLDivElement>(null);
+  const tourUploadRef = useRef<HTMLDivElement>(null);
+  const tourReviewSummaryRef = useRef<HTMLDivElement>(null);
   const tourStep2Ref = useRef<HTMLDivElement>(null);
   const tourStep3Ref = useRef<HTMLDivElement>(null);
   const tourStep4Ref = useRef<HTMLDivElement>(null);
@@ -222,6 +420,18 @@ export default function NewChecklistPage() {
    * here — including for suggestions that reach a rank GBIF has no taxa at,
    * where no single key exists to look up in the first place.
    */
+  // Live completion state for the Step 1 tour stops — each gates that stop's
+  // "Next" button until the user has actually done the thing it asked for,
+  // rather than letting them click through without doing it.
+  const tourProgress = useMemo(
+    () => ({
+      title: title.trim().length > 0,
+      scope: isScopeUsable(taxonomicScope),
+      region: !!region.region_gadm_id,
+    }),
+    [title, taxonomicScope, region],
+  );
+
   function applyScopeSuggestion() {
     if (!suggestedScope?.nodes?.length) return;
     const scope = buildScope(suggestedScope.nodes, suggestedScope.enabledRanks ?? []);
@@ -578,7 +788,8 @@ export default function NewChecklistPage() {
   return (
     <>
       <div ref={dialogScrollRef} className="fixed inset-0 z-[100] overflow-y-auto backdrop-blur-sm bg-surface/60 p-4">
-      <div className="bg-surface w-full max-w-2xl mx-auto my-8 rounded-lg shadow-xl border border-outline-variant overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-2xl mx-auto my-8">
+      <div ref={dialogBoxRef} className="bg-surface w-full rounded-lg shadow-xl border border-outline-variant overflow-hidden flex flex-col">
         {/* Header: title + progress bar */}
         <div className="bg-surface-container-low border-b border-outline-variant px-6 py-4 shrink-0">
           <div className="text-center mb-sm relative">
@@ -627,8 +838,8 @@ export default function NewChecklistPage() {
         <div className="p-6 flex flex-col gap-4">
           <div className="flex flex-col gap-3">
             {step === 1 && (
-              <div ref={tourStep1Ref} className="flex flex-col gap-3">
-                <div className="space-y-xs">
+              <div className="flex flex-col gap-3">
+                <div ref={tourTitleRef} className="space-y-xs">
                   <label
                     className="text-sm font-semibold text-on-surface-variant"
                     htmlFor="checklist-title"
@@ -645,7 +856,7 @@ export default function NewChecklistPage() {
                   />
                 </div>
 
-                <div className="space-y-xs">
+                <div ref={tourHierarchySuggestRef} className="space-y-xs">
                   <label className="text-sm font-semibold text-on-surface-variant">
                     Taxonomic Scope
                   </label>
@@ -658,7 +869,7 @@ export default function NewChecklistPage() {
                         <button
                           type="button"
                           onClick={applyScopeSuggestion}
-                          className="shrink-0 font-label-caps uppercase tracking-wider text-[10px] text-primary border border-primary/40 bg-primary-container/20 hover:bg-primary-container/40 px-2 py-0.5 rounded-sm transition-colors"
+                          className="shrink-0 bg-primary text-on-primary font-label-caps uppercase tracking-wider text-[10px] px-2 py-1 hard-shadow hover:translate-y-[-1px] transition-transform active:translate-y-[1px]"
                         >
                           Select
                         </button>
@@ -678,17 +889,19 @@ export default function NewChecklistPage() {
                       )}
                     </div>
                   )}
-                  <TaxonomicScopeSelector
-                    value={taxonomicScope}
-                    onChange={(scope, taxonKey) => {
-                      setTaxonomicScope(scope);
-                      setDeepestTaxonKey(taxonKey);
-                    }}
-                    compact
-                  />
+                  <div ref={tourScopeSelectorRef}>
+                    <TaxonomicScopeSelector
+                      value={taxonomicScope}
+                      onChange={(scope, taxonKey) => {
+                        setTaxonomicScope(scope);
+                        setDeepestTaxonKey(taxonKey);
+                      }}
+                      compact
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-xs">
+                <div ref={tourRegionRef} className="space-y-xs">
                   <div className="flex items-center justify-between gap-2">
                     <label className="text-sm font-semibold text-on-surface-variant">
                       Region
@@ -716,6 +929,9 @@ export default function NewChecklistPage() {
                   onAddLiterature={(records) => setLiteratureRecords((prev) => [...prev, ...records])}
                   deepSearchRunId={deepSearchRunId}
                   onDeepSearchRunIdChange={setDeepSearchRunId}
+                  summaryRef={tourDiscoverySummaryRef}
+                  deepSearchRef={tourDeepSearchRef}
+                  uploadRef={tourUploadRef}
                 />
               </div>
             )}
@@ -858,7 +1074,7 @@ export default function NewChecklistPage() {
                   Review &amp; Create
                 </h2>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div ref={tourReviewSummaryRef} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="border border-outline-variant bg-white p-3 flex flex-col gap-2">
                     <span className="font-label-caps text-[10px] uppercase tracking-wider text-on-surface-variant">
                       Project Overview
@@ -1053,6 +1269,7 @@ export default function NewChecklistPage() {
 
           {step < 5 ? (
             <button
+              ref={tourContinueButtonRef}
               type="button"
               onClick={goNext}
               disabled={!canContinue()}
@@ -1084,6 +1301,32 @@ export default function NewChecklistPage() {
           )}
         </div>
       </div>
+
+      {/* Guide tour trigger — sits just outside the dialog box, to the right,
+          visible on every step. No background/border/shadow of its own — just
+          the mascot's own cutout shape, with a small wiggle on hover instead. */}
+      <button
+        type="button"
+        onClick={() => setManualTourOpen(true)}
+        aria-label="Start guided tour"
+        className="group hidden lg:flex absolute left-full top-6 ml-3 flex-col items-center gap-1"
+      >
+        <style>{`
+          @keyframes guide-tour-icon-wiggle {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            25% { transform: rotate(-8deg) scale(1.06); }
+            50% { transform: rotate(6deg) scale(1.06); }
+            75% { transform: rotate(-4deg) scale(1.03); }
+          }
+        `}</style>
+        <span className="relative block w-11 h-11 group-hover:[animation:guide-tour-icon-wiggle_0.5s_ease-in-out]">
+          <Image src="/guide_tour_icon.png" alt="" fill sizes="44px" className="object-contain" />
+        </span>
+        <span className="font-label-caps text-[10px] uppercase tracking-wider text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+          Start Tour
+        </span>
+      </button>
+      </div>
       </div>
 
       {/* Rendered outside the dialog's backdrop-blur container — backdrop-filter
@@ -1103,16 +1346,28 @@ export default function NewChecklistPage() {
         </button>
       )}
 
-      {showTour && (
+      {tourActive && (
         <ChecklistTour
           step={step}
           stops={TOUR_STOPS}
+          containerRef={dialogBoxRef}
+          progress={tourProgress}
           targets={{
-            1: tourStep1Ref,
-            2: tourStep2Ref,
-            3: tourStep3Ref,
-            4: tourStep4Ref,
-            5: tourCreateButtonRef,
+            title: tourTitleRef,
+            "hierarchy-suggest": tourHierarchySuggestRef,
+            scope: tourScopeSelectorRef,
+            region: tourRegionRef,
+            continue: tourContinueButtonRef,
+            "discovery-summary": tourDiscoverySummaryRef,
+            "deep-search": tourDeepSearchRef,
+            upload: tourUploadRef,
+            "continue-2": tourContinueButtonRef,
+            "review-species": tourStep3Ref,
+            "continue-3": tourContinueButtonRef,
+            invite: tourStep4Ref,
+            "continue-4": tourContinueButtonRef,
+            "review-summary": tourReviewSummaryRef,
+            "step-5": tourCreateButtonRef,
           }}
           onSkip={endTour}
           onFinish={endTour}

@@ -252,21 +252,18 @@ function ScopeSummaryNote({ nodes, compact }: { nodes: ScopeNode[]; compact: boo
   return (
     <div
       className={`mt-2 pt-2 border-t border-outline-variant/40 flex gap-1.5 ${
-        compact ? "text-[10px]" : "text-[11px]"
+        compact ? "text-[11px]" : "text-xs"
       } text-on-surface-variant/80 leading-relaxed`}
     >
-      <span className="material-symbols-outlined text-[13px] shrink-0 mt-px opacity-70">info</span>
-      <div className="space-y-0.5">
+      <span className="material-symbols-outlined text-[15px] shrink-0 mt-px opacity-70">info</span>
+      <div className="space-y-1">
         {deepest ? (
           <p>
             <span className="font-semibold text-on-surface-variant">Included:</span> every species under{" "}
             {deepest.rank} <span className="italic">{deepest.name}</span>.
           </p>
         ) : (
-          <p>
-            Choose a level to set what this checklist covers. Everything under your deepest choice is
-            included — stop wherever the scope should stop.
-          </p>
+          <p>Pick a rank below to set your scope — everything underneath it will be included.</p>
         )}
 
         {excluded.length > 0 && (
@@ -279,8 +276,16 @@ function ScopeSummaryNote({ nodes, compact }: { nodes: ScopeNode[]; compact: boo
 
         {excluded.length === 0 && (
           <p className="opacity-80">
-            To leave a group out, hover any option and choose <span className="font-semibold">exclude</span>.
-            Moths, for instance, are all Lepidoptera <em>except</em> the butterflies.
+            Each option has two buttons:{" "}
+            <span className="material-symbols-outlined text-[15px] align-text-bottom font-bold text-primary">
+              add
+            </span>{" "}
+            <span className="font-semibold">includes</span> it and everything under it,{" "}
+            <span className="material-symbols-outlined text-[15px] align-text-bottom font-bold text-on-surface-variant">
+              remove
+            </span>{" "}
+            <span className="font-semibold">excludes</span> it. Example: include order <em>Lepidoptera</em> and
+            exclude <em>Papilionoidea</em> to get every moth but no butterflies.
           </p>
         )}
       </div>
@@ -388,7 +393,7 @@ function TaxonLevelRow({
                   onClick={() => onToggleOptionalRank(optional)}
                   aria-pressed={on}
                   title={on ? `Remove the ${optional} level` : `Add a ${optional} level`}
-                  className={`px-1.5 py-0.5 rounded-sm border text-[10px] capitalize transition-colors ${
+                  className={`px-2 py-1 rounded-sm border text-xs capitalize transition-colors ${
                     on
                       ? "border-primary bg-primary-container/40 text-primary font-bold"
                       : "border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary"
@@ -432,7 +437,7 @@ function SelectedPill({
   const isExclude = node.mode === "exclude";
   return (
     <span
-      className={`${textSize} group/pill px-2 py-0.5 rounded-sm inline-flex items-center gap-1 ${
+      className={`${textSize} font-medium not-italic group/pill px-1.5 py-0.5 rounded-sm inline-flex items-center gap-1 ${
         isExclude
           ? "bg-surface-container-low text-on-surface-variant line-through decoration-1 decoration-on-surface-variant/40"
           : "text-on-surface bg-primary-container/30"
@@ -449,9 +454,10 @@ function SelectedPill({
           e.stopPropagation();
           onClear(node);
         }}
-        // Revealed on hover/focus. Always-visible clear buttons put an ✕ next
-        // to every rank at once, which reads louder than the scope itself.
-        className="ml-0.5 text-on-surface-variant/50 hover:text-on-surface transition-all opacity-0 group-hover/pill:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+        // Collapsed to 0 width until hover/focus, rather than just opacity-0 —
+        // an invisible-but-still-laid-out button left a strip of dead space on
+        // every pill's right edge that read as an oversized/empty border.
+        className="grid place-items-center w-0 group-hover/pill:w-3 focus-visible:w-3 overflow-hidden text-on-surface-variant/50 hover:text-on-surface transition-all focus-visible:outline-none"
         aria-label={`Clear ${node.name}`}
       >
         <span className="material-symbols-outlined text-[12px] leading-none no-underline">close</span>
@@ -543,6 +549,18 @@ function TaxonLevelOptions({
               key={`${taxon.gbifKey ?? "i"}-${taxon.inatId ?? "g"}-${taxon.name}`}
               className="flex items-center group hover:bg-surface-container-low transition-colors"
             >
+              {/* + always visible: include this taxon (and drill into it). Filled/primary once selected. */}
+              <button
+                type="button"
+                onClick={() => onSelect(taxon)}
+                aria-pressed={isSelected}
+                title={`Include ${taxon.name} — everything under it`}
+                className={`shrink-0 pl-2 material-symbols-outlined ${compact ? "text-[15px]" : "text-[17px]"} transition-colors ${
+                  isSelected ? "text-primary" : "text-on-surface-variant/40 hover:text-primary"
+                }`}
+              >
+                {isSelected ? "add_circle" : "add"}
+              </button>
               <button
                 type="button"
                 onClick={() => onSelect(taxon)}
@@ -552,21 +570,17 @@ function TaxonLevelOptions({
               >
                 {taxon.name}
               </button>
+              {/* − always visible: exclude this taxon (and everything under it) from an otherwise-included ancestor. */}
               <button
                 type="button"
                 onClick={() => onToggleExclude(taxon)}
                 aria-pressed={isExcluded}
                 title={isExcluded ? `Stop excluding ${taxon.name}` : `Exclude ${taxon.name} from this scope`}
-                // Quiet by default and only on hover: this sits beside every
-                // option in a long list, so a always-lit icon per row competes
-                // with the names the user is actually reading.
-                className={`px-2 shrink-0 text-[10px] font-label-caps uppercase tracking-wider transition-all ${
-                  isExcluded
-                    ? "opacity-100 text-on-surface-variant"
-                    : "opacity-0 group-hover:opacity-60 hover:!opacity-100 text-on-surface-variant focus-visible:opacity-100"
+                className={`shrink-0 pr-2 material-symbols-outlined ${compact ? "text-[15px]" : "text-[17px]"} transition-colors ${
+                  isExcluded ? "text-on-surface-variant" : "text-on-surface-variant/30 hover:text-on-surface-variant"
                 }`}
               >
-                {isExcluded ? "excluded" : "exclude"}
+                {isExcluded ? "do_not_disturb_on" : "remove"}
               </button>
             </div>
           );

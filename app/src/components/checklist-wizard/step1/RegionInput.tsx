@@ -62,22 +62,38 @@ function RegionField({
   );
 }
 
-/** De-duplicate suggestions down to one entry per distinct place. Keyed by
- * OSM identity when available — district/state/country alone collapse
- * genuinely different places in countries where Nominatim's address
- * breakdown doesn't populate those fields consistently (e.g. two different
- * boroughs of the same German city would otherwise both key to the same
+/** De-duplicate suggestions down to one entry per distinct place.
+ *
+ * Nominatim frequently returns the *same* place twice under different OSM
+ * elements — e.g. an address/POI node and its enclosing administrative
+ * boundary way/relation — which otherwise show up as two visually identical
+ * rows in the dropdown, one with a postcode and one without. When the
+ * address breakdown is populated, key on matched name + district/state/
+ * country so those collapse into one row, keeping whichever copy actually
+ * carries a pin code.
+ *
+ * When the breakdown is empty (some countries' Nominatim results don't
+ * populate district/state/country consistently), fall back to raw OSM
+ * identity instead — a name+address key would incorrectly collapse
+ * genuinely different places that all key to the same near-empty tuple
+ * (e.g. two different boroughs of the same German city both keying to
  * "||Germany"). */
 function dedupeByRegion(suggestions: RegionSuggestion[]): RegionSuggestion[] {
-  const seen = new Set<string>();
-  const result: RegionSuggestion[] = [];
+  const byKey = new Map<string, RegionSuggestion>();
   for (const s of suggestions) {
-    const key = s.osmType && s.osmId ? `${s.osmType}:${s.osmId}` : `${s.subDistrict}|${s.district}|${s.state}|${s.country}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(s);
+    const hasAddress = Boolean(s.subDistrict || s.district || s.state || s.country);
+    const key = hasAddress
+      ? `${s.matchedName}|${s.subDistrict}|${s.district}|${s.state}|${s.country}`.toLowerCase()
+      : s.osmType && s.osmId
+        ? `${s.osmType}:${s.osmId}`
+        : `${s.matchedName}|${s.displayName}`.toLowerCase();
+
+    const existing = byKey.get(key);
+    if (!existing || (!existing.pin && s.pin)) {
+      byKey.set(key, s);
+    }
   }
-  return result;
+  return Array.from(byKey.values());
 }
 
 /**
@@ -90,6 +106,11 @@ export function RegionInput({ value, onChange, compact = false }: RegionInputPro
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [resolvingGadm, setResolvingGadm] = useState(false);
+  // Set once a GADM resolution attempt has completed without a match — lets
+  // the UI distinguish "still resolving" from "gave up with nothing", which
+  // otherwise look identical (both just show no gadm chip) and leave the
+  // user unable to tell why Continue won't enable.
+  const [gadmFailed, setGadmFailed] = useState(false);
 
   // Read by the async GADM/postal-code resolutions below so each only patches
   // its own field onto whatever the *latest* value is, instead of each
@@ -134,16 +155,23 @@ export function RegionInput({ value, onChange, compact = false }: RegionInputPro
     onChange(next);
     setOpen(false);
     setQuery("");
+    setGadmFailed(false);
 
-    // Best-effort: resolve a GADM GID for this region so GBIF occurrence
-    // queries can be scoped to it. Degrades silently if no match is found.
+    // Resolve a GADM GID for this region so GBIF occurrence queries can be
+    // scoped to it. A missing match (no boundary for this place, or the
+    // reference-data-service unreachable/misconfigured) is surfaced via
+    // `gadmFailed` rather than failing silently — Continue is gated on
+    // `region_gadm_id` being set, so the user needs to know why it's stuck.
     setResolvingGadm(true);
     resolveGadmId({ country: s.country, state: s.state, district: s.district })
       .then((gid) => {
-        if (!gid) return;
+        if (!gid) {
+          setGadmFailed(true);
+          return;
+        }
         onChange({ ...latestValueRef.current, region_gadm_id: gid });
       })
-      .catch(() => {})
+      .catch(() => setGadmFailed(true))
       .finally(() => setResolvingGadm(false));
 
     // Best-effort: district-level forward search rarely carries a postcode —
@@ -162,6 +190,7 @@ export function RegionInput({ value, onChange, compact = false }: RegionInputPro
     onChange(EMPTY_VALUE);
     setQuery("");
     setOpen(false);
+    setGadmFailed(false);
   }
 
   const isSelected = Boolean(value.region_district || value.region_state || value.region_country);
@@ -185,6 +214,11 @@ export function RegionInput({ value, onChange, compact = false }: RegionInputPro
           <RegionField label="gadm" value={value.region_gadm_id} valueClassName="text-secondary" />
           {resolvingGadm && !value.region_gadm_id && (
             <span className="text-on-surface-variant text-xs italic">resolving gadm…</span>
+          )}
+          {!resolvingGadm && !value.region_gadm_id && gadmFailed && (
+            <span className="text-red-700 text-xs italic">
+              no GADM boundary match found — Continue may stay disabled
+            </span>
           )}
           <RegionField label="pin" value={value.region_pin} valueClassName="text-primary font-bold" />
         </div>
