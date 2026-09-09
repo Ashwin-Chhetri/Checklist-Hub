@@ -52,6 +52,44 @@ export default function TaxonomyPanel({ species, checklistId, activeDetailTab }:
   const taxonomy = species.taxonomy;
   const { data: mediaItems = [] } = useSpeciesMedia(species.gbif_taxon_key);
 
+  // Lightbox: which media item is open full-size, if any. Reset during
+  // render (not an effect) when the panel switches to a different species —
+  // otherwise a stale index could point at the new species' unrelated media.
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [lightboxSpeciesId, setLightboxSpeciesId] = useState(species.id);
+  if (species.id !== lightboxSpeciesId) {
+    setLightboxSpeciesId(species.id);
+    setLightboxIndex(null);
+  }
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightboxIndex(null);
+      else if (e.key === "ArrowRight") setLightboxIndex((i) => (i === null ? i : (i + 1) % mediaItems.length));
+      else if (e.key === "ArrowLeft") setLightboxIndex((i) => (i === null ? i : (i - 1 + mediaItems.length) % mediaItems.length));
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightboxIndex, mediaItems.length]);
+
+  // Horizontal mouse-wheel scrolling for the thumbnail strip, on top of the
+  // scrollbar it already has. Attached as a native (non-passive) listener —
+  // React's onWheel is passive by default, which silently ignores
+  // preventDefault() and lets the vertical scroll bleed through to the panel
+  // behind it instead of just scrolling the strip.
+  const galleryScrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = galleryScrollRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (e.deltaY === 0) return; // leave native horizontal trackpad swipes alone
+      e.preventDefault();
+      el!.scrollLeft += e.deltaY;
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [mediaItems.length]);
+
   const [editMode, setEditMode] = useState(false);
   const [editFields, setEditFields] = useState({
     scientific_name: "",
@@ -314,14 +352,15 @@ export default function TaxonomyPanel({ species, checklistId, activeDetailTab }:
       {/* Species image gallery */}
       {mediaItems.length > 0 && (
         <section>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div ref={galleryScrollRef} className="flex gap-2 overflow-x-auto pb-1">
             {mediaItems.map((item, idx) => (
               <div key={idx} className="flex-none w-36">
                 <img
                   src={item.url}
                   alt={species.scientific_name}
-                  className="w-36 h-28 object-cover rounded-sm border border-surface-dim bg-surface-container-low"
+                  className="w-36 h-28 object-cover rounded-sm border border-surface-dim bg-surface-container-low cursor-pointer hover:opacity-80 transition-opacity"
                   loading="lazy"
+                  onClick={() => setLightboxIndex(idx)}
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                 />
                 <p className="mt-0.5 text-[8px] text-slate-400 leading-tight truncate">
@@ -331,6 +370,60 @@ export default function TaxonomyPanel({ species, checklistId, activeDetailTab }:
             ))}
           </div>
         </section>
+      )}
+
+      {/* Image lightbox — overlays the whole workbench without touching its
+          state; closing it (backdrop click, X, or Escape) just clears
+          lightboxIndex and everything underneath is exactly as it was. */}
+      {lightboxIndex !== null && mediaItems[lightboxIndex] && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-8"
+          onClick={() => setLightboxIndex(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            onClick={() => setLightboxIndex(null)}
+            title="Close"
+          >
+            <span className="material-symbols-outlined text-3xl">close</span>
+          </button>
+          {mediaItems.length > 1 && (
+            <>
+              <button
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((i) => (i === null ? i : (i - 1 + mediaItems.length) % mediaItems.length));
+                }}
+                title="Previous"
+              >
+                <span className="material-symbols-outlined text-4xl">chevron_left</span>
+              </button>
+              <button
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((i) => (i === null ? i : (i + 1) % mediaItems.length));
+                }}
+                title="Next"
+              >
+                <span className="material-symbols-outlined text-4xl">chevron_right</span>
+              </button>
+            </>
+          )}
+          <div className="flex flex-col items-center gap-2 max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={mediaItems[lightboxIndex].url}
+              alt={species.scientific_name}
+              className="max-w-[90vw] max-h-[80vh] object-contain rounded-sm shadow-hard"
+            />
+            <p className="text-[10px] text-white/70 leading-tight text-center">
+              {mediaItems[lightboxIndex].creator ?? "Unknown"}
+              {mediaItems[lightboxIndex].license ? ` · ${formatLicense(mediaItems[lightboxIndex].license)}` : ""} ·{" "}
+              <span className="text-brand">GBIF</span>
+            </p>
+          </div>
+        </div>
       )}
 
       <section>

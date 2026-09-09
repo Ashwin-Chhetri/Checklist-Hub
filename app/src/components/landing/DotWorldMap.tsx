@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { geoMercator, geoPath } from "d3-geo";
+import { geoEqualEarth, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import gsap from "gsap";
 import type { Topology } from "topojson-specification";
-import type { Feature, FeatureCollection, Geometry } from "geojson";
+import type { FeatureCollection } from "geojson";
 
 const WORLD_ATLAS_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+
+// Equal Earth's own width:height ratio when fit to the full globe (measured
+// via geoPath(geoEqualEarth().scale(1)).bounds({type:"Sphere"})). Used to
+// keep the map a clean, correctly-proportioned rectangle instead of
+// stretching to fill whatever (often taller) box the hero section gives it.
+const EQUAL_EARTH_ASPECT_RATIO = 2.0546;
 
 // Based on dot_map_viewer.html's config, spacing widened ~5.4% twice over
 // (3 / sqrt(0.9) / sqrt(0.9)) to bring dot count down ~19% total, with a
@@ -39,10 +45,6 @@ const FALL_SWEEP_MS = 1000; // spread of start times from the leftmost to rightm
 const FALL_DELAY_JITTER_MS = 280; // random +/- noise on top of the x-based start delay
 const fallEase = gsap.parseEase("power2.out");
 
-// This component now renders into its own column (separate from the hero
-// text), so the map is just centered within whatever space it's given.
-const MAP_CENTER_X_RATIO = 0.5;
-
 interface Ripple {
   x: number;
   y: number;
@@ -61,11 +63,7 @@ function loadWorldGeo(): Promise<FeatureCollection> {
       .then((res) => res.json())
       .then((topo: Topology) => {
         const countries = topo.objects.countries;
-        const geo = feature(topo, countries) as FeatureCollection;
-        geo.features = geo.features.filter(
-          (f: Feature<Geometry>) => f.id !== "010" // Antarctica
-        );
-        return geo;
+        return feature(topo, countries) as FeatureCollection;
       });
   }
   return worldGeoPromise;
@@ -169,9 +167,22 @@ export default function DotWorldMap() {
       const hiddenCtx = hidden.getContext("2d", { willReadFrequently: true });
       if (!hiddenCtx) return;
 
-      const projection = geoMercator()
-        .fitSize([width * 1.05, height * 1.05], geo)
-        .translate([width * MAP_CENTER_X_RATIO, height / 1.6]);
+      // Constrain to Equal Earth's own aspect ratio and fit against the full
+      // globe (not just the landmass bbox) so the map always renders as a
+      // clean, consistently-proportioned rectangle, centered in whatever
+      // box the hero section gives it — rather than stretching to fill it.
+      let mapWidth = width;
+      let mapHeight = mapWidth / EQUAL_EARTH_ASPECT_RATIO;
+      if (mapHeight > height) {
+        mapHeight = height;
+        mapWidth = mapHeight * EQUAL_EARTH_ASPECT_RATIO;
+      }
+      const mapOffsetX = (width - mapWidth) / 2;
+      const mapOffsetY = (height - mapHeight) / 2;
+
+      const projection = geoEqualEarth().fitSize([mapWidth, mapHeight], { type: "Sphere" });
+      const [tx, ty] = projection.translate();
+      projection.translate([tx + mapOffsetX, ty + mapOffsetY]);
       const path = geoPath(projection, hiddenCtx);
 
       hiddenCtx.fillStyle = "#fff";

@@ -1134,7 +1134,7 @@ export default function WorkbenchPage() {
               <button
                 type="button"
                 onClick={startWorkbenchTour}
-                className="group flex flex-col items-center gap-1 px-2 w-full"
+                className="group flex flex-col items-start gap-1 px-2 w-full"
               >
                 <style>{`
                   @keyframes workbench-tour-icon-wiggle {
