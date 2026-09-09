@@ -14,6 +14,7 @@ import {
   type CreateChecklistProgress,
 } from "@/modules/checklist/services/checklistService";
 import { useEmailLookup, useProfileSearch } from "@/modules/checklist/hooks/useChecklist";
+import { useOwnedChecklistCount } from "@/modules/checklist/hooks/useChecklists";
 import { isValidEmailFormat } from "@/lib/validation/email";
 import {
   mergeParsedFiles,
@@ -111,7 +112,7 @@ const TOUR_STOPS: TourStop[] = [
           Type in the region or town — e.g. <B>Darjeeling town</B> — and wait while we fetch its metadata.
         </p>
         <p>
-          That's its <B>GADM code</B> and <B>boundary shapefile</B>. Once that's set, hit <B>Continue</B>.
+          That&apos;s its <B>GADM code</B> and <B>boundary shapefile</B>. Once that&apos;s set, hit <B>Continue</B>.
         </p>
       </>
     ),
@@ -179,7 +180,7 @@ const TOUR_STOPS: TourStop[] = [
     title: "Ready to review",
     body: (
       <p>
-        Once you're happy with your species sources, hit <B>Continue</B> to review them.
+        Once you&apos;re happy with your species sources, hit <B>Continue</B> to review them.
       </p>
     ),
     checkKey: "continue2",
@@ -214,7 +215,7 @@ const TOUR_STOPS: TourStop[] = [
     title: "Bring in your team",
     body: (
       <p>
-        Invite collaborators by <B>email</B> — they get access right away, or an <B>invite</B> if they're new here.
+        Invite collaborators by <B>email</B> — they get access right away, or an <B>invite</B> if they&apos;re new here.
       </p>
     ),
   },
@@ -248,9 +249,16 @@ const TOUR_STOPS: TourStop[] = [
     icon: "🎉",
     title: "You're ready",
     body: (
-      <p>
-        Hit <B>Create Checklist</B> to publish your species list and start collaborating.
-      </p>
+      <>
+        <p>
+          Hit <B>Create Checklist</B> to spin up your workbench and start reviewing and collaborating on the
+          species list.
+        </p>
+        <p>
+          It&apos;ll take a moment — we&apos;re fetching taxonomy data for every species and flagging{" "}
+          <B>synonyms</B> and <B>taxonomic conflicts</B> for you to review in the workbench.
+        </p>
+      </>
     ),
   },
 ];

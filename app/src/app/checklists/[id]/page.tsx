@@ -1,7 +1,8 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useChecklist, useChecklistCollaborators } from "@/modules/checklist/hooks/useChecklist";
@@ -22,6 +23,7 @@ import TeamModal from "@/components/workbench/TeamModal";
 import WatcherSetupDialog, { WatcherResultsDialog } from "@/components/workbench/WatcherDialog";
 import ExportDialog from "@/components/workbench/ExportDialog";
 import ActivityPanel, { type ActivityPanelMode } from "@/components/workbench/panels/ActivityPanel";
+import { ChecklistTour, type TourStop } from "@/components/checklist-wizard/ChecklistTour";
 import { useWatcher, useWatcherRuns } from "@/modules/watching/hooks/useWatcher";
 import { computeEvidenceQuality } from "@/modules/editor/utils/evidenceScore";
 import AppHeader from "@/components/shared/AppHeader";
@@ -94,6 +96,129 @@ const TAXONOMY_VIEWS: { id: WorkbenchViewId; label: string; icon: string }[] = [
   { id: "authority_conflicts", label: "Conflicts", icon: "warning" },
   { id: "unresolved", label: "Unresolved", icon: "help" },
   { id: "merged", label: "Merged / Hidden", icon: "merge" },
+];
+
+/** Bold inline emphasis for tour copy — keeps the highlighted-term look consistent across stops. */
+function B({ children }: { children: ReactNode }) {
+  return <strong className="text-on-surface">{children}</strong>;
+}
+
+const WORKBENCH_TOUR_STOPS: TourStop[] = [
+  {
+    id: "table-overview",
+    step: 1,
+    icon: "🐾",
+    iconAnimate: true,
+    title: "Every species, one table",
+    body: (
+      <p>
+        Every species discovered or imported for this checklist is listed here — one row each, with its{" "}
+        <B>evidence</B>, <B>taxonomy resolution</B>, and <B>review status</B> side by side.
+      </p>
+    ),
+    docsHref: "/docs/features/workbench",
+  },
+  {
+    id: "evidence",
+    step: 1,
+    icon: "🔎",
+    secondaryId: "panel",
+    title: "How strong is the evidence?",
+    body: (
+      <>
+        <p>
+          Click a row&apos;s <B>Evidence</B> cell to open it in the panel on the right and see exactly which sources back
+          it.
+        </p>
+        <p>
+          <B>LOW</B> — thin support, often one weak source or very few records; worth a closer look.
+          <br />
+          <B>MEDIUM</B> — some corroborating sources, but not overwhelming.
+          <br />
+          <B>HIGH</B> — multiple independent sources with strong record counts.
+        </p>
+      </>
+    ),
+    docsHref: "/docs/features/evidence",
+  },
+  {
+    id: "taxonomy",
+    step: 1,
+    icon: "🪜",
+    secondaryId: "panel",
+    title: "Resolve taxonomy conflicts",
+    body: (
+      <p>
+        When sources disagree on a name — a <B>synonym</B> or an <B>authority conflict</B> — the row flags it right
+        here. Open the <B>Taxonomy</B> tab on the right for the full picture and to resolve it.
+      </p>
+    ),
+    docsHref: "/docs/features/reconciliation",
+  },
+  {
+    id: "review-status",
+    step: 1,
+    icon: "✅",
+    secondaryId: "panel",
+    title: "Review status & consensus",
+    body: (
+      <p>
+        At least one reviewer has to <B>Agree</B> to <B>Accept</B> or <B>Reject</B> a species before it&apos;s final.
+        Work out any disagreement in the <B>Discussion</B> tab on the right.
+      </p>
+    ),
+    docsHref: "/docs/features/workbench",
+  },
+  {
+    id: "watcher",
+    step: 1,
+    icon: "👁️",
+    title: "Watch for new records",
+    body: (
+      <p>
+        Turn on the <B>Watcher</B> to get notified when new evidence shows up for this checklist&apos;s species and
+        region, so the list stays current after you publish.
+      </p>
+    ),
+    docsHref: "/docs/features/watcher",
+  },
+  {
+    id: "export",
+    step: 1,
+    icon: "📤",
+    title: "Export anytime",
+    body: (
+      <p>
+        Export the checklist&apos;s data whenever you need it outside Checklist Hub.
+      </p>
+    ),
+    docsHref: "/docs/features/export",
+  },
+  {
+    id: "collaboration",
+    step: 1,
+    icon: "🤝",
+    title: "Bring in your team",
+    body: (
+      <p>
+        Invite collaborators here to help review and validate species together.
+      </p>
+    ),
+    docsHref: "/docs/features/collaboration",
+  },
+  {
+    id: "finish",
+    step: 1,
+    icon: "🎉",
+    center: true,
+    title: "On to publication",
+    body: (
+      <p>
+        Every species needs to be <B>Accepted</B> or <B>Rejected</B> before Checklist Hub can generate metadata and a{" "}
+        <B>Darwin Core Archive</B> — then you&apos;re ready to move on to publication.
+      </p>
+    ),
+  },
 ];
 
 const DISCUSSION_NOTIFICATION_TYPES = new Set(["mention", "comment_reply", "comment_added"]);
@@ -260,7 +385,10 @@ export default function WorkbenchPage() {
     // handoff, not a live binding to the URL.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [panelTabRequest, setPanelTabRequest] = useState<{ speciesId: string; tab: "discussion" } | null>(null);
+  const [panelTabRequest, setPanelTabRequest] = useState<{
+    speciesId: string;
+    tab: "discussion" | "evidence" | "taxonomy";
+  } | null>(null);
   const [activityMode, setActivityMode] = useState<ActivityPanelMode | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addSpeciesOpen, setAddSpeciesOpen] = useState(false);
@@ -269,6 +397,41 @@ export default function WorkbenchPage() {
   const [watcherResultsRunId, setWatcherResultsRunId] = useState<string | null>(null);
   const [watcherInfoOpen, setWatcherInfoOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+
+  // Guided tour — manual-trigger only (no first-visit auto-show, unlike the
+  // checklist wizard's tour, since there's no per-workbench "seen it" flag).
+  const [workbenchTourOpen, setWorkbenchTourOpen] = useState(false);
+  const tourEvidenceCellRef = useRef<HTMLTableCellElement>(null);
+  const tourTaxonomyCellRef = useRef<HTMLTableCellElement>(null);
+  const tourReviewCellRef = useRef<HTMLTableCellElement>(null);
+  const tourPanelRef = useRef<HTMLDivElement>(null);
+  const tourWatcherRef = useRef<HTMLButtonElement>(null);
+  const tourExportRef = useRef<HTMLButtonElement>(null);
+  const tourTeamRef = useRef<HTMLButtonElement>(null);
+
+  // Row-linked tour stops (evidence/taxonomy/review-status) all anchor to the
+  // first visible row, so opening the panel and switching its tab is driven
+  // here rather than requiring the user to actually click through each step.
+  function handleTourStopChange(stop: TourStop | null) {
+    if (!stop) return;
+    const firstId = visibleSpecies[0]?.id;
+    if (!firstId) return;
+    if (stop.id === "evidence" || stop.id === "taxonomy" || stop.id === "review-status") {
+      rowVirtualizer.scrollToIndex(0, { align: "start" });
+      setActivityMode(null);
+      setActiveSpeciesId(firstId);
+      setPanelTabRequest({
+        speciesId: firstId,
+        tab: stop.id === "evidence" ? "evidence" : stop.id === "taxonomy" ? "taxonomy" : "discussion",
+      });
+    }
+  }
+
+  function startWorkbenchTour() {
+    rowVirtualizer.scrollToIndex(0, { align: "start" });
+    tableScrollRef.current?.scrollTo({ top: 0 });
+    setWorkbenchTourOpen(true);
+  }
 
   // Deep link from the watcher alert email/notification:
   // /checklists/[id]?watcher_run=<id> opens that run's results dialog directly.
@@ -650,6 +813,7 @@ export default function WorkbenchPage() {
           )}
           <NotificationBell userId={user?.id} onNavigate={handleNotificationNavigate} />
           <button
+            ref={tourTeamRef}
             onClick={() => setTeamOpen(true)}
             className="text-on-surface-variant hover:text-primary transition-colors w-8 h-8 flex items-center justify-center"
             title="Team"
@@ -933,6 +1097,7 @@ export default function WorkbenchPage() {
                     </span>
                   )}
                   <button
+                    ref={tourWatcherRef}
                     onClick={() => setWatcherSetupOpen(true)}
                     className="w-fit bg-primary-container text-white px-2.5 py-1 rounded-sm text-[10px] font-code-md font-bold uppercase tracking-wide transition-transform"
                     style={{ boxShadow: "3px 3px 0 rgba(164, 31, 36, 1)" }}
@@ -950,6 +1115,7 @@ export default function WorkbenchPage() {
 
               <div className="flex flex-col gap-3 px-2">
                 <button
+                  ref={tourExportRef}
                   onClick={() => setExportOpen(true)}
                   className="w-fit bg-primary-container text-white px-2.5 py-1 rounded-sm text-[10px] font-code-md font-bold uppercase tracking-wide transition-transform"
                   style={{ boxShadow: "3px 3px 0 rgba(164, 31, 36, 1)" }}
@@ -957,6 +1123,31 @@ export default function WorkbenchPage() {
                   Export
                 </button>
               </div>
+            </section>
+
+            {/* GUIDE TOUR */}
+
+            <section>
+              <button
+                type="button"
+                onClick={startWorkbenchTour}
+                className="group flex items-center gap-2 px-2 w-full"
+              >
+                <style>{`
+                  @keyframes workbench-tour-icon-wiggle {
+                    0%, 100% { transform: rotate(0deg) scale(1); }
+                    25% { transform: rotate(-8deg) scale(1.06); }
+                    50% { transform: rotate(6deg) scale(1.06); }
+                    75% { transform: rotate(-4deg) scale(1.03); }
+                  }
+                `}</style>
+                <span className="relative block w-8 h-8 shrink-0 group-hover:[animation:workbench-tour-icon-wiggle_0.5s_ease-in-out]">
+                  <Image src="/guide_tour_icon.png" alt="" fill sizes="32px" className="object-contain" />
+                </span>
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-slate-500 group-hover:text-primary transition-colors">
+                  Start Tour
+                </span>
+              </button>
             </section>
           </div>
         </aside>
@@ -1254,6 +1445,9 @@ export default function WorkbenchPage() {
                           key={s.id}
                           ref={(node) => rowVirtualizer.measureElement(node)}
                           rowIndex={virtualRow.index}
+                          evidenceCellRef={virtualRow.index === 0 ? tourEvidenceCellRef : undefined}
+                          taxonomyCellRef={virtualRow.index === 0 ? tourTaxonomyCellRef : undefined}
+                          reviewCellRef={virtualRow.index === 0 ? tourReviewCellRef : undefined}
                           species={s}
                           checklistId={checklistId}
                           selected={selectedIds.has(s.id)}
@@ -1301,27 +1495,51 @@ export default function WorkbenchPage() {
           </div>
           </div>{/* end table section */}
 
-          {/* Detail panel — always visible, fixed right column */}
-          <SpeciesPanel
-            species={activeSpecies}
-            checklistId={checklistId}
-            region={{
-              gadmId: checklist?.region_gadm_id ?? null,
-              name: checklist?.region_name ?? null,
-              country: checklist?.region_country ?? null,
-              state: checklist?.region_state ?? null,
-              district: checklist?.region_district ?? null,
-              osmType: checklist?.region_osm_type ?? null,
-              osmId: checklist?.region_osm_id ?? null,
-            }}
-            collaborators={collaborators ?? []}
-            speciesList={species}
-            panelTabRequest={panelTabRequest}
-            onClose={() => setActiveSpeciesId(null)}
-            onSelectSpecies={(id) => setActiveSpeciesId(id)}
-          />
+          {/* Detail panel — always visible, fixed right column. Wrapped in a
+              `contents` div (no layout box of its own) purely so the tour has
+              a stable element to spotlight regardless of which tab is open. */}
+          <div ref={tourPanelRef} className="contents">
+            <SpeciesPanel
+              species={activeSpecies}
+              checklistId={checklistId}
+              region={{
+                gadmId: checklist?.region_gadm_id ?? null,
+                name: checklist?.region_name ?? null,
+                country: checklist?.region_country ?? null,
+                state: checklist?.region_state ?? null,
+                district: checklist?.region_district ?? null,
+                osmType: checklist?.region_osm_type ?? null,
+                osmId: checklist?.region_osm_id ?? null,
+              }}
+              collaborators={collaborators ?? []}
+              speciesList={species}
+              panelTabRequest={panelTabRequest}
+              onClose={() => setActiveSpeciesId(null)}
+              onSelectSpecies={(id) => setActiveSpeciesId(id)}
+            />
+          </div>
         </main>
       </div>
+
+      {workbenchTourOpen && (
+        <ChecklistTour
+          step={1}
+          stops={WORKBENCH_TOUR_STOPS}
+          targets={{
+            "table-overview": tableScrollRef,
+            evidence: tourEvidenceCellRef,
+            taxonomy: tourTaxonomyCellRef,
+            "review-status": tourReviewCellRef,
+            panel: tourPanelRef,
+            watcher: tourWatcherRef,
+            export: tourExportRef,
+            collaboration: tourTeamRef,
+          }}
+          onActiveStopChange={handleTourStopChange}
+          onSkip={() => setWorkbenchTourOpen(false)}
+          onFinish={() => setWorkbenchTourOpen(false)}
+        />
+      )}
 
       {activityMode && (
         <ActivityPanel

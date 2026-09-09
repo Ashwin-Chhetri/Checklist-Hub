@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useState } from "react";
+import { forwardRef, useState, type Ref } from "react";
 import type { Species } from "@/types/species.types";
 import type { ConflictCardVotes, ReviewVoteData, SynonymVoteData, VoterProfile } from "@/modules/species/hooks/useChecklistVotes";
 import {
@@ -29,6 +29,10 @@ interface SpeciesRowProps {
   synonymVoteData?: SynonymVoteData;
   /** Index within the virtualized row list — used by the row virtualizer to measure this row. */
   rowIndex?: number;
+  /** Guided-tour anchors for this row's Evidence / Taxonomy Resolution / Review Status cells — only ever passed for the first rendered row. */
+  evidenceCellRef?: Ref<HTMLTableCellElement>;
+  taxonomyCellRef?: Ref<HTMLTableCellElement>;
+  reviewCellRef?: Ref<HTMLTableCellElement>;
   onToggleSelect: (speciesId: string) => void;
   onSelect: (speciesId: string) => void;
   onOpenDiscussion: (speciesId: string) => void;
@@ -138,6 +142,9 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
   reviewVoteData,
   synonymVoteData,
   rowIndex,
+  evidenceCellRef,
+  taxonomyCellRef,
+  reviewCellRef,
   onToggleSelect,
   onSelect,
   onOpenDiscussion,
@@ -394,7 +401,7 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
       </td>
 
       {/* Evidence */}
-      <td className="px-3 py-2.5 border-r border-surface-dim align-top h-[inherit]">
+      <td ref={evidenceCellRef} className="px-3 py-2.5 border-r border-surface-dim align-top h-[inherit]">
         <div className="flex flex-col justify-between h-full gap-2.5">
           <div className="flex flex-col gap-2.5">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -536,7 +543,11 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
       </td>
 
       {/* Taxonomy Resolution */}
-      <td className="px-3 py-2.5 border-r border-surface-dim align-top h-[inherit]" onClick={() => onSelect(species.id)}>
+      <td
+        ref={taxonomyCellRef}
+        className="px-3 py-2.5 border-r border-surface-dim align-top h-[inherit]"
+        onClick={() => onSelect(species.id)}
+      >
 
         {/* ── AUTHORITY CONFLICT ────────────────────────────── */}
         {species.taxonomy_status === "authority_conflict" && (() => {
@@ -976,7 +987,11 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
       </td>
 
       {/* Review Status */}
-      <td className="px-4 pt-5 pb-2.5 align-top h-[inherit] pr-8" onClick={() => onSelect(species.id)}>
+      <td
+        ref={reviewCellRef}
+        className="px-4 pt-5 pb-2.5 align-top h-[inherit] pr-8"
+        onClick={() => onSelect(species.id)}
+      >
         <div className="flex flex-col h-full justify-between pr-8">
           {/* Top: status pill */}
           <div className="flex items-center">
