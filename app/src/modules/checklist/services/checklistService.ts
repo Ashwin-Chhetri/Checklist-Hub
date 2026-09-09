@@ -96,6 +96,23 @@ export interface ChecklistSummary extends Checklist {
   watcher: { is_active: boolean; frequency: WatchFrequency } | null;
 }
 
+/**
+ * Cheap existence check for "has this user ever created a checklist" —
+ * `head: true` skips returning row data, so this is just a count query, not
+ * the full listChecklists() join. Used to gate the create-checklist guide
+ * tour to first-time creators only.
+ */
+export async function countOwnedChecklists(ownerId: string): Promise<number> {
+  const supabase = createClient();
+  const { count, error } = await supabase
+    .from("checklists")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", ownerId);
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function listChecklists(): Promise<ChecklistSummary[]> {
   const supabase = createClient();
   const { data, error } = await supabase

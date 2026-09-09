@@ -72,6 +72,25 @@ function measureUnion(el: Element): Rect {
 }
 
 /**
+ * Clamps `rect` to stay within `bounds`. measureUnion() walks every
+ * descendant regardless of whether an ancestor actually clips it — a wide
+ * chart or a long scrollable species list has rows/columns that are part of
+ * the DOM (and so count toward the union) well past what's actually visible
+ * inside the dialog's own box, which without this made the spotlight (and
+ * the card position derived from it) balloon past the dialog's right edge
+ * and bottom edge. Falls back to the unclamped rect if the intersection is
+ * degenerate (e.g. the target has actually scrolled fully out of bounds).
+ */
+function clampRect(rect: Rect, bounds: Rect): Rect {
+  const top = Math.max(rect.top, bounds.top);
+  const left = Math.max(rect.left, bounds.left);
+  const right = Math.min(rect.right, bounds.right);
+  const bottom = Math.min(rect.bottom, bounds.bottom);
+  if (right <= left || bottom <= top) return rect;
+  return { top, left, right, bottom, width: right - left, height: bottom - top };
+}
+
+/**
  * First-time guided tour for the "Create Checklist" wizard: one contextual
  * callout per wizard step (or, for step 1, per sub-section of that step),
  * shown against whichever step the user is currently on rather than driving
@@ -118,8 +137,10 @@ export function ChecklistTour({
     }
 
     function update() {
-      setRect(measureUnion(el!));
-      setContainerRect(containerEl ? measure(containerEl) : null);
+      const union = measureUnion(el!);
+      const container = containerEl ? measure(containerEl) : null;
+      setRect(container ? clampRect(union, container) : union);
+      setContainerRect(container);
     }
 
     update();

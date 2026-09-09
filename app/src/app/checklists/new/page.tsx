@@ -302,11 +302,31 @@ export default function NewChecklistPage() {
   // or finishes it, without waiting on the profile refetch that follows the
   // mutation below.
   const [tourDismissedLocally, setTourDismissedLocally] = useState(false);
-  const showTour = Boolean(profile) && !profile?.has_seen_checklist_tour && !tourDismissedLocally;
+  // Auto-show is reserved for a user's actual first checklist — has_seen_checklist_tour
+  // alone isn't enough, since it defaults to false for accounts that already
+  // had checklists before this flag/feature existed, which would otherwise
+  // greet an experienced user with a "welcome, first-time" tour. Undefined
+  // (still loading) counts as "not yet confirmed first checklist", so the
+  // tour never flashes on before this resolves.
+  const { data: ownedChecklistCount } = useOwnedChecklistCount(currentUser?.id);
+  const isFirstChecklist = ownedChecklistCount === 0;
+  const showTour = Boolean(profile) && isFirstChecklist && !profile?.has_seen_checklist_tour && !tourDismissedLocally;
   // Lets a returning user re-open the tour on demand via the guide icon next
   // to the dialog, independent of the has-seen-tour gating above.
   const [manualTourOpen, setManualTourOpen] = useState(false);
-  const tourActive = showTour || manualTourOpen;
+  // The tour's spotlight/card math assumes the desktop dialog layout (fixed
+  // max-width, room to the right for the card) — on a narrow viewport there's
+  // nowhere for the card to go and the trigger button is already hidden below
+  // `lg`, so just don't run the tour at all rather than let it render badly.
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const update = () => setIsMobileViewport(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  const tourActive = (showTour || manualTourOpen) && !isMobileViewport;
   function endTour() {
     setTourDismissedLocally(true);
     setManualTourOpen(false);
