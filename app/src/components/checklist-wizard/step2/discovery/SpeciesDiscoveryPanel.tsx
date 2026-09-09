@@ -1,5 +1,6 @@
 "use client";
 
+import type { RefObject } from "react";
 import type { TaxonomicScope } from "@/types/checklist.types";
 import type { RegionValue } from "@/components/checklist-wizard/step1/RegionInput";
 import { SpeciesUploadDropzone } from "@/components/checklist-wizard/step2/SpeciesUploadDropzone";
@@ -23,6 +24,10 @@ export interface SpeciesDiscoveryPanelProps {
   onAddLiterature: (records: RawSpeciesRecord[]) => void;
   deepSearchRunId: string | null;
   onDeepSearchRunIdChange: (runId: string | null) => void;
+  /** Anchors for the Step 2 guide tour — optional so this panel doesn't need a tour context to render. */
+  summaryRef?: RefObject<HTMLDivElement | null>;
+  deepSearchRef?: RefObject<HTMLDivElement | null>;
+  uploadRef?: RefObject<HTMLDivElement | null>;
 }
 
 /**
@@ -43,27 +48,34 @@ export function SpeciesDiscoveryPanel({
   onAddLiterature,
   deepSearchRunId,
   onDeepSearchRunIdChange,
+  summaryRef,
+  deepSearchRef,
+  uploadRef,
 }: SpeciesDiscoveryPanelProps) {
   return (
     <div className="flex flex-col gap-3">
-      <SpeciesInventorySummary
-        taxonomicScope={taxonomicScope}
-        deepestTaxonKey={deepestTaxonKey}
-        region={region}
-        literatureRecords={literatureRecords}
-      />
+      <div ref={summaryRef}>
+        <SpeciesInventorySummary
+          taxonomicScope={taxonomicScope}
+          deepestTaxonKey={deepestTaxonKey}
+          region={region}
+          literatureRecords={literatureRecords}
+        />
+      </div>
 
-      <DeepSearchButton
-        region={region.region_name}
-        taxonGroup={deepestTaxonName(taxonomicScope) ?? ""}
-        onAddLiterature={onAddLiterature}
-        runId={deepSearchRunId}
-        onRunIdChange={onDeepSearchRunIdChange}
-      />
+      <div ref={deepSearchRef}>
+        <DeepSearchButton
+          region={region.region_name}
+          taxonGroup={deepestTaxonName(taxonomicScope) ?? ""}
+          onAddLiterature={onAddLiterature}
+          runId={deepSearchRunId}
+          onRunIdChange={onDeepSearchRunIdChange}
+        />
+      </div>
 
       <div className="h-px bg-outline-variant" />
 
-      <div className="flex flex-col gap-3">
+      <div ref={uploadRef} className="flex flex-col gap-3">
         <h3 className="font-headline-md text-[13px] font-bold text-on-surface">UPLOAD SPECIES LIST</h3>
         <SpeciesUploadDropzone onFilesAdded={onFilesAdded} compact />
         <ExpectedColumnsHelp compact />
