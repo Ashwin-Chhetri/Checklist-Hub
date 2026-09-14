@@ -16,9 +16,21 @@ export function buildDatasetSummary(species: Species[]): DatasetSummary {
   };
 }
 
+export interface TaxonomicTreeGenus {
+  name: string;
+  speciesCount: number;
+}
+
+export interface TaxonomicTreeFamily {
+  name: string;
+  speciesCount: number;
+  genera: TaxonomicTreeGenus[];
+}
+
 export interface TaxonomicTreeOrder {
   name: string;
   speciesCount: number;
+  families: TaxonomicTreeFamily[];
 }
 
 export interface TaxonomicTreeClass {
@@ -36,15 +48,17 @@ export interface TaxonomicTreeKingdom {
   phyla: TaxonomicTreePhylum[];
 }
 
-/** Groups accepted species into a Kingdom -> Phylum -> Class -> Order tree with per-order species counts, for the Classification Breakdown section. */
+/** Groups accepted species into a Kingdom -> Phylum -> Class -> Order -> Family -> Genus tree with per-order and per-genus species counts, for the Classification Breakdown section — matching the Family/Genus/Species depth the checklist wizard's taxonomic scope selector now supports. */
 export function buildTaxonomicTree(species: Species[]): TaxonomicTreeKingdom[] {
-  const kingdoms = new Map<string, Map<string, Map<string, Map<string, number>>>>();
+  const kingdoms = new Map<string, Map<string, Map<string, Map<string, Map<string, Map<string, number>>>>>>();
 
   for (const s of species) {
     const kingdom = s.kingdom ?? "Unclassified";
     const phylum = s.phylum ?? "Unclassified";
     const klass = s.class ?? "Unclassified";
     const order = s.order ?? "Unclassified";
+    const family = s.family ?? "Unclassified";
+    const genus = s.genus ?? "Unclassified";
 
     if (!kingdoms.has(kingdom)) kingdoms.set(kingdom, new Map());
     const phyla = kingdoms.get(kingdom)!;
@@ -55,7 +69,13 @@ export function buildTaxonomicTree(species: Species[]): TaxonomicTreeKingdom[] {
     if (!classes.has(klass)) classes.set(klass, new Map());
     const orders = classes.get(klass)!;
 
-    orders.set(order, (orders.get(order) ?? 0) + 1);
+    if (!orders.has(order)) orders.set(order, new Map());
+    const families = orders.get(order)!;
+
+    if (!families.has(family)) families.set(family, new Map());
+    const genera = families.get(family)!;
+
+    genera.set(genus, (genera.get(genus) ?? 0) + 1);
   }
 
   return Array.from(kingdoms.entries()).map(([kingdomName, phyla]) => ({
@@ -65,7 +85,25 @@ export function buildTaxonomicTree(species: Species[]): TaxonomicTreeKingdom[] {
       classes: Array.from(classes.entries()).map(([className, orders]) => ({
         name: className,
         orders: Array.from(orders.entries())
-          .map(([orderName, speciesCount]) => ({ name: orderName, speciesCount }))
+          .map(([orderName, families]) => {
+            const familyList = Array.from(families.entries())
+              .map(([familyName, genera]) => {
+                const generaList = Array.from(genera.entries())
+                  .map(([genusName, speciesCount]) => ({ name: genusName, speciesCount }))
+                  .sort((a, b) => b.speciesCount - a.speciesCount);
+                return {
+                  name: familyName,
+                  genera: generaList,
+                  speciesCount: generaList.reduce((sum, g) => sum + g.speciesCount, 0),
+                };
+              })
+              .sort((a, b) => b.speciesCount - a.speciesCount);
+            return {
+              name: orderName,
+              families: familyList,
+              speciesCount: familyList.reduce((sum, f) => sum + f.speciesCount, 0),
+            };
+          })
           .sort((a, b) => b.speciesCount - a.speciesCount),
       })),
     })),

@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
+import { refreshSessionOnce } from "@/lib/supabase/refreshSession";
+import { runInBatches } from "@/lib/async/runInBatches";
 import { parseJsonResponse } from "@/lib/http/parseJsonResponse";
 import { addSpeciesToChecklist } from "@/modules/species/services/speciesService";
 import type { Checklist, ChecklistPublicationDraft, CreateChecklistInput } from "@/types/checklist.types";
@@ -55,20 +57,6 @@ export class PartialChecklistCreationError extends Error {
     super(message);
     this.name = "PartialChecklistCreationError";
   }
-}
-
-async function runInBatches<T>(items: T[], batchSize: number, concurrency: number, run: (batch: T[]) => Promise<void>) {
-  const batches: T[][] = [];
-  for (let i = 0; i < items.length; i += batchSize) batches.push(items.slice(i, i + batchSize));
-
-  let nextIndex = 0;
-  async function worker() {
-    while (nextIndex < batches.length) {
-      const batch = batches[nextIndex++];
-      await run(batch);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, worker));
 }
 
 export interface ChecklistCollaboratorProfile {
@@ -198,11 +186,24 @@ export async function createChecklist(
   const remaining = allSpecies.slice(SPECIES_BATCH_SIZE);
   const total = allSpecies.length;
 
-  const response = await fetchWithTimeout("/api/checklists", {
+  let response = await fetchWithTimeout("/api/checklists", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...input, species: firstBatch, totalSpeciesCount: total }),
   });
+
+  // See refreshSessionOnce: after a long spell filling out the wizard
+  // (taxonomy validation on a large species list can take a while), the
+  // session backing this first request can be stale. Refresh once and retry
+  // before surfacing a spurious "Not authenticated." on step one.
+  if (response.status === 401) {
+    await refreshSessionOnce();
+    response = await fetchWithTimeout("/api/checklists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...input, species: firstBatch, totalSpeciesCount: total }),
+    });
+  }
 
   const body = await parseJsonResponse<{ checklist: Checklist }>(response, "Failed to create checklist.");
   const checklist = body.checklist;

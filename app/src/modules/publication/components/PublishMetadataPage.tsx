@@ -18,6 +18,8 @@ import {
   type TemporalRecordProvenance,
 } from "../utils/checklistStats";
 import { EMPTY_METADATA, seedMetadataDefaults } from "../utils/metadataDrafts";
+import { CORE_RANKS, type CoreRankName } from "@/lib/taxonomy/ranks";
+import { excludedNodes, scopeNodes } from "@/lib/taxonomy/scopeNodes";
 
 const LICENSES: { value: ChecklistLicense; label: string }[] = [
   { value: "CC0-1.0", label: "CC0 1.0 (Public Domain)" },
@@ -83,6 +85,19 @@ export function PublishMetadataPage({
   const temporal = useMemo(() => temporalRange(species), [species]);
   const temporalSources = useMemo(() => temporalCoverage(species), [species]);
   const tree = useMemo(() => buildTaxonomicTree(species), [species]);
+
+  // Core-rank tiles for the Taxonomic Coverage section, covering the full
+  // Kingdom-through-Species scope the wizard's taxonomic scope selector now
+  // supports (previously only kingdom/phylum/class were ever shown, even
+  // when a checklist scoped down to family or genus).
+  const scope = checklist?.taxonomic_scope;
+  const scopeTiles = useMemo(() => {
+    if (!scope) return [];
+    return CORE_RANKS.map((rank) => ({ rank, name: scope[rank] })).filter(
+      (t): t is { rank: CoreRankName; name: string } => Boolean(t.name),
+    );
+  }, [scope]);
+  const excludedTaxa = useMemo(() => (scope ? excludedNodes(scopeNodes(scope)) : []), [scope]);
 
   const [metadata, setMetadata] = useState<Partial<ChecklistMetadata>>(EMPTY_METADATA);
   const [contributors, setContributors] = useState<ChecklistContributor[]>([
@@ -538,11 +553,21 @@ export function PublishMetadataPage({
                   <SubHeading title="SECTION 4 — TAXONOMIC COVERAGE" />
                   <Field label="Core Taxonomy">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <TaxonTile label="Kingdom" value={checklist?.taxonomic_scope?.kingdom ?? "—"} />
-                      <TaxonTile label="Phylum" value={checklist?.taxonomic_scope?.phylum ?? "—"} />
-                      <TaxonTile label="Class" value={checklist?.taxonomic_scope?.class ?? "—"} />
+                      {scopeTiles.length > 0 ? (
+                        scopeTiles.map((t) => (
+                          <TaxonTile key={t.rank} label={t.rank.charAt(0).toUpperCase() + t.rank.slice(1)} value={t.name} />
+                        ))
+                      ) : (
+                        <TaxonTile label="Scope" value="—" />
+                      )}
                       <TaxonTile label="Taxa Counts" value={`${stats.families} Fam / ${stats.total} Spp`} accent />
                     </div>
+                    {excludedTaxa.length > 0 && (
+                      <p className="font-code-md text-[11px] text-secondary mt-3">
+                        <span className="font-semibold text-on-surface-variant">Excludes:</span>{" "}
+                        {excludedTaxa.map((n) => n.name).join(", ")}
+                      </p>
+                    )}
                   </Field>
                   <Field label="Scope Description">
                     <textarea className={`${inputClass} h-20`} value={metadata.taxonomic_scope_description ?? ""} onChange={(e) => set("taxonomic_scope_description", e.target.value)} />
@@ -871,7 +896,13 @@ function ClassificationTree({ tree }: { tree: TaxonomicTreeKingdom[] }) {
                 keys.push(k.name);
                 for (const p of k.phyla) {
                   keys.push(`${k.name}/${p.name}`);
-                  for (const c of p.classes) keys.push(`${k.name}/${p.name}/${c.name}`);
+                  for (const c of p.classes) {
+                    keys.push(`${k.name}/${p.name}/${c.name}`);
+                    for (const o of c.orders) {
+                      keys.push(`${k.name}/${p.name}/${c.name}/${o.name}`);
+                      for (const f of o.families) keys.push(`${k.name}/${p.name}/${c.name}/${o.name}/${f.name}`);
+                    }
+                  }
                 }
               }
               setCollapsed(new Set(keys));
@@ -920,16 +951,40 @@ function ClassificationTree({ tree }: { tree: TaxonomicTreeKingdom[] }) {
                     onToggle={toggle}
                     query={query}
                   >
-                    {klass.orders.map((order) => {
-                      if (query && !order.name.toLowerCase().includes(query)) return null;
-                      return (
-                        <div key={order.name} className="flex items-center gap-2 py-1 px-1 ml-5">
-                          <span className="w-5 flex-shrink-0" />
-                          <span>Order: {order.name}</span>
-                          <span className="text-[10px] text-secondary ml-auto">{order.speciesCount} Species</span>
-                        </div>
-                      );
-                    })}
+                    {klass.orders.map((order) => (
+                      <TreeNode
+                        key={order.name}
+                        nodeKey={`${kingdom.name}/${phylum.name}/${klass.name}/${order.name}`}
+                        label={`Order: ${order.name}`}
+                        collapsed={collapsed}
+                        onToggle={toggle}
+                        query={query}
+                        trailing={`${order.speciesCount} Species`}
+                      >
+                        {order.families.map((family) => (
+                          <TreeNode
+                            key={family.name}
+                            nodeKey={`${kingdom.name}/${phylum.name}/${klass.name}/${order.name}/${family.name}`}
+                            label={`Family: ${family.name}`}
+                            collapsed={collapsed}
+                            onToggle={toggle}
+                            query={query}
+                            trailing={`${family.speciesCount} Species`}
+                          >
+                            {family.genera.map((genus) => {
+                              if (query && !genus.name.toLowerCase().includes(query)) return null;
+                              return (
+                                <div key={genus.name} className="flex items-center gap-2 py-1 px-1 ml-5">
+                                  <span className="w-5 flex-shrink-0" />
+                                  <span>Genus: {genus.name}</span>
+                                  <span className="text-[10px] text-secondary ml-auto">{genus.speciesCount} Species</span>
+                                </div>
+                              );
+                            })}
+                          </TreeNode>
+                        ))}
+                      </TreeNode>
+                    ))}
                   </TreeNode>
                 ))}
               </TreeNode>
@@ -948,6 +1003,7 @@ function TreeNode({
   collapsed,
   onToggle,
   query,
+  trailing,
   children,
 }: {
   nodeKey: string;
@@ -956,6 +1012,7 @@ function TreeNode({
   collapsed: Set<string>;
   onToggle: (key: string) => void;
   query: string;
+  trailing?: string;
   children: React.ReactNode;
 }) {
   const isCollapsed = collapsed.has(nodeKey) && !query;
@@ -966,6 +1023,7 @@ function TreeNode({
           expand_more
         </span>
         <span className={bold ? "font-bold text-brand" : "font-bold"}>{label}</span>
+        {trailing && <span className="text-[10px] text-secondary ml-auto">{trailing}</span>}
       </div>
       {!isCollapsed && <div className="ml-4 border-l border-surface-dim pl-2">{children}</div>}
     </div>

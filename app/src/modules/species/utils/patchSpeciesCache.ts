@@ -16,6 +16,18 @@ export function patchSpeciesInList(
   );
 }
 
+export function patchSpeciesInListMany(
+  qc: QueryClient,
+  checklistId: string,
+  speciesIds: string[],
+  updater: (species: Species) => Species,
+) {
+  const ids = new Set(speciesIds);
+  qc.setQueryData<Species[]>(["species", "list", checklistId], (old) =>
+    old?.map((s) => (ids.has(s.id) ? updater(s) : s)) ?? old,
+  );
+}
+
 export function patchSpeciesFromRow(qc: QueryClient, checklistId: string, row: Species) {
   qc.setQueryData<Species[]>(["species", "list", checklistId], (old) =>
     old?.map((s) => (s.id === row.id ? row : s)) ?? old,

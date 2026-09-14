@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useChecklist, useChecklistCollaborators } from "@/modules/checklist/hooks/useChecklist";
 import { useWorkbenchView, type WorkbenchViewId } from "@/modules/editor/hooks/useWorkbenchView";
-import { useUpdateSpeciesStatus } from "@/modules/species/hooks/useUpdateSpeciesStatus";
+import { useBulkUpdateSpeciesStatus } from "@/modules/species/hooks/useBulkUpdateSpeciesStatus";
 import { useSpeciesList } from "@/modules/species/hooks/useSpecies";
 import { useChecklistVotes } from "@/modules/species/hooks/useChecklistVotes";
 import { useConflictVote } from "@/modules/species/hooks/useConflictVote";
@@ -310,7 +310,7 @@ export default function WorkbenchPage() {
   // currently visible view.
   const { data: allSpecies } = useSpeciesList(checklistId);
   const speciesById = useMemo(() => new Map((allSpecies ?? []).map((s) => [s.id, s])), [allSpecies]);
-  const updateStatus = useUpdateSpeciesStatus(checklistId);
+  const updateStatus = useBulkUpdateSpeciesStatus(checklistId);
   const { data: votes } = useChecklistVotes(checklistId);
   const castConflictVote = useConflictVote(checklistId);
   const castReviewVote = useReviewVote(checklistId);
@@ -683,12 +683,12 @@ export default function WorkbenchPage() {
   }
 
   function handleBulkAccept() {
-    resolvableSelectedIds().forEach((id) => updateStatus.mutate({ speciesId: id, reviewStatus: "accepted" }));
+    updateStatus.mutate({ speciesIds: resolvableSelectedIds(), reviewStatus: "accepted" });
     setSelectedIds(new Set());
   }
 
   function handleBulkReject() {
-    resolvableSelectedIds().forEach((id) => updateStatus.mutate({ speciesId: id, reviewStatus: "rejected" }));
+    updateStatus.mutate({ speciesIds: resolvableSelectedIds(), reviewStatus: "rejected" });
     setSelectedIds(new Set());
   }
 
