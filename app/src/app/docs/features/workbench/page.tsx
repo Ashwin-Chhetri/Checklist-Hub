@@ -234,7 +234,7 @@ export default function WorkbenchPage() {
           hint="Click a step below to see it highlighted in the screenshot."
           screen={{
             src: "/res/docs/workbench.png",
-            alt: "The Workbench species table, where merged rows move to the Merged / Hidden view",
+            alt: "The Workbench species table, where merged rows move to the Merged view",
             aspect: "2562 / 1899",
             variant: "flush",
           }}

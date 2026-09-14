@@ -364,6 +364,13 @@ function ReadinessRow({
 
       {expanded && hasIssues && (
         <div className="px-2.5 pb-2 space-y-1">
+          <Link
+            href={`/checklists/${checklistId}?species=${issues.map((i) => i.speciesId).join(",")}`}
+            className="flex items-center justify-center gap-1 w-full text-[10px] font-bold uppercase mono-text border border-brand text-brand rounded-sm py-1 hover:bg-brand hover:text-white transition-colors"
+          >
+            <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+            View all {issues.length} in workbench
+          </Link>
           {action && (
             <button
               type="button"

@@ -25,6 +25,7 @@ import ExportDialog from "@/components/workbench/ExportDialog";
 import ActivityPanel, { type ActivityPanelMode } from "@/components/workbench/panels/ActivityPanel";
 import { ChecklistTour, type TourStop } from "@/components/checklist-wizard/ChecklistTour";
 import { useWatcher, useWatcherRuns } from "@/modules/watching/hooks/useWatcher";
+import { useMergeDuplicates } from "@/modules/publication/hooks/useMergeDuplicates";
 import { computeEvidenceQuality } from "@/modules/editor/utils/evidenceScore";
 import AppHeader from "@/components/shared/AppHeader";
 import Avatar from "@/components/shared/Avatar";
@@ -92,10 +93,12 @@ const VIEWS: { id: WorkbenchViewId; label: string; icon: string }[] = [
 ];
 
 const TAXONOMY_VIEWS: { id: WorkbenchViewId; label: string; icon: string }[] = [
+  { id: "duplicates", label: "Duplicates", icon: "content_copy" },
+  { id: "incomplete", label: "Incomplete", icon: "rule" },
   { id: "synonyms", label: "Synonyms", icon: "link" },
   { id: "authority_conflicts", label: "Conflicts", icon: "warning" },
   { id: "unresolved", label: "Unresolved", icon: "help" },
-  { id: "merged", label: "Merged / Hidden", icon: "merge" },
+  { id: "merged", label: "Merged", icon: "merge" },
 ];
 
 /** Bold inline emphasis for tour copy — keeps the highlighted-term look consistent across stops. */
@@ -240,6 +243,8 @@ const EVIDENCE_RANK: Record<EvidenceQuality, number> = { insufficient: 0, low: 1
 const VIEW_FILTER_SECTIONS: Record<WorkbenchViewId, { evidence: boolean; taxonomy: boolean; review: boolean }> = {
   all:                 { evidence: true,  taxonomy: true,  review: true  },
   needs_review:        { evidence: true,  taxonomy: true,  review: false },
+  duplicates:          { evidence: true,  taxonomy: true,  review: true  },
+  incomplete:          { evidence: true,  taxonomy: true,  review: true  },
   synonyms:            { evidence: true,  taxonomy: false, review: true  },
   authority_conflicts: { evidence: true,  taxonomy: false, review: true  },
   unresolved:          { evidence: true,  taxonomy: false, review: true  },
@@ -309,6 +314,7 @@ export default function WorkbenchPage() {
   const { data: votes } = useChecklistVotes(checklistId);
   const castConflictVote = useConflictVote(checklistId);
   const castReviewVote = useReviewVote(checklistId);
+  const mergeDuplicates = useMergeDuplicates(checklistId);
 
   const collaboratorCount = (collaborators?.length ?? 0) + 1; // owner + collaborators
 
@@ -372,17 +378,36 @@ export default function WorkbenchPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [activeSpeciesId, setActiveSpeciesId] = useState<string | null>(null);
+  // Non-null while landed here from a publish-readiness issue list — restricts
+  // the table to exactly those flagged species regardless of the active view's
+  // usual filter, so "view in workbench" from the dialog actually surfaces the
+  // rows it flagged instead of dropping the user on the unfiltered default.
+  const [focusedIds, setFocusedIds] = useState<Set<string> | null>(null);
+
+  // Switching views/searching manually means the user is done with the
+  // dialog's flagged-rows list — drop back to that view's normal filtering.
+  function selectView(id: WorkbenchViewId) {
+    setFocusedIds(null);
+    setActiveView(id);
+  }
 
   // Deep link from elsewhere (e.g. the publish validation report's issue
-  // lists): /checklists/[id]?species=<id> opens that species' panel directly.
-  // Switches to the "all" view first since the linked-to species may not be
-  // part of whichever view happens to be active by default.
+  // lists): /checklists/[id]?species=<id> opens that species' panel directly,
+  // or /checklists/[id]?species=<id1>,<id2>,... filters the table down to
+  // exactly those flagged rows. Switches to the "all" view first since the
+  // linked-to species may not be part of whichever view happens to be active
+  // by default.
   const searchParams = useSearchParams();
   useEffect(() => {
     const speciesParam = searchParams.get("species");
     if (speciesParam) {
+      const ids = speciesParam.split(",").map((id) => id.trim()).filter(Boolean);
       setActiveView("all");
-      setActiveSpeciesId(speciesParam);
+      if (ids.length > 1) {
+        setFocusedIds(new Set(ids));
+      } else if (ids.length === 1) {
+        setActiveSpeciesId(ids[0]);
+      }
     }
     // Intentionally run only once on mount — this is a one-time deep-link
     // handoff, not a live binding to the URL.
@@ -510,6 +535,9 @@ export default function WorkbenchPage() {
   const filteredSpecies = useMemo(() => {
     let list = species; // already deduplicated (non-canonicals removed) by useWorkbenchView
 
+    if (focusedIds) {
+      list = list.filter((s) => focusedIds.has(s.id));
+    }
     if (filters.families.size > 0) {
       list = list.filter((s) => filters.families.has(s.family ?? "Unclassified"));
     }
@@ -523,7 +551,7 @@ export default function WorkbenchPage() {
       list = list.filter((s) => filters.reviewStatus.has(s.review_status));
     }
     return list;
-  }, [species, filters, evidenceQualityById]);
+  }, [species, filters, evidenceQualityById, focusedIds]);
 
   const searchSuggestions = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
@@ -694,9 +722,18 @@ export default function WorkbenchPage() {
     const status = speciesById.get(id)?.taxonomy_status;
     return status === "authority_conflict" || status === "synonym";
   }).length;
-  // accepted + rejected are mutually exclusive subsets of counts.all, so this is
-  // exactly "every species has been reviewed" with no extra aggregation needed.
-  const allReviewed = counts.all > 0 && counts.accepted + counts.rejected === counts.all;
+  // Deliberately computed from the full unfiltered active list (allSpecies),
+  // not the deduplicated `counts` from useWorkbenchView — counts.all hides
+  // non-canonical rows collapsed behind an authority-conflict "canonical"
+  // row, but GET /api/checklists/[id]/validate (which actually gates
+  // publishing) checks every active row's review_status with no such
+  // dedup. Using counts.all here previously let this button light up
+  // "ready" while a hidden sibling row was still unreviewed, only for the
+  // publish dialog to then block on it — this keeps the two in agreement.
+  const allReviewed = useMemo(() => {
+    const active = (allSpecies ?? []).filter((s) => s.is_active !== false);
+    return active.length > 0 && active.every((s) => s.review_status === "accepted" || s.review_status === "rejected");
+  }, [allSpecies]);
 
   // Row virtualization: bounds mounted SpeciesRow instances to roughly the viewport
   // regardless of how many species are in the checklist. Uses the native-<table>
@@ -881,8 +918,8 @@ export default function WorkbenchPage() {
 
                   <button
                     key={view.id}
-                    onClick={() => setActiveView(view.id)}
-                    className={`workbench-sidebar-item ${activeView === view.id
+                    onClick={() => selectView(view.id)}
+                    className={`workbench-sidebar-item ${activeView === view.id && !focusedIds
                       ? "workbench-sidebar-item-active"
                       : ""
                       }`}
@@ -942,8 +979,8 @@ export default function WorkbenchPage() {
 
                   <button
                     key={view.id}
-                    onClick={() => setActiveView(view.id)}
-                    className={`workbench-sidebar-item ${activeView === view.id
+                    onClick={() => selectView(view.id)}
+                    className={`workbench-sidebar-item ${activeView === view.id && !focusedIds
                       ? "workbench-sidebar-item-active"
                       : ""
                       }`}
@@ -1373,6 +1410,44 @@ export default function WorkbenchPage() {
               </div>
             )}
           </div>
+
+          {/* Flagged-rows banner — shown when landed here from the publish
+              readiness dialog's "view in workbench" link. */}
+          {focusedIds && (
+            <div className="px-3 py-1.5 border-b border-outline-variant flex items-center gap-2 bg-amber-50">
+              <span className="material-symbols-outlined text-[14px] text-amber-600">flag</span>
+              <span className="font-code-md text-[10px] font-bold text-amber-700 uppercase">
+                Showing {focusedIds.size} flagged row{focusedIds.size === 1 ? "" : "s"} from publish check
+              </span>
+              <button
+                onClick={() => setFocusedIds(null)}
+                className="font-code-md text-[10px] font-bold uppercase text-amber-700 underline hover:text-amber-900"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
+          {/* Duplicate-taxa merge action */}
+          {!focusedIds && activeView === "duplicates" && counts.duplicates > 0 && (
+            <div className="px-3 py-1.5 border-b border-outline-variant flex items-center gap-2 bg-surface-container-low/30">
+              <span className="font-code-md text-[10px] font-bold text-on-surface-variant uppercase">
+                {counts.duplicates} rows share a taxon ID with another row
+              </span>
+              <button
+                onClick={() => mergeDuplicates.mutate()}
+                disabled={mergeDuplicates.isPending}
+                className="status-pill px-2.5 py-1 border border-outline-variant bg-white text-on-surface hover:bg-surface-container-low disabled:opacity-50"
+              >
+                {mergeDuplicates.isPending ? "Merging..." : "Auto-merge duplicates"}
+              </button>
+              {mergeDuplicates.isError && (
+                <span className="font-code-md text-[10px] text-error">
+                  {(mergeDuplicates.error as Error).message}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Bulk selection actions */}
           {selectedIds.size > 0 && (

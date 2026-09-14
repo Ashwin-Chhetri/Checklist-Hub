@@ -6,6 +6,8 @@ import type { ReviewStatus, Species, TaxonomyStatus } from "@/types/species.type
 export type WorkbenchViewId =
   | "all"
   | "needs_review"
+  | "duplicates"
+  | "incomplete"
   | "synonyms"
   | "authority_conflicts"
   | "unresolved"
@@ -29,6 +31,8 @@ const VIEW_FILTERS: Record<
 > = {
   all:                  { activeOnly: true },
   needs_review:         { review: "not_reviewed", activeOnly: true },
+  duplicates:           { activeOnly: true, excludeRejected: true },
+  incomplete:           { activeOnly: true, excludeRejected: true },
   synonyms:             { taxonomy: "synonym", activeOnly: true, excludeRejected: true },
   authority_conflicts:  { taxonomy: "authority_conflict", activeOnly: true, excludeRejected: true },
   unresolved:           { taxonomy: "unresolved", activeOnly: true, excludeRejected: true },
@@ -41,8 +45,8 @@ const VIEW_FILTERS: Record<
  * Workbench table state: active sidebar view, sorting, column filters, and
  * row selection, layered on top of the species list query for a checklist.
  *
- * Default views filter to is_active = true only. The "Merged / Hidden" view
- * shows is_active = false rows for audit and undo purposes.
+ * Default views filter to is_active = true only. The "Merged" view shows
+ * is_active = false rows for audit and undo purposes.
  */
 export function useWorkbenchView(checklistId: string) {
   const speciesQuery = useSpeciesList(checklistId);
@@ -104,6 +108,64 @@ export function useWorkbenchView(checklistId: string) {
     return { nonCanonicalIds, relatedRowsByCanonical };
   }, [speciesQuery.data]);
 
+  // Rows that share a gbif_taxon_key with at least one other active,
+  // non-rejected row — mirrors `duplicate_groups` in GET
+  // /api/checklists/[id]/validate so the "Duplicates" sidebar view and count
+  // match what the publish-readiness dialog flags. Unlike nonCanonicalIds
+  // above (which hides all-but-one row per conflict group), every row in a
+  // duplicate group is kept here since the user needs to see and merge them.
+  const duplicateSpeciesIds = useMemo(() => {
+    const all = speciesQuery.data ?? [];
+    const relevant = all.filter((s) => s.is_active !== false && s.review_status !== "rejected");
+    const byKey = new Map<number, Species[]>();
+    for (const s of relevant) {
+      if (!s.gbif_taxon_key) continue;
+      const group = byKey.get(s.gbif_taxon_key) ?? [];
+      group.push(s);
+      byKey.set(s.gbif_taxon_key, group);
+    }
+    const ids = new Set<string>();
+    for (const group of byKey.values()) {
+      if (group.length < 2) continue;
+      for (const s of group) ids.add(s.id);
+    }
+    return ids;
+  }, [speciesQuery.data]);
+
+  // Rows with a blank higher-taxon column, or that disagree with a same-genus
+  // sibling on family/order/class/phylum/kingdom — mirrors `classification_issues`
+  // in GET /api/checklists/[id]/validate (both `missing_rank` and the
+  // publish-blocking `inconsistent_genus`) so incomplete/inconsistent rows
+  // surface here instead of only being visible inside the publish dialog.
+  const HIGHER_RANKS = ["kingdom", "phylum", "class", "order", "family"] as const;
+  const incompleteSpeciesIds = useMemo(() => {
+    const all = speciesQuery.data ?? [];
+    const relevant = all.filter((s) => s.is_active !== false && s.review_status !== "rejected");
+    const ids = new Set<string>();
+
+    for (const s of relevant) {
+      if (HIGHER_RANKS.some((rank) => !s[rank])) ids.add(s.id);
+    }
+
+    const byGenus = new Map<string, Species[]>();
+    for (const s of relevant) {
+      if (!s.genus) continue;
+      const group = byGenus.get(s.genus) ?? [];
+      group.push(s);
+      byGenus.set(s.genus, group);
+    }
+    for (const group of byGenus.values()) {
+      if (group.length < 2) continue;
+      for (const rank of ["family", "order", "class", "phylum", "kingdom"] as const) {
+        const values = new Set(group.map((s) => s[rank]).filter(Boolean));
+        if (values.size > 1) {
+          for (const s of group) ids.add(s.id);
+        }
+      }
+    }
+    return ids;
+  }, [speciesQuery.data]);
+
   const baseFilteredSpecies = useMemo(() => {
     const all = speciesQuery.data ?? [];
     const { review, taxonomy, activeOnly, inactiveOnly, excludeRejected } = VIEW_FILTERS[activeView];
@@ -116,11 +178,13 @@ export function useWorkbenchView(checklistId: string) {
       if (review && species.review_status !== review) return false;
       if (taxonomy && species.taxonomy_status !== taxonomy) return false;
       if (excludeRejected && species.review_status === "rejected") return false;
+      if (activeView === "duplicates" && !duplicateSpeciesIds.has(species.id)) return false;
+      if (activeView === "incomplete" && !incompleteSpeciesIds.has(species.id)) return false;
       // Non-canonical rows are represented by their canonical partner — hide them in all views.
       if (nonCanonicalIds.has(species.id)) return false;
       return true;
     });
-  }, [speciesQuery.data, activeView, nonCanonicalIds]);
+  }, [speciesQuery.data, activeView, nonCanonicalIds, duplicateSpeciesIds, incompleteSpeciesIds]);
 
   // Stamp stickiness for every row currently visible under the active view, so that
   // when a row's status changes and it no longer matches the filter, it keeps
@@ -166,6 +230,8 @@ export function useWorkbenchView(checklistId: string) {
     return {
       all: active.length,
       needs_review: active.filter((s) => s.review_status === "not_reviewed").length,
+      duplicates: active.filter((s) => duplicateSpeciesIds.has(s.id)).length,
+      incomplete: active.filter((s) => incompleteSpeciesIds.has(s.id)).length,
       synonyms: unrejected.filter((s) => s.taxonomy_status === "synonym").length,
       authority_conflicts: unrejected.filter((s) => s.taxonomy_status === "authority_conflict").length,
       unresolved: unrejected.filter((s) => s.taxonomy_status === "unresolved").length,
@@ -173,7 +239,7 @@ export function useWorkbenchView(checklistId: string) {
       rejected: active.filter((s) => s.review_status === "rejected").length,
       merged: all.filter((s) => s.is_active === false).length,
     };
-  }, [speciesQuery.data, nonCanonicalIds]);
+  }, [speciesQuery.data, nonCanonicalIds, duplicateSpeciesIds, incompleteSpeciesIds]);
 
   return {
     species: filteredSpecies,
