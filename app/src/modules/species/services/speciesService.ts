@@ -14,6 +14,7 @@ export async function listSpecies(checklistId: string): Promise<Species[]> {
       .select("*")
       .eq("checklist_id", checklistId)
       .order("scientific_name", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, to),
   );
 }

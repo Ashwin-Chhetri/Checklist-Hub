@@ -31,6 +31,7 @@ export async function getAcceptedSpecies(checklistId: string): Promise<Species[]
       .eq("review_status", "accepted")
       .eq("is_active", true)
       .order("scientific_name", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, to),
   );
 }

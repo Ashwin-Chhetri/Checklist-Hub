@@ -204,6 +204,7 @@ export async function runWatcherEtl(
         .from("species")
         .select("id, gbif_taxon_key, scientific_name, common_name, is_active, taxonomy, evidence")
         .eq("checklist_id", checklistRow.id)
+        .order("id", { ascending: true })
         .range(from, to),
     );
 

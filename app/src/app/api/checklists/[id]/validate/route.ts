@@ -155,6 +155,7 @@ export async function GET(
         )
         .eq("checklist_id", checklistId)
         .eq("is_active", true)
+        .order("id", { ascending: true })
         .range(from, to),
     );
   } catch (err) {

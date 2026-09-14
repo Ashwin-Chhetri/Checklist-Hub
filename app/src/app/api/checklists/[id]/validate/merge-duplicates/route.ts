@@ -57,6 +57,7 @@ export async function POST(
         .eq("checklist_id", checklistId)
         .eq("is_active", true)
         .neq("review_status", "rejected")
+        .order("id", { ascending: true })
         .range(from, to),
     );
   } catch (err) {

@@ -52,6 +52,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .from("species")
         .select("scientific_name, gbif_taxon_key")
         .eq("checklist_id", checklistId)
+        .order("id", { ascending: true })
         .range(from, to),
     );
   } catch (err) {
