@@ -1,18 +1,19 @@
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/supabase/fetchAllRows";
 import { parseJsonResponse } from "@/lib/http/parseJsonResponse";
 import type { CreateChecklistSpeciesInput } from "@/types/checklist.types";
 import type { ReviewStatus, Species } from "@/types/species.types";
 
 export async function listSpecies(checklistId: string): Promise<Species[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("species")
-    .select("*")
-    .eq("checklist_id", checklistId)
-    .order("scientific_name", { ascending: true });
-
-  if (error) throw error;
-  return (data ?? []) as Species[];
+  return fetchAllRows<Species>((from, to) =>
+    supabase
+      .from("species")
+      .select("*")
+      .eq("checklist_id", checklistId)
+      .order("scientific_name", { ascending: true })
+      .range(from, to),
+  );
 }
 
 export async function getSpecies(speciesId: string): Promise<Species> {

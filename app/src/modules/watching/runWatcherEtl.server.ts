@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/serviceClient";
+import { fetchAllRows } from "@/lib/supabase/fetchAllRows";
 import { lookupBackbone } from "@/lib/taxonomy/backbone.server";
 import { buildDiscoveryContext } from "@/modules/evidence/hooks/useSpeciesInventory";
 import { discoverSpeciesInventory } from "@/modules/evidence/discovery/aggregator";
@@ -193,11 +194,18 @@ export async function runWatcherEtl(
     // Every species row regardless of is_active — an inactive row (merged,
     // ignored, or rejected) still represents a prior human decision about
     // that taxon, and its identity must keep suppressing rediscovery just
-    // like an active row's does (see collectKnownIdentifiers).
-    const { data: speciesRows } = await supabase
-      .from("species")
-      .select("id, gbif_taxon_key, scientific_name, common_name, is_active, taxonomy, evidence")
-      .eq("checklist_id", checklistRow.id);
+    // like an active row's does (see collectKnownIdentifiers). Paginated
+    // (see fetchAllRows) since an unbounded select silently truncates past
+    // the project's db-max-rows limit for large checklists, which would
+    // otherwise let the watcher re-suggest species already added past the
+    // cutoff.
+    const speciesRows = await fetchAllRows<SpeciesIdentityRow>((from, to) =>
+      supabase
+        .from("species")
+        .select("id, gbif_taxon_key, scientific_name, common_name, is_active, taxonomy, evidence")
+        .eq("checklist_id", checklistRow.id)
+        .range(from, to),
+    );
 
     const knownTaxonKeys = new Set<number>();
     const knownNames = new Set<string>();
@@ -209,7 +217,7 @@ export async function runWatcherEtl(
     // attach an observation update to the wrong row.
     const activeByCommonName = new Map<string, string | null>();
 
-    for (const row of (speciesRows ?? []) as SpeciesIdentityRow[]) {
+    for (const row of speciesRows) {
       const { taxonKeys, names, commonNames } = collectKnownIdentifiers(row);
       for (const key of taxonKeys) knownTaxonKeys.add(key);
       for (const name of names) knownNames.add(name);
@@ -234,7 +242,7 @@ export async function runWatcherEtl(
     // baseline lived only in this jsonb column.
     const previousTotalBySpecies = new Map<string, number>();
     const previousCountsBySpecies = new Map<string, Record<string, number>>();
-    for (const row of (speciesRows ?? []) as SpeciesIdentityRow[]) {
+    for (const row of speciesRows) {
       if (!row.is_active) continue;
       previousTotalBySpecies.set(row.id, row.evidence?.occurrence_count ?? 0);
       const bucket: Record<string, number> = {};

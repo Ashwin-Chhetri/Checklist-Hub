@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetchAllRows";
 import { buildSpeciesPayload } from "@/lib/taxonomy/buildSpeciesPayload.server";
 import type { Checklist, CreateChecklistSpeciesInput } from "@/types/checklist.types";
 import type { Species } from "@/types/species.types";
@@ -40,15 +41,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // Dedupe against species already in this checklist (by scientific name or
-  // GBIF taxon key) before running the normalization pipeline.
-  const { data: existingRows } = await supabase
-    .from("species")
-    .select("scientific_name, gbif_taxon_key")
-    .eq("checklist_id", checklistId);
+  // GBIF taxon key) before running the normalization pipeline. Paginated
+  // (see fetchAllRows) since an unbounded select silently truncates past
+  // the project's db-max-rows limit — without it, checklists larger than
+  // that limit could accept real duplicates past the cutoff.
+  let existingRows: { scientific_name: string; gbif_taxon_key: number | null }[];
+  try {
+    existingRows = await fetchAllRows<{ scientific_name: string; gbif_taxon_key: number | null }>((from, to) =>
+      supabase
+        .from("species")
+        .select("scientific_name, gbif_taxon_key")
+        .eq("checklist_id", checklistId)
+        .range(from, to),
+    );
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+  }
 
-  const existingNames = new Set((existingRows ?? []).map((r) => r.scientific_name.trim().toLowerCase()));
+  const existingNames = new Set(existingRows.map((r) => r.scientific_name.trim().toLowerCase()));
   const existingKeys = new Set(
-    (existingRows ?? []).map((r) => r.gbif_taxon_key).filter((k): k is number => k != null),
+    existingRows.map((r) => r.gbif_taxon_key).filter((k): k is number => k != null),
   );
 
   const toImport = candidates.filter((s) => {

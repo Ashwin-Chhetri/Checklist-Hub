@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetchAllRows";
 import { fillHierarchy, mergeEvidence, type MergeableEvidence } from "@/lib/taxonomy/mergeSpeciesData.server";
 
 interface SpeciesRow {
@@ -45,18 +46,22 @@ export async function POST(
   // Excludes rejected rows — they'll never be published, so they're not
   // counted as a duplicate issue by GET /validate either; this keeps the two
   // routes in agreement about what counts as an outstanding duplicate.
-  const { data: allSpecies, error: speciesErr } = await supabase
-    .from("species")
-    .select("id, gbif_taxon_key, taxonomy_status, evidence, kingdom, phylum, class, order, family, genus")
-    .eq("checklist_id", checklistId)
-    .eq("is_active", true)
-    .neq("review_status", "rejected");
-
-  if (speciesErr) {
-    return NextResponse.json({ error: speciesErr.message }, { status: 400 });
+  // Paginated (see fetchAllRows) since an unbounded select silently
+  // truncates at the project's db-max-rows limit for large checklists.
+  let rows: SpeciesRow[];
+  try {
+    rows = await fetchAllRows<SpeciesRow>((from, to) =>
+      supabase
+        .from("species")
+        .select("id, gbif_taxon_key, taxonomy_status, evidence, kingdom, phylum, class, order, family, genus")
+        .eq("checklist_id", checklistId)
+        .eq("is_active", true)
+        .neq("review_status", "rejected")
+        .range(from, to),
+    );
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
   }
-
-  const rows = (allSpecies ?? []) as SpeciesRow[];
 
   const byKey = new Map<number, SpeciesRow[]>();
   for (const r of rows) {

@@ -865,7 +865,7 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
                 <span className="text-slate-500">UNKNOWN</span>
               </div>
             </div>
-            <div className="pt-2 border-t border-surface-dim/50 flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+            <div className="pt-2 border-t border-surface-dim/50 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
               <button
                 className="text-[9px] font-bold text-brand uppercase flex items-center gap-1 group/link"
                 onClick={() => onSelect(species.id)}
@@ -874,6 +874,20 @@ const SpeciesRow = forwardRef<HTMLTableRowElement, SpeciesRowProps>(function Spe
                 <span className="material-symbols-outlined text-[14px] transition-transform group-hover/link:translate-y-0.5">
                   expand_more
                 </span>
+              </button>
+              {/* No backbone match exists to agree/disagree with, so this is the
+                  one resolving action for an unresolved row: confirm the
+                  imported name/identity as-is (e.g. a locally described taxon
+                  not yet in GBIF). Calls the same resolve-taxonomy RPC the
+                  synonym/conflict AGREE buttons use, which sets
+                  taxonomy_status='accepted' — clearing the Unresolved flag. */}
+              <button
+                disabled={resolveTaxonomy.isPending}
+                className="px-2 py-1 text-[9px] font-bold uppercase rounded-sm border border-brand text-brand hover:bg-brand hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Confirm this name/identity as correct even without a GBIF backbone match"
+                onClick={() => resolveTaxonomy.mutate("agree")}
+              >
+                {resolveTaxonomy.isPending ? "Confirming..." : "Confirm as Accepted"}
               </button>
             </div>
           </div>

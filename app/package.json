@@ -9,7 +9,8 @@
     "lint": "eslint",
     "build:backbone": "node scripts/build-gbif-backbone.mjs",
     "build:gadm": "node scripts/build-gadm.mjs",
-    "test:scope": "node scripts/test-scope-suggestions.mjs"
+    "test:scope": "node scripts/test-scope-suggestions.mjs",
+    "test:gadm-districts": "node scripts/test-gadm-districts.mjs"
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.19.5",

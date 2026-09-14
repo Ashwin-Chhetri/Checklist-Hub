@@ -58,7 +58,7 @@ export async function PATCH(
   const { data: existing, error: fetchError } = await supabase
     .from("species")
     .select(
-      "id, checklist_id, taxonomy, evidence, scientific_name, gbif_taxon_key, kingdom, phylum, class, order, family, genus",
+      "id, checklist_id, taxonomy, evidence, scientific_name, gbif_taxon_key, taxonomy_status, kingdom, phylum, class, order, family, genus",
     )
     .eq("id", speciesId)
     .eq("checklist_id", checklistId)
@@ -87,6 +87,17 @@ export async function PATCH(
     "gbif_taxon_key" in updates ? (updates.gbif_taxon_key as number | null) : existing.gbif_taxon_key;
   const effectiveScientificName =
     "scientific_name" in updates ? (updates.scientific_name as string | null) : existing.scientific_name;
+
+  // An "unresolved" row has no backbone match at all — the moment a human
+  // manually supplies one here (via the Taxonomy panel's GBIF type-ahead),
+  // that's a genuine resolution, so clear the flag the same way agreeing to
+  // a synonym/conflict match does. Without this, editing in a real match
+  // fixed the row's identity but left it permanently stuck in "Unresolved"
+  // (see resolve_species_taxonomy, which only ever runs from the
+  // synonym/conflict AGREE/DISAGREE buttons, never from this edit form).
+  if (existing.taxonomy_status === "unresolved" && effectiveGbifKey) {
+    updates.taxonomy_status = "accepted";
+  }
 
   let duplicateRow: {
     id: string;

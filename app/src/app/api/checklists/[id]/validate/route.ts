@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetchAllRows";
 import type { TaxonomyAuthorityConflict } from "@/types/species.types";
 
 interface DuplicateGroupRow {
@@ -37,6 +38,23 @@ interface AuthorityConflictRow {
   scientific_name: string;
   conflict_count: number;
   conflicts: TaxonomyAuthorityConflict[];
+}
+
+interface ValidateSpeciesRow {
+  id: string;
+  scientific_name: string;
+  gbif_taxon_key: number | null;
+  taxonomy_status: string;
+  review_status: string;
+  taxonomy: unknown;
+  evidence: unknown;
+  is_active: boolean;
+  kingdom: string | null;
+  phylum: string | null;
+  class: string | null;
+  order: string | null;
+  family: string | null;
+  genus: string | null;
 }
 
 export interface ReviewStatusCounts {
@@ -122,20 +140,26 @@ export async function GET(
     return NextResponse.json({ error: "Checklist not found." }, { status: 404 });
   }
 
-  // Fetch all active species rows with taxonomy data.
-  const { data: allSpecies, error: speciesErr } = await supabase
-    .from("species")
-    .select(
-      "id, scientific_name, gbif_taxon_key, taxonomy_status, review_status, taxonomy, evidence, is_active, kingdom, phylum, class, order, family, genus",
-    )
-    .eq("checklist_id", checklistId)
-    .eq("is_active", true);
-
-  if (speciesErr) {
-    return NextResponse.json({ error: speciesErr.message }, { status: 400 });
+  // Fetch all active species rows with taxonomy data — paginated (see
+  // fetchAllRows) since an unbounded select silently truncates at the
+  // project's db-max-rows limit (1000 by default) for checklists larger
+  // than that, which previously made this report disagree with anything
+  // fetched client-side under a different sort order.
+  let rows: ValidateSpeciesRow[];
+  try {
+    rows = await fetchAllRows<ValidateSpeciesRow>((from, to) =>
+      supabase
+        .from("species")
+        .select(
+          "id, scientific_name, gbif_taxon_key, taxonomy_status, review_status, taxonomy, evidence, is_active, kingdom, phylum, class, order, family, genus",
+        )
+        .eq("checklist_id", checklistId)
+        .eq("is_active", true)
+        .range(from, to),
+    );
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
   }
-
-  const rows = allSpecies ?? [];
 
   // A rejected row will never be published (getAcceptedSpecies only selects
   // review_status='accepted'), so its taxonomy never needs resolving and it
@@ -248,7 +272,7 @@ export async function GET(
   const classificationIssues: ClassificationIssueRow[] = [];
 
   for (const r of publishRelevantRows) {
-    const missing = HIGHER_RANKS.filter((rank) => !(r as Record<string, unknown>)[rank]);
+    const missing = HIGHER_RANKS.filter((rank) => !r[rank]);
     if (missing.length > 0) {
       classificationIssues.push({
         species_id: r.id,
@@ -261,7 +285,7 @@ export async function GET(
 
   const byGenus = new Map<string, typeof publishRelevantRows>();
   for (const r of publishRelevantRows) {
-    const genus = (r as Record<string, unknown>).genus as string | null;
+    const genus = r.genus;
     if (!genus) continue;
     const group = byGenus.get(genus) ?? [];
     group.push(r);
@@ -270,9 +294,7 @@ export async function GET(
   for (const [genus, group] of byGenus.entries()) {
     if (group.length <= 1) continue;
     for (const rank of ["family", "order", "class", "phylum", "kingdom"] as const) {
-      const values = new Set(
-        group.map((r) => (r as Record<string, unknown>)[rank] as string | null).filter(Boolean),
-      );
+      const values = new Set(group.map((r) => r[rank]).filter(Boolean));
       if (values.size > 1) {
         for (const r of group) {
           classificationIssues.push({

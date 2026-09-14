@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/supabase/fetchAllRows";
 import type { Species } from "@/types/species.types";
 import type { ChecklistPublicationSnapshot } from "@/types/checklist.types";
 import type { ValidationReport } from "@/app/api/checklists/[id]/validate/route";
@@ -22,16 +23,16 @@ export async function getPublicationReadiness(checklistId: string): Promise<Vali
 
 export async function getAcceptedSpecies(checklistId: string): Promise<Species[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("species")
-    .select("*")
-    .eq("checklist_id", checklistId)
-    .eq("review_status", "accepted")
-    .eq("is_active", true)
-    .order("scientific_name", { ascending: true });
-
-  if (error) throw error;
-  return (data ?? []) as Species[];
+  return fetchAllRows<Species>((from, to) =>
+    supabase
+      .from("species")
+      .select("*")
+      .eq("checklist_id", checklistId)
+      .eq("review_status", "accepted")
+      .eq("is_active", true)
+      .order("scientific_name", { ascending: true })
+      .range(from, to),
+  );
 }
 
 export async function publishChecklist(checklistId: string): Promise<void> {

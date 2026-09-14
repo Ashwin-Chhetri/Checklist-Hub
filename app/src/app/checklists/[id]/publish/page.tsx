@@ -156,7 +156,9 @@ export default function PublishChecklistPage() {
                     (readiness?.total_species ?? 0) > 0
                   }
                   label="All species reviewed"
-                  value={`${readiness?.review_status_counts.accepted ?? 0} / ${readiness?.total_species ?? 0}`}
+                  value={`${
+                    (readiness?.review_status_counts.accepted ?? 0) + (readiness?.review_status_counts.rejected ?? 0)
+                  } / ${readiness?.total_species ?? 0}`}
                   checklistId={checklistId}
                 />
                 <ReadinessRow
