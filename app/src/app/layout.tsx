@@ -121,7 +121,7 @@ const jsonLd = {
       dateModified: "2026-07-04",
       author: { "@id": `${SITE_URL}/#founder` },
       citation:
-        "Chhetri, A. (2026). Checklist Hub: Evidence-based species checklist platform for biodiversity experts [Computer software]. https://checklisthub.in",
+        "Chhetri, A. (2026). Checklist Hub: an evidence-backed species checklist platform for publishing to GBIF [Computer software]. https://checklisthub.in",
     },
   ],
 };

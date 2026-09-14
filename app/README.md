@@ -1,6 +1,6 @@
 # Checklist Hub
 
-**Checklist Hub** helps biodiversity experts build a species checklist for a region or taxon group — and publish it straight to GBIF. It replaces the usual round of emails, spreadsheets, and manual synonym-checking with one shared workspace, from the first name you import to the moment it's published.
+Build a species checklist backed by real evidence — and publish it straight to GBIF.
 
 🔗 **Live app:** [checklisthub.in](https://checklisthub.in)  
 🔗 **Docs:** [checklisthub.in/docs](https://checklisthub.in/docs)  
@@ -10,7 +10,9 @@
 
 ## Who is this for?
 
-Biodiversity experts — taxonomists, park authorities, conservation planners, researchers — who need to build a species checklist for a region or taxon group and get it onto GBIF. If you've ever chased down evidence across three different databases, argued about a synonym over email, or hand-built a Darwin Core Archive from a spreadsheet, this is for you.
+Biodiversity experts — taxonomists, park authorities, conservation planners, researchers — who need to build a species checklist for a region or taxon group and publish it to GBIF. It takes away the usual back-and-forth of emails, spreadsheets, and manually resolving synonyms.
+
+Sign in with Google, ORCID (the researcher identity standard), or email.
 
 Docs: [What is Checklist Hub?](https://checklisthub.in/docs/getting-started/what-is-checklist-hub)
 
@@ -18,18 +20,26 @@ Docs: [What is Checklist Hub?](https://checklisthub.in/docs/getting-started/what
 
 ## What it does
 
-### 1. Gather evidence
-Pull existing occurrence records from GBIF, iNaturalist (citizen science data), and eBird, or extract species presence straight from the literature. Already have data? Upload your own CSV. For every species, Checklist Hub gathers whatever evidence of presence exists — literature mentions, occurrence records, or both.
+### 1. Gather & validate evidence
+- Pulls existing occurrence records from GBIF, iNaturalist (citizen science data), and eBird
+- Extracts species presence straight from the literature
+- Or upload your own manually collected CSV
+- Every name is checked against the GBIF Backbone and Catalogue of Life, with synonyms resolved automatically
+- For each species, evidence of presence — literature, occurrence records, or both — is gathered and attached
 
 Docs: [Importing data](https://checklisthub.in/docs/getting-started/import-data) · [Validating species](https://checklisthub.in/docs/getting-started/validate-species)
 
 ### 2. Review together
-A shared workspace where collaborators see the evidence side by side, discuss it in threads, and Accept or Reject each species — every acceptance needs at least one reviewer. Outdated taxonomy is automatically flagged against newly accepted names. Turn on the Watcher to keep an eye on outside sources for new species and new records over time.
+- A shared workspace where collaborators view the evidence, discuss it in threads, and Accept or Reject each species — every acceptance needs at least one reviewer
+- Outdated taxonomy is automatically flagged against newly accepted names
+- Reconcile against other checklists to catch shared species, missing species, and conflicts
+- Turn on the Watcher to catch new species and new field records from outside sources over time — every update still waits on a reviewer
 
-Docs: [Workbench](https://checklisthub.in/docs/features/workbench) · [Collaborating](https://checklisthub.in/docs/getting-started/collaborate) · [Watcher](https://checklisthub.in/docs/features/watcher)
+Docs: [Workbench](https://checklisthub.in/docs/features/workbench) · [Collaborating](https://checklisthub.in/docs/getting-started/collaborate) · [Reconciliation](https://checklisthub.in/docs/features/reconciliation) · [Watcher](https://checklisthub.in/docs/features/watcher)
 
 ### 3. Publish
-Once every species is verified, Checklist Hub generates the metadata and builds the Darwin Core Archive for you — no hand-assembly required. Push it to a nearby IPT accepted by GBIF, and you're done.
+- Once every species is verified, Checklist Hub generates the metadata and builds the Darwin Core Archive for you — no hand-assembly required
+- Push it to a nearby IPT accepted by GBIF, and you're done
 
 Docs: [Publishing to GBIF](https://checklisthub.in/docs/getting-started/publish-to-gbif) · [Darwin Core format](https://checklisthub.in/docs/getting-started/darwin-core-format)
 

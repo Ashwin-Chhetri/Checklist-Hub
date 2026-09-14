@@ -28,8 +28,8 @@ export default function CitationPage() {
             APA
           </p>
           <p className="font-body-sm text-body-sm text-on-surface">
-            Chhetri, A. (2026). <em>Checklist Hub: Evidence-based species checklist
-            platform for biodiversity experts</em> [Computer software]. Checklist Hub.
+            Chhetri, A. (2026). <em>Checklist Hub: an evidence-backed species checklist
+            platform for publishing to GBIF</em> [Computer software]. Checklist Hub.
             https://checklisthub.in
           </p>
         </div>
@@ -40,7 +40,7 @@ export default function CitationPage() {
           <pre className="font-code-md text-code-md text-on-surface whitespace-pre-wrap break-words">
 {`@software{checklisthub2026,
   author  = {Chhetri, Ashwin},
-  title   = {Checklist Hub: Evidence-based species checklist platform for biodiversity experts},
+  title   = {Checklist Hub: an evidence-backed species checklist platform for publishing to GBIF},
   year    = {2026},
   url     = {https://checklisthub.in}
 }`}
@@ -57,13 +57,13 @@ export default function CitationPage() {
             "@id": "https://checklisthub.in/#citation",
             name: "Checklist Hub",
             description:
-              "Checklist Hub: Evidence-based species checklist platform for biodiversity experts.",
+              "Checklist Hub: an evidence-backed species checklist platform for publishing to GBIF.",
             url: "https://checklisthub.in",
             author: { "@id": "https://checklisthub.in/#founder" },
             publisher: { "@id": "https://checklisthub.in/#organization" },
             datePublished: "2026-06-29",
             citation:
-              "Chhetri, A. (2026). Checklist Hub: Evidence-based species checklist platform for biodiversity experts [Computer software]. https://checklisthub.in",
+              "Chhetri, A. (2026). Checklist Hub: an evidence-backed species checklist platform for publishing to GBIF [Computer software]. https://checklisthub.in",
             mainEntityOfPage: "https://checklisthub.in/docs/reference/citation",
           }),
         }}

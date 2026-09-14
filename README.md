@@ -2,27 +2,40 @@
 
 # ChecklistHub
 
-Evidence-based species checklist platform for biodiversity experts.
+Build a species checklist backed by real evidence — and publish it straight to GBIF.
 
 **Live:** [checklisthub.in](https://checklisthub.in)
 **Docs:** [checklisthub.in/docs](https://checklisthub.in/docs)
 
 ## Who is this for?
 
-Biodiversity researchers, taxonomists, and reviewers who build and publish
-species checklists for a region or taxon group, and need every accepted
-species backed by evidence — not just a name on a spreadsheet.
+Biodiversity experts — taxonomists, park authorities, conservation planners,
+researchers — who need to build a species checklist for a region or taxon
+group and publish it to GBIF. It takes away the usual back-and-forth of
+emails, spreadsheets, and manually resolving synonyms.
+
+Sign in with Google, ORCID (the researcher identity standard), or email.
 
 ## What it does?
 
-- **Import** a species list (CSV) or discover candidates via literature/data search
-- **Validate** taxonomy against GBIF Backbone / Catalogue of Life, resolving synonyms
-- **Gather evidence** from GBIF, iNaturalist, eBird, museum collections, and literature
-- **Review** as a team — comment, discuss, vote, accept/reject (every accepted species needs ≥1 expert reviewer)
-- **Reconcile** against other checklists — shared species, missing species, conflicts
-- **Watch** live checklists for new field records over time, with reviewer-confirmed updates
-- **Publish** a Darwin Core Archive, ready for an IPT installation
-- **Sign in** with Google or ORCID (the researcher identity standard), or email
+**1. Gather & validate evidence**
+- Import a species list (CSV) or discover candidates via literature/data search
+- Validate taxonomy against GBIF Backbone / Catalogue of Life, with synonyms resolved automatically
+- Gather evidence from GBIF, iNaturalist, eBird, museum collections, and literature
+
+Docs: [Import data](https://checklisthub.in/docs/getting-started/import-data) · [Validate species](https://checklisthub.in/docs/getting-started/validate-species)
+
+**2. Review together**
+- Review as a team — comment, discuss, vote, accept/reject (every accepted species needs ≥1 expert reviewer)
+- Reconcile against other checklists — shared species, missing species, conflicts
+- Watch live checklists for new field records over time, with every update waiting on reviewer confirmation
+
+Docs: [Workbench](https://checklisthub.in/docs/features/workbench) · [Collaborate](https://checklisthub.in/docs/getting-started/collaborate) · [Reconciliation](https://checklisthub.in/docs/features/reconciliation) · [Watcher](https://checklisthub.in/docs/features/watcher)
+
+**3. Publish**
+- Generate a Darwin Core Archive automatically and publish it through a nearby GBIF-registered IPT
+
+Docs: [Publish to GBIF](https://checklisthub.in/docs/getting-started/publish-to-gbif) · [Darwin Core format](https://checklisthub.in/docs/getting-started/darwin-core-format)
 
 See [`USER_GUIDE.md`](USER_GUIDE.md) for the step-by-step workflow,
 [`checklistHub_architecture.md`](checklistHub_architecture.md) for the full
@@ -110,14 +123,14 @@ If you published a checklist through GBIF, cite that checklist's own dataset
 DOI. To cite the **platform** itself (methods section, tool comparison, or
 acknowledgment):
 
-> Chhetri, A. (2026). *Checklist Hub: Evidence-based species checklist
-> platform for biodiversity experts* [Computer software]. Checklist Hub.
+> Chhetri, A. (2026). *Checklist Hub: an evidence-backed species checklist
+> platform for publishing to GBIF* [Computer software]. Checklist Hub.
 > https://checklisthub.in
 
 ```bibtex
 @software{checklisthub2026,
   author  = {Chhetri, Ashwin},
-  title   = {Checklist Hub: Evidence-based species checklist platform for biodiversity experts},
+  title   = {Checklist Hub: an evidence-backed species checklist platform for publishing to GBIF},
   year    = {2026},
   url     = {https://checklisthub.in}
 }
