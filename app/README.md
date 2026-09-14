@@ -1,6 +1,6 @@
 # Checklist Hub
 
-**Checklist Hub** helps biodiversity experts validate, review, and publish species checklists through evidence-based taxonomic workflows. It transforms raw species lists into defensible scientific checklists supported by taxonomy validation, aggregated occurrence evidence, expert peer review, and publication-ready Darwin Core Archive outputs.
+**Checklist Hub** helps biodiversity experts build a species checklist for a region or taxon group — and publish it straight to GBIF. It replaces the usual round of emails, spreadsheets, and manual synonym-checking with one shared workspace, from the first name you import to the moment it's published.
 
 🔗 **Live app:** [checklisthub.in](https://checklisthub.in)  
 🔗 **Docs:** [checklisthub.in/docs](https://checklisthub.in/docs)  
@@ -8,22 +8,30 @@
 
 ---
 
-## What is it?
+## Who is this for?
 
-Most species checklists live in spreadsheets — names typed into cells with no taxonomic authority check, no evidence, no reviewer sign-off, and no way to reconstruct the reasoning later. Synonyms, duplicates, and unsupported names ship silently.
+Biodiversity experts — taxonomists, park authorities, conservation planners, researchers — who need to build a species checklist for a region or taxon group and get it onto GBIF. If you've ever chased down evidence across three different databases, argued about a synonym over email, or hand-built a Darwin Core Archive from a spreadsheet, this is for you.
 
-Checklist Hub treats every species as a **decision record**, not a row — identity, taxonomy, evidence, review history, and discussion all attached to it, with nothing accepted until at least one qualified reviewer signs off.
+Docs: [What is Checklist Hub?](https://checklisthub.in/docs/getting-started/what-is-checklist-hub)
 
 ---
 
-## How It Works
+## What it does
 
-| Step | What happens |
-|---|---|
-| **01 — Import & Validate** | Upload a CSV or run a discovery search. Names are checked against the GBIF Backbone and Catalogue of Life; synonyms resolved automatically. |
-| **02 — Gather Evidence & Reconcile** | Evidence is pulled from GBIF, iNaturalist, eBird, and literature, deduplicated, and compared against other checklists for conflicts. |
-| **03 — Review & Collaborate** | Experts work the Workbench together — comment, discuss, vote. Nothing is accepted without at least one reviewer. |
-| **04 — Publish** | Run readiness checks, generate the Darwin Core package, and publish through a GBIF-registered IPT. |
+### 1. Gather evidence
+Pull existing occurrence records from GBIF, iNaturalist (citizen science data), and eBird, or extract species presence straight from the literature. Already have data? Upload your own CSV. For every species, Checklist Hub gathers whatever evidence of presence exists — literature mentions, occurrence records, or both.
+
+Docs: [Importing data](https://checklisthub.in/docs/getting-started/import-data) · [Validating species](https://checklisthub.in/docs/getting-started/validate-species)
+
+### 2. Review together
+A shared workspace where collaborators see the evidence side by side, discuss it in threads, and Accept or Reject each species — every acceptance needs at least one reviewer. Outdated taxonomy is automatically flagged against newly accepted names. Turn on the Watcher to keep an eye on outside sources for new species and new records over time.
+
+Docs: [Workbench](https://checklisthub.in/docs/features/workbench) · [Collaborating](https://checklisthub.in/docs/getting-started/collaborate) · [Watcher](https://checklisthub.in/docs/features/watcher)
+
+### 3. Publish
+Once every species is verified, Checklist Hub generates the metadata and builds the Darwin Core Archive for you — no hand-assembly required. Push it to a nearby IPT accepted by GBIF, and you're done.
+
+Docs: [Publishing to GBIF](https://checklisthub.in/docs/getting-started/publish-to-gbif) · [Darwin Core format](https://checklisthub.in/docs/getting-started/darwin-core-format)
 
 ---
 
