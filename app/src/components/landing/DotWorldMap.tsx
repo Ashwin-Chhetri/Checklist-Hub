@@ -210,6 +210,9 @@ export default function DotWorldMap() {
         }
       }
 
+      lastWidth = width;
+      lastHeight = height;
+
       const n = xs.length;
       baseX = Float32Array.from(xs);
       baseY = Float32Array.from(ys);
@@ -380,7 +383,9 @@ export default function DotWorldMap() {
     }
 
     let resizeTimer = 0;
-    function handleResize() {
+    let lastWidth = -1;
+    let lastHeight = -1;
+    function scheduleRebuild() {
       window.clearTimeout(resizeTimer);
       resizeTimer = window.setTimeout(() => {
         loadWorldGeo().then((geo) => {
@@ -405,8 +410,28 @@ export default function DotWorldMap() {
     container.addEventListener("mousemove", handleMouseMove);
     container.addEventListener("mouseleave", handleMouseLeave);
     container.addEventListener("click", handleClick);
-    window.addEventListener("resize", handleResize);
     document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Watch the container's own box, not the window: its size can change from
+    // causes other than a viewport resize (headline text reflowing to a
+    // different number of lines, web fonts swapping in, layout shifts from
+    // sibling content) and each of those needs to re-fit and re-lay-out the
+    // dots just as much as an actual window resize would.
+    let isFirstObservation = true;
+    const resizeObserver = new ResizeObserver((entries) => {
+      // Skip the observer's initial callback — the mount effect below already
+      // triggers the first buildDots() once the world atlas loads.
+      if (isFirstObservation) {
+        isFirstObservation = false;
+        return;
+      }
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (Math.round(width) === lastWidth && Math.round(height) === lastHeight) return;
+      scheduleRebuild();
+    });
+    resizeObserver.observe(container);
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -424,8 +449,8 @@ export default function DotWorldMap() {
       container.removeEventListener("mousemove", handleMouseMove);
       container.removeEventListener("mouseleave", handleMouseLeave);
       container.removeEventListener("click", handleClick);
-      window.removeEventListener("resize", handleResize);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      resizeObserver.disconnect();
       observer.disconnect();
     };
   }, []);
