@@ -117,7 +117,7 @@ export default function Home() {
         className="relative overflow-hidden py-24 md:py-32"
         style={{ backgroundColor: "#E8E8E8" }}
       >
-        <div className="absolute top-0 right-0 bottom-0 left-[30%] z-0 hidden md:block">
+        <div className="absolute top-0 right-0 bottom-0 left-[38%] lg:left-[30%] z-0 hidden md:block">
           <DotWorldMap />
         </div>
         <div className="w-full px-lg md:px-xl relative z-10 pointer-events-none">
