@@ -114,6 +114,21 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Three squares rippling small -> large -> small in sequence, standing in for a plain "..." on the media-fetch status line so a long-running fetch reads as active rather than stalled. */
+function MediaFetchDots() {
+  return (
+    <span className="inline-flex items-center gap-0.5 ml-1" aria-hidden="true">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="w-1.5 h-1.5 bg-brand animate-media-fetch-box"
+          style={{ animationDelay: `${i * 0.18}s` }}
+        />
+      ))}
+    </span>
+  );
+}
+
 interface PublishPackagePageProps {
   checklist: Checklist | undefined;
   checklistId: string;
@@ -208,17 +223,45 @@ export function PublishPackagePage({
 
     // Build everything except real multimedia data first — it's all
     // synchronous and instant, so the reviewer can start browsing the
-    // package right away instead of waiting on the (often slow) GBIF media
-    // lookups behind multimedia.txt.
+    // package right away instead of waiting on the (often slow, sometimes
+    // multi-minute for a large checklist) GBIF media lookups behind
+    // multimedia.txt.
     const interimFiles = buildDwcaFiles(checklist, metadata, contributors, acceptedSpecies, new Map(), regionBoundingBox);
     const interimBlob = await zipDwcaFiles(interimFiles);
     setDwcaPackage({ files: interimFiles, blob: interimBlob });
     setSelectedFile("taxon.txt");
 
+    // Persist this interim package right away rather than only after the
+    // media fetch below finishes — otherwise a checklist with many species
+    // could sit with no `package_storage_path` at all (so it never shows
+    // up as generated anywhere outside this page, e.g. on /checklists) for
+    // as long as the media lookups take, or forever if the tab is closed
+    // before they finish.
+    let saved = await uploadPackage(interimBlob);
+
     setMediaProgress({ done: 0, total: acceptedSpecies.length });
     let finalBlob = interimBlob;
+    let lastPreviewDone = 0;
+    let previewToken = 0;
     try {
-      const mediaMap = await fetchSpeciesMediaMap(acceptedSpecies, (done, total) => setMediaProgress({ done, total }));
+      const mediaMap = await fetchSpeciesMediaMap(acceptedSpecies, (done, total, partial) => {
+        setMediaProgress({ done, total });
+        // Refresh the visible multimedia.txt as media comes in, so it
+        // visibly fills with rows instead of sitting static (still showing
+        // whatever the last generation left behind) until the whole fetch
+        // finishes. Throttled to every ~200 species — rebuilding and
+        // re-zipping all 7 files on every batch of 5 would be far too
+        // expensive for a checklist with thousands of species. `token`
+        // guards against an earlier, slower zip finishing after a later
+        // one and clobbering it with stale data.
+        if (done - lastPreviewDone < 200 && done !== total) return;
+        lastPreviewDone = done;
+        const token = ++previewToken;
+        const previewFiles = buildDwcaFiles(checklist, metadata, contributors, acceptedSpecies, new Map(partial), regionBoundingBox);
+        zipDwcaFiles(previewFiles).then((blob) => {
+          if (token === previewToken) setDwcaPackage({ files: previewFiles, blob });
+        });
+      });
       const finalFiles = buildDwcaFiles(checklist, metadata, contributors, acceptedSpecies, mediaMap, regionBoundingBox);
       finalBlob = await zipDwcaFiles(finalFiles);
       // Always show the locally-built package, including real media rows,
@@ -233,7 +276,8 @@ export function PublishPackagePage({
       setMediaProgress(null);
     }
 
-    return uploadPackage(finalBlob);
+    saved = await uploadPackage(finalBlob);
+    return saved;
   }
 
   function retryUpload() {
@@ -252,10 +296,20 @@ export function PublishPackagePage({
   async function confirmRegenerate() {
     setIsRegenerating(true);
     setRegenerateError(null);
+    // Drop the old package from view immediately — it's about to be deleted
+    // server-side, so continuing to show its (now-stale) rows while the
+    // delete/rebuild runs would be actively misleading, not just outdated.
+    // Rendering falls back to the "Generating package..." state until
+    // generatePackage below sets a fresh one. If the delete itself fails,
+    // nothing was actually removed server-side, so restore it rather than
+    // leaving the page looking empty.
+    const previousPackage = dwcaPackage;
+    setDwcaPackage(null);
     try {
       await clearPackage.mutateAsync();
     } catch (err) {
       setRegenerateError(err instanceof Error ? err.message : "Failed to delete the previous package.");
+      setDwcaPackage(previousPackage);
       setIsRegenerating(false);
       return;
     }
@@ -723,8 +777,9 @@ export function PublishPackagePage({
               ))}
             </ul>
             {mediaProgress && (
-              <p className="px-4 mt-2 text-[10px] text-secondary font-code-md">
-                Fetching media for multimedia.txt ({mediaProgress.done}/{mediaProgress.total})...
+              <p className="px-4 mt-2 text-[10px] text-brand font-code-md font-bold flex items-center">
+                Fetching media for multimedia.txt ({mediaProgress.done}/{mediaProgress.total})
+                <MediaFetchDots />
               </p>
             )}
           </div>
@@ -794,8 +849,14 @@ export function PublishPackagePage({
                     <span className="font-bold text-on-surface">{selectedFile}</span>
                     <span className="text-secondary">| {isTxt ? "text/tab-separated-values" : "application/xml"}</span>
                     <span className="text-secondary">| {formatBytes(sizeBytes)}</span>
+                    {previewRows && (
+                      <span className="text-secondary">| {previewRows.totalRows.toLocaleString()} rows</span>
+                    )}
                     {selectedFile === "multimedia.txt" && mediaProgress && (
-                      <span className="text-secondary italic">still fetching media...</span>
+                      <span className="text-brand font-bold flex items-center">
+                        still fetching media
+                        <MediaFetchDots />
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">

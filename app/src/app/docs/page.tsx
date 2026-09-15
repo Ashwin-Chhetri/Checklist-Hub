@@ -106,6 +106,10 @@ export default function DocsIndexPage() {
         </h2>
         <div className="space-y-4 font-body-sm text-body-sm text-secondary">
           <p>
+            Ever spent a week re-checking a checklist against a taxonomy that changed while you
+            weren&apos;t looking?
+          </p>
+          <p>
             GBIF hosts more than one kind of dataset, including checklists and occurrence
             datasets. An occurrence dataset is a collection of individual sightings pulled from
             open sources, and on its own it isn&apos;t enough to say a species belongs on a
@@ -120,13 +124,22 @@ export default function DocsIndexPage() {
             carry similar biodiversity but have never had a checklist built for them, so what
             lives there stays undocumented. Citizen science platforms are now generating records
             from many of these regions, often faster than anyone is turning them into a
-            checklist. Checklist Hub is built to close that gap, making it easier to take those
-            records and turn them into a published checklist for a region that has not had one
-            before.
+            checklist, and the taxonomic authorities those records get checked against, like the{" "}
+            <a
+              href="https://www.gbif.org"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary underline underline-offset-2 hover:opacity-80"
+            >
+              GBIF Backbone
+            </a>{" "}
+            and Catalogue of Life, keep being revised underneath them. Checklist Hub is built to
+            close both gaps: turning those records into a published checklist where none existed,
+            and keeping an existing one accurate as the ground shifts under it.
           </p>
           <p>
-            Building a checklist has traditionally been tedious. You gather occurrence records
-            from{" "}
+            Building and maintaining a checklist by hand means repeating the same tedious steps
+            every time something changes. You gather occurrence records from{" "}
             <a
               href="https://www.gbif.org"
               target="_blank"
@@ -154,17 +167,19 @@ export default function DocsIndexPage() {
               eBird
             </a>
             , and mentions in literature, and pull them into one place by hand. You check each
-            name against a taxonomic authority and resolve synonyms one at a time. Once you have
-            a draft list, you share it with collaborators for review, usually back and forth over
-            email or spreadsheets, with no single record of who approved what. And at the end,
-            you still have to convert the list into a Darwin Core Archive, the format GBIF
-            requires, attach the right metadata, and publish it to GBIF.
+            name against a taxonomic authority and resolve synonyms one at a time, then do it
+            again every time the backbone updates. Once you have a draft list, you share it with
+            collaborators for review, usually back and forth over email or spreadsheets, with no
+            single record of who approved what. And at the end, you still have to convert the
+            list into a Darwin Core Archive, the format GBIF requires, attach the right metadata,
+            and publish it to GBIF.
           </p>
           <p>Checklist Hub is built to take on each of those steps:</p>
           <ul className="space-y-3 list-disc pl-5">
             <li>
               Every name you import is checked against the GBIF Backbone and Catalogue of Life,
-              with synonyms resolved automatically.
+              with synonyms resolved automatically — and rechecked automatically when either
+              updates, instead of you having to notice.
             </li>
             <li>
               Evidence for each species is gathered in one place, from GBIF, iNaturalist, eBird,
@@ -186,13 +201,23 @@ export default function DocsIndexPage() {
               GBIF-registered IPT.
             </li>
           </ul>
+          <p>
+            That same work changes what reaches GBIF, not just what you see in the Workbench.
+            Taxonomy validated and conflicts reconciled before publication means the Darwin Core
+            Archive that lands in GBIF&apos;s index arrives cleaner, with less cleanup needed on
+            GBIF&apos;s side afterward. And a checklist that automates its own DwC-A generation
+            and IPT submission is one that actually gets published, instead of staying in a
+            spreadsheet because standing up an IPT by hand was too much friction for a region
+            that was never going to attract dedicated funding for it.
+          </p>
           <div className="border border-outline-variant bg-surface-container-low p-lg">
             <p>
               Citizen science has grown large enough that a species new to a region can turn up
               between one publication and the next. The{" "}
               <Highlight>Watcher</Highlight> module tracks sources on a schedule after
               publication and alerts experts when a new sighting suggests a species should be
-              added to the list.
+              added to the list — so the dataset GBIF holds keeps being maintained, not just
+              published once and left behind.
             </p>
           </div>
         </div>

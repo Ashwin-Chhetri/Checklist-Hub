@@ -19,7 +19,11 @@ async function fetchMediaForTaxon(taxonKey: number): Promise<SpeciesMediaItem[]>
  */
 export async function fetchSpeciesMediaMap(
   species: Species[],
-  onProgress?: (done: number, total: number) => void,
+  // `partial` is the same map being built, handed over read-only at each
+  // tick so a caller can render a live-filling multimedia.txt instead of a
+  // static file until the whole fetch finishes — safe to read synchronously
+  // in the callback since nothing mutates it again until the next tick.
+  onProgress?: (done: number, total: number, partial: ReadonlyMap<string, SpeciesMediaItem[]>) => void,
 ): Promise<Map<string, SpeciesMediaItem[]>> {
   const targets = species.filter((s) => s.gbif_taxon_key != null);
   const result = new Map<string, SpeciesMediaItem[]>();
@@ -32,7 +36,7 @@ export async function fetchSpeciesMediaMap(
       if (mediaLists[idx].length > 0) result.set(s.id, mediaLists[idx]);
     });
     done += batch.length;
-    onProgress?.(done, targets.length);
+    onProgress?.(done, targets.length, result);
   }
 
   return result;

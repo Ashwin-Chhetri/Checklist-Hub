@@ -16,6 +16,45 @@ emails, spreadsheets, and manually resolving synonyms.
 
 Sign in with Google, ORCID (the researcher identity standard), or email.
 
+## Why do we need it?
+
+**For biodiversity experts**
+
+Taxonomy doesn't hold still, and citizen science doesn't either. GBIF
+Backbone and Catalogue of Life are revised on an ongoing basis, and
+platforms like iNaturalist and eBird add new observations continuously.
+Keeping an existing checklist accurate means re-checking it against both,
+over and over — chasing down which names have been resynonymized, which
+species now have supporting records they didn't have last year, and which
+new candidates a citizen science platform has surfaced. Done by hand across
+hundreds of species, that's slow, repetitive, and easy to get wrong.
+ChecklistHub automates the checking — taxonomy validation, synonym
+resolution, evidence gathering, and change detection — so an expert reviewer
+spends their time on the judgment calls a machine shouldn't make, not on the
+busywork of finding what changed.
+
+**For GBIF**
+
+- **Cleaner data arrives in the index.** Every species is validated against
+  GBIF Backbone / Catalogue of Life and checked for synonym conflicts before
+  an expert can accept it, and a checklist is reconciled against other
+  checklists to surface overlaps before publication. The Darwin Core
+  Archives that reach GBIF arrive with fewer errors and duplicates, which
+  means less manual curation on GBIF's side after the fact.
+- **More regional data actually gets published.** Many taxonomists, park
+  authorities, and conservation planners hold valuable checklists that never
+  reach GBIF because building a compliant Darwin Core Archive and standing
+  up an IPT is a real technical barrier. ChecklistHub generates the DwC-A
+  automatically and publishes through a nearby GBIF-registered IPT, turning
+  checklists that would otherwise sit in a spreadsheet into published GBIF
+  datasets.
+- **Published checklists stay current instead of going stale.** The Watcher
+  re-fetches GBIF, iNaturalist, and eBird on a schedule for active
+  checklists and surfaces new candidate species and records over time, with
+  every change waiting on a reviewer's confirmation. A dataset published
+  through ChecklistHub doesn't need a from-scratch resurvey a year later to
+  stay accurate — it keeps getting maintained.
+
 ## What it does?
 
 **1. Gather & validate evidence**
