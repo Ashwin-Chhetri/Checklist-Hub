@@ -161,29 +161,21 @@ export default function DotWorldMap() {
       canvas!.width = Math.round(width * dpr);
       canvas!.height = Math.round(height * dpr);
 
+      // Never crop the sides: always render the full width of the globe at
+      // Equal Earth's natural aspect ratio, then vertically resample that
+      // silhouette to exactly match whatever height the container has —
+      // stretching it taller on a short/wide box, or squeezing it down on a
+      // tall/narrow one — so left/right edges are never clipped and the map
+      // always fully occupies the box in both dimensions, centered.
+      const naturalMapHeight = Math.max(1, Math.round(width / EQUAL_EARTH_ASPECT_RATIO));
+
       const hidden = document.createElement("canvas");
       hidden.width = width;
-      hidden.height = height;
+      hidden.height = naturalMapHeight;
       const hiddenCtx = hidden.getContext("2d", { willReadFrequently: true });
       if (!hiddenCtx) return;
 
-      // Cover-fit against Equal Earth's own aspect ratio and the full globe
-      // (not just the landmass bbox): scale up so the map fully covers the
-      // container in both dimensions, cropping whatever overflows off the
-      // shorter axis, rather than shrinking to fit and leaving letterbox
-      // margin whenever the box isn't exactly that aspect ratio.
-      let mapWidth = width;
-      let mapHeight = mapWidth / EQUAL_EARTH_ASPECT_RATIO;
-      if (mapHeight < height) {
-        mapHeight = height;
-        mapWidth = mapHeight * EQUAL_EARTH_ASPECT_RATIO;
-      }
-      const mapOffsetX = (width - mapWidth) / 2;
-      const mapOffsetY = (height - mapHeight) / 2;
-
-      const projection = geoEqualEarth().fitSize([mapWidth, mapHeight], { type: "Sphere" });
-      const [tx, ty] = projection.translate();
-      projection.translate([tx + mapOffsetX, ty + mapOffsetY]);
+      const projection = geoEqualEarth().fitSize([width, naturalMapHeight], { type: "Sphere" });
       const path = geoPath(projection, hiddenCtx);
 
       hiddenCtx.fillStyle = "#fff";
@@ -191,7 +183,8 @@ export default function DotWorldMap() {
       path(geo);
       hiddenCtx.fill();
 
-      const imageData = hiddenCtx.getImageData(0, 0, width, height).data;
+      const imageData = hiddenCtx.getImageData(0, 0, width, naturalMapHeight).data;
+      const verticalScale = naturalMapHeight / height;
 
       const offsetX = (width % DOT_SPACING) / 2;
       const offsetY = (height % DOT_SPACING) / 2;
@@ -201,8 +194,9 @@ export default function DotWorldMap() {
       const glows: number[] = [];
 
       for (let gy = offsetY; gy < height; gy += DOT_SPACING) {
+        const sy = Math.min(naturalMapHeight - 1, Math.max(0, Math.floor(gy * verticalScale)));
         for (let gx = offsetX; gx < width; gx += DOT_SPACING) {
-          const idx = (Math.floor(gy) * width + Math.floor(gx)) * 4;
+          const idx = (sy * width + Math.floor(gx)) * 4;
           if (imageData[idx + 3] > 128) {
             xs.push(gx);
             ys.push(gy);
