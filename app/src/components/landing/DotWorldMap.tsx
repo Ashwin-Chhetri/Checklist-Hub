@@ -167,13 +167,14 @@ export default function DotWorldMap() {
       const hiddenCtx = hidden.getContext("2d", { willReadFrequently: true });
       if (!hiddenCtx) return;
 
-      // Constrain to Equal Earth's own aspect ratio and fit against the full
-      // globe (not just the landmass bbox) so the map always renders as a
-      // clean, consistently-proportioned rectangle, centered in whatever
-      // box the hero section gives it — rather than stretching to fill it.
+      // Cover-fit against Equal Earth's own aspect ratio and the full globe
+      // (not just the landmass bbox): scale up so the map fully covers the
+      // container in both dimensions, cropping whatever overflows off the
+      // shorter axis, rather than shrinking to fit and leaving letterbox
+      // margin whenever the box isn't exactly that aspect ratio.
       let mapWidth = width;
       let mapHeight = mapWidth / EQUAL_EARTH_ASPECT_RATIO;
-      if (mapHeight > height) {
+      if (mapHeight < height) {
         mapHeight = height;
         mapWidth = mapHeight * EQUAL_EARTH_ASPECT_RATIO;
       }
