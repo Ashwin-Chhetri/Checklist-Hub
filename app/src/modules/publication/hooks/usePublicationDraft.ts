@@ -56,6 +56,8 @@ export function useDeleteChecklistMetadata(checklistId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["publication", "metadata", checklistId] });
       queryClient.invalidateQueries({ queryKey: ["publication", "draft", checklistId] });
+      queryClient.invalidateQueries({ queryKey: ["publication", "versions", checklistId] });
+      queryClient.invalidateQueries({ queryKey: ["publication", "comments", checklistId] });
       queryClient.invalidateQueries({ queryKey: ["checklists"] });
     },
   });
@@ -65,9 +67,11 @@ export function useClearPublicationPackage(checklistId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (storagePath: string | null) => clearPublicationPackage(checklistId, storagePath),
+    mutationFn: () => clearPublicationPackage(checklistId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["publication", "draft", checklistId] });
+      queryClient.invalidateQueries({ queryKey: ["publication", "versions", checklistId] });
+      queryClient.invalidateQueries({ queryKey: ["publication", "comments", checklistId] });
       queryClient.invalidateQueries({ queryKey: ["checklists"] });
     },
   });

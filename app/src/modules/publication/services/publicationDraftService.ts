@@ -39,25 +39,44 @@ export async function deletePublicationDraft(checklistId: string): Promise<void>
   if (error) throw error;
 }
 
-/** Deletes the saved metadata/contributors for a checklist and clears its in-progress draft pointer — used by the "delete metadata" action in the checklist organizer's nested row. */
-export async function deleteChecklistMetadata(checklistId: string): Promise<void> {
+/** Removes every storage object an RPC's `{ storage_paths: [...] }` result points at (best-effort — a missing object is not an error). Shared by every delete RPC below since a Postgres delete never touches Storage on its own. */
+async function purgeReturnedStoragePaths(data: unknown): Promise<void> {
+  const storagePaths = ((data as { storage_paths?: string[] } | null)?.storage_paths ?? []).filter(Boolean);
+  if (storagePaths.length === 0) return;
   const supabase = createClient();
-  const { error } = await supabase.rpc("delete_checklist_metadata", {
-    p_checklist_id: checklistId,
-  });
-  if (error) throw error;
+  await supabase.storage.from(PUBLICATION_EXPORTS_BUCKET).remove(storagePaths);
 }
 
-/** Removes the generated DwC-A package from storage (best-effort — a missing object is not an error) and clears the draft's package pointer, reverting it to the metadata stage. */
-export async function clearPublicationPackage(checklistId: string, storagePath: string | null): Promise<void> {
+/**
+ * Deletes the saved metadata/contributors for a checklist, clears its
+ * in-progress draft pointer, and deletes its entire publication version
+ * history — both the `checklist_publication_versions` rows and every
+ * snapshot zip they (and the draft) point at in storage — so nothing is
+ * left orphaned. Used by the "delete metadata" action in the checklist
+ * organizer's nested row.
+ */
+export async function deleteChecklistMetadata(checklistId: string): Promise<void> {
   const supabase = createClient();
-  if (storagePath) {
-    await supabase.storage.from(PUBLICATION_EXPORTS_BUCKET).remove([storagePath]);
-  }
-  const { error } = await supabase.rpc("clear_checklist_publication_package", {
+  const { data, error } = await supabase.rpc("delete_checklist_metadata", {
     p_checklist_id: checklistId,
   });
   if (error) throw error;
+  await purgeReturnedStoragePaths(data);
+}
+
+/**
+ * Deletes the generated DwC-A package and its entire version history for a
+ * checklist: the draft's live package pointer, every
+ * `checklist_publication_versions` row, and every object those rows (and
+ * the draft) point at in storage.
+ */
+export async function clearPublicationPackage(checklistId: string): Promise<void> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("clear_checklist_publication_package", {
+    p_checklist_id: checklistId,
+  });
+  if (error) throw error;
+  await purgeReturnedStoragePaths(data);
 }
 
 /** Downloads the generated DwC-A package zip directly from storage (private bucket, so this goes through the authenticated client rather than a public URL). */

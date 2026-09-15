@@ -12,7 +12,7 @@ import { useCurrentUser } from "@/modules/auth/hooks/useCurrentUser";
 import { useProfile } from "@/modules/auth/hooks/useProfile";
 import { useRegionBoundary } from "@/modules/checklist/hooks/useRegionBoundary";
 import TeamModal from "@/components/workbench/TeamModal";
-import { usePublicationDraft, useSavePublicationDraftStage } from "../hooks/usePublicationDraft";
+import { usePublicationDraft, useSavePublicationDraftStage, useClearPublicationPackage } from "../hooks/usePublicationDraft";
 import { usePublicationComments, usePostPublicationComment } from "../hooks/usePublicationComments";
 import { usePublicationVersions, useCreatePublicationVersion } from "../hooks/usePublicationVersions";
 import { useApplySpeciesEdits } from "../hooks/useApplySpeciesEdits";
@@ -143,6 +143,7 @@ export function PublishPackagePage({
   const postComment = usePostPublicationComment(checklistId);
   const { data: versions } = usePublicationVersions(checklistId);
   const createVersion = useCreatePublicationVersion(checklistId);
+  const clearPackage = useClearPublicationPackage(checklistId);
   const applySpeciesEdits = useApplySpeciesEdits(checklistId);
   const saveMetadata = useSaveChecklistMetadata(checklistId);
   const { data: regionBoundary } = useRegionBoundary({
@@ -163,6 +164,9 @@ export function PublishPackagePage({
   const [generatedAt, setGeneratedAt] = useState<string | null>(draft?.package_generated_at ?? null);
   const [commentBody, setCommentBody] = useState("");
   const generatedRef = useRef(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   const [editMode, setEditMode] = useState(false);
   const [editHeader, setEditHeader] = useState<string[] | null>(null);
@@ -172,8 +176,9 @@ export function PublishPackagePage({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [saveEditError, setSaveEditError] = useState<string | null>(null);
 
-  async function uploadPackage(blob: Blob) {
-    if (!checklist) return;
+  /** Returns whether the package was actually persisted (storage path saved to the draft) — callers that depend on that (e.g. `confirmRegenerate`) must check this rather than assume success, since a storage/RLS failure here is otherwise only visible as a small inline banner. */
+  async function uploadPackage(blob: Blob): Promise<boolean> {
+    if (!checklist) return false;
     setUploadError(null);
     try {
       const supabase = createClient();
@@ -186,16 +191,18 @@ export function PublishPackagePage({
       const now = new Date().toISOString();
       await saveDraftStage.mutateAsync({ stage: "review", packageStoragePath: path, packageGeneratedAt: now });
       setGeneratedAt(now);
+      return true;
     } catch (err) {
       const reason = err instanceof Error ? err.message : "Unknown error.";
       setUploadError(
         `Package was built locally but couldn't be saved to server storage (${reason}). You can still preview and download it below — click Retry Upload once this is resolved.`,
       );
+      return false;
     }
   }
 
-  async function generatePackage() {
-    if (!checklist) return;
+  async function generatePackage(): Promise<boolean> {
+    if (!checklist) return false;
     setGenerateError(null);
     setUploadError(null);
 
@@ -226,12 +233,51 @@ export function PublishPackagePage({
       setMediaProgress(null);
     }
 
-    await uploadPackage(finalBlob);
+    return uploadPackage(finalBlob);
   }
 
   function retryUpload() {
     if (!dwcaPackage) return;
     uploadPackage(dwcaPackage.blob);
+  }
+
+  /**
+   * Rebuilds the package from scratch. Unlike `saveEdit` (which snapshots a
+   * new version on top of history), this permanently deletes the existing
+   * package and every prior version — both the DB rows and their storage
+   * objects (see `clear_checklist_publication_package`) — before generating
+   * fresh, so it's gated behind an explicit confirmation the caller must
+   * accept first.
+   */
+  async function confirmRegenerate() {
+    setIsRegenerating(true);
+    setRegenerateError(null);
+    try {
+      await clearPackage.mutateAsync();
+    } catch (err) {
+      setRegenerateError(err instanceof Error ? err.message : "Failed to delete the previous package.");
+      setIsRegenerating(false);
+      return;
+    }
+    setShowRegenerateConfirm(false);
+    let saved = false;
+    try {
+      saved = await generatePackage();
+    } finally {
+      setIsRegenerating(false);
+    }
+    if (!saved) {
+      // The old package/version history is already gone at this point — a
+      // failed re-upload here would otherwise leave the checklist with no
+      // package at all while the review page still shows one locally,
+      // exactly the "regenerate doesn't show up" symptom. generatePackage
+      // already surfaces the storage error via `uploadError`; reopen the
+      // confirm dialog too so it's impossible to miss and points at Retry.
+      setRegenerateError(
+        "The new package was built but couldn't be saved to server storage — see the error below and use Retry Upload. It won't appear on the checklists list until that succeeds.",
+      );
+      setShowRegenerateConfirm(true);
+    }
   }
 
   function enterEditMode() {
@@ -456,11 +502,16 @@ export function PublishPackagePage({
   const isTxt = selectedFile.endsWith(".txt");
   const sizeBytes = dwcaPackage ? new TextEncoder().encode(selectedContents).length : 0;
 
+  // Rendering every row as a real <table> row doesn't scale to thousands of
+  // species, so the preview caps at 200 for performance — but the file
+  // itself (and the "Raw" view, and the actual downloaded/published
+  // package) always has every row. `totalRows` lets the UI say so
+  // explicitly instead of silently looking truncated.
   const previewRows = (() => {
     if (!isTxt || !selectedContents) return null;
     const lines = selectedContents.split("\n").filter(Boolean);
     const [header, ...rows] = lines.map((l) => l.split("\t"));
-    return { header: header ?? [], rows: rows.slice(0, 200) };
+    return { header: header ?? [], rows: rows.slice(0, 200), totalRows: rows.length };
   })();
 
   return (
@@ -478,6 +529,19 @@ export function PublishPackagePage({
           </button>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setRegenerateError(null);
+              setShowRegenerateConfirm(true);
+            }}
+            disabled={!dwcaPackage || !!mediaProgress || isRegenerating}
+            title="Rebuild the package from scratch — deletes the current package and its version history"
+            className="px-3 py-1.5 bg-white border border-surface-dim text-secondary text-[10px] mono-text font-bold uppercase rounded-sm flex items-center gap-2 hover:border-brand hover:text-brand transition-colors disabled:opacity-40"
+          >
+            <span className="material-symbols-outlined text-[16px]">autorenew</span>
+            Regenerate
+          </button>
           <button
             type="button"
             onClick={handleDownload}
@@ -527,6 +591,62 @@ export function PublishPackagePage({
           canManageRoles={checklist?.owner_id === currentUser?.id}
           onClose={() => setShowTeamModal(false)}
         />
+      )}
+
+      {showRegenerateConfirm && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30"
+          onClick={() => !isRegenerating && setShowRegenerateConfirm(false)}
+        >
+          <div
+            className="w-[28rem] max-w-[90vw] bg-white border border-surface-dim rounded-sm shadow-hard overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-surface-dim">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-600 text-[20px]">warning</span>
+                <h3 className="mono-text text-sm font-bold uppercase tracking-wider text-slate-700">Regenerate Package</h3>
+              </div>
+              {!isRegenerating && (
+                <button
+                  type="button"
+                  onClick={() => setShowRegenerateConfirm(false)}
+                  className="text-slate-400 hover:text-primary transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              )}
+            </div>
+
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-slate-600">
+                This rebuilds every file from the checklist&apos;s current data. The existing package and its entire version
+                history{versions && versions.length > 0 ? ` (${versions.length} version${versions.length === 1 ? "" : "s"})` : ""} will
+                be permanently deleted from storage and cannot be recovered.
+              </p>
+              {regenerateError && <p className="text-sm text-error">{regenerateError}</p>}
+            </div>
+
+            <div className="px-5 py-4 border-t border-surface-dim flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowRegenerateConfirm(false)}
+                disabled={isRegenerating}
+                className="px-4 py-2 mono-text text-[11px] font-bold uppercase text-slate-500 hover:text-primary transition-colors disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRegenerate}
+                disabled={isRegenerating}
+                className="px-5 py-2 bg-brand text-white mono-text text-[11px] font-bold uppercase tracking-wider hover:opacity-90 transition-colors disabled:opacity-40"
+              >
+                {isRegenerating ? "Regenerating..." : "Delete & Regenerate"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex flex-1 mx-auto w-full min-h-0">
@@ -614,10 +734,13 @@ export function PublishPackagePage({
               <div className="font-label-caps text-[10px] font-bold text-secondary uppercase tracking-widest">Metadata</div>
               <button
                 type="button"
-                onClick={generatePackage}
-                disabled={!!mediaProgress}
+                onClick={() => {
+                  setRegenerateError(null);
+                  setShowRegenerateConfirm(true);
+                }}
+                disabled={!!mediaProgress || isRegenerating}
                 className="text-secondary hover:text-brand disabled:opacity-40"
-                title="Regenerate package"
+                title="Rebuild the package from scratch — deletes the current package and its version history"
               >
                 <span className="material-symbols-outlined text-[16px]">refresh</span>
               </button>
@@ -865,6 +988,13 @@ export function PublishPackagePage({
                     </pre>
                   )}
                 </div>
+
+                {!editMode && viewMode === "preview" && previewRows && previewRows.totalRows > previewRows.rows.length && (
+                  <div className="px-4 py-2 border-t border-surface-dim bg-surface-container-low text-[10px] text-secondary font-code-md">
+                    Showing first {previewRows.rows.length.toLocaleString()} of {previewRows.totalRows.toLocaleString()} rows —
+                    the full file is included in the downloaded/published package. Switch to &ldquo;Raw&rdquo; to see every row inline.
+                  </div>
+                )}
               </div>
             )}
 

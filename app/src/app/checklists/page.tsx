@@ -325,7 +325,10 @@ export default function ChecklistsPage() {
 
                 <div className="grid grid-cols-2 gap-y-2 gap-x-3 font-code-md text-code-md">
                   <div className="flex flex-col gap-0.5">
-                    <span className="font-label-caps text-[10px] text-on-surface-variant tracking-wider">
+                    <span
+                      className="font-label-caps text-[10px] text-on-surface-variant tracking-wider"
+                      title="Every species row added to this checklist, including pending, rejected, and merged-duplicate ones — the accepted/publishable count (used in metadata and the DwC-A export) can be lower."
+                    >
                       SPECIES
                     </span>
                     <span className="text-on-surface font-bold">
@@ -400,7 +403,12 @@ export default function ChecklistsPage() {
                   <tr className="font-label-caps text-label-caps text-on-surface-variant">
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[25%]">CHECKLIST</th>
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[12%]">STATUS</th>
-                    <th className="px-5 py-4 font-extrabold tracking-wider w-[10%]">SPECIES COUNT</th>
+                    <th
+                      className="px-5 py-4 font-extrabold tracking-wider w-[10%]"
+                      title="Every species row added to this checklist, including pending, rejected, and merged-duplicate ones — the accepted/publishable count (used in metadata and the DwC-A export) can be lower."
+                    >
+                      SPECIES COUNT
+                    </th>
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[15%]">REGION</th>
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[15%]">COLLABORATORS</th>
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[15%]">LAST MODIFIED</th>
@@ -678,45 +686,54 @@ function MetadataSubRow({ checklistId, speciesCount }: { checklistId: string; sp
       className="bg-surface-container-low/40 hover:bg-surface-container-low cursor-pointer transition-colors"
     >
       <td colSpan={7} className="px-5 py-2">
-        <div className="pl-10 flex items-center justify-between gap-3 border-t border-dashed border-outline-variant pt-2">
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-[16px] text-secondary">description</span>
-            <span className="font-code-md text-[11px] text-on-surface-variant">
-              Checklist Metadata saved —{" "}
-              <span className="font-bold text-on-surface">{speciesCount.toLocaleString()} species</span>
-            </span>
+        <div className="pl-10 flex flex-col gap-1.5 border-t border-dashed border-outline-variant pt-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-[16px] text-secondary">description</span>
+              <span className="font-code-md text-[11px] text-on-surface-variant">
+                Checklist Metadata saved —{" "}
+                <span className="font-bold text-on-surface">{speciesCount.toLocaleString()} species</span>
+              </span>
+            </div>
+            {!confirming ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirming(true);
+                }}
+                title="Delete metadata"
+                className="p-1 text-on-surface-variant hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors"
+              >
+                <span className="material-symbols-outlined text-[16px]">delete</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <span className="text-[10px] text-on-surface-variant font-code-md">Delete this metadata?</span>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleteMetadata.isPending}
+                  className="px-2 py-1 bg-red-600 text-white text-[10px] font-label-caps uppercase rounded-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {deleteMetadata.isPending ? "Deleting..." : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className="text-[10px] text-on-surface-variant hover:text-primary transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
-          {!confirming ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setConfirming(true);
-              }}
-              title="Delete metadata"
-              className="p-1 text-on-surface-variant hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors"
+          {deleteError && (
+            <div
+              className="px-2 py-1.5 bg-red-50 border border-red-200 text-red-700 text-[11px] font-code-md"
+              onClick={(e) => e.stopPropagation()}
             >
-              <span className="material-symbols-outlined text-[16px]">delete</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              {deleteError && <span className="text-[10px] text-red-600 font-code-md">{deleteError}</span>}
-              <span className="text-[10px] text-on-surface-variant font-code-md">Delete this metadata?</span>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={deleteMetadata.isPending}
-                className="px-2 py-1 bg-red-600 text-white text-[10px] font-label-caps uppercase rounded-sm hover:bg-red-700 transition-colors disabled:opacity-50"
-              >
-                {deleteMetadata.isPending ? "Deleting..." : "Confirm"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(false)}
-                className="text-[10px] text-on-surface-variant hover:text-primary transition-colors"
-              >
-                Cancel
-              </button>
+              Delete failed: {deleteError}
             </div>
           )}
         </div>
@@ -725,7 +742,7 @@ function MetadataSubRow({ checklistId, speciesCount }: { checklistId: string; sp
   );
 }
 
-/** Nested sub-row for a checklist's generated DwC-A package — opens the package review page directly on click, with inline download and delete (delete only clears the package, reverting the draft to the metadata stage). */
+/** Nested sub-row for a checklist's generated DwC-A package — opens the package review page directly on click, with inline download and delete (delete removes the package and its entire version history from both the database and storage, reverting the draft to the metadata stage). */
 function PackageSubRow({
   checklistId,
   checklistTitle,
@@ -747,7 +764,7 @@ function PackageSubRow({
 
   function handleDeletePackage() {
     setDeleteError(null);
-    clearPackage.mutate(storagePath, {
+    clearPackage.mutate(undefined, {
       onError: (err) => setDeleteError(err instanceof Error ? err.message : "Failed to delete package."),
     });
   }
@@ -769,59 +786,68 @@ function PackageSubRow({
       className="bg-surface-container-low/40 hover:bg-surface-container-low cursor-pointer transition-colors"
     >
       <td colSpan={7} className="px-5 py-2">
-        <div className="pl-10 flex items-center justify-between gap-3 border-t border-dashed border-outline-variant pt-2">
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-[16px] text-secondary">archive</span>
-            <span className="font-code-md text-[11px] text-on-surface-variant">
-              Darwin Core Archive —{" "}
-              <span className="font-bold text-on-surface">{speciesCount.toLocaleString()} species</span>
-              {generatedAt && <> · Generated {formatRelativeTime(generatedAt)}</>}
-            </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={downloading}
-              title="Download package"
-              className="p-1 text-on-surface-variant hover:text-primary hover:bg-primary-container/10 rounded-sm transition-colors disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined text-[16px]">download</span>
-            </button>
-            {!confirming ? (
+        <div className="pl-10 flex flex-col gap-1.5 border-t border-dashed border-outline-variant pt-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-[16px] text-secondary">archive</span>
+              <span className="font-code-md text-[11px] text-on-surface-variant">
+                Darwin Core Archive —{" "}
+                <span className="font-bold text-on-surface">{speciesCount.toLocaleString()} species</span>
+                {generatedAt && <> · Generated {formatRelativeTime(generatedAt)}</>}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setConfirming(true);
-                }}
-                title="Delete package"
-                className="p-1 text-on-surface-variant hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors"
+                onClick={handleDownload}
+                disabled={downloading}
+                title="Download package"
+                className="p-1 text-on-surface-variant hover:text-primary hover:bg-primary-container/10 rounded-sm transition-colors disabled:opacity-50"
               >
-                <span className="material-symbols-outlined text-[16px]">delete</span>
+                <span className="material-symbols-outlined text-[16px]">download</span>
               </button>
-            ) : (
-              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                {deleteError && <span className="text-[10px] text-red-600 font-code-md">{deleteError}</span>}
-                <span className="text-[10px] text-on-surface-variant font-code-md">Delete this package?</span>
+              {!confirming ? (
                 <button
                   type="button"
-                  onClick={handleDeletePackage}
-                  disabled={clearPackage.isPending}
-                  className="px-2 py-1 bg-red-600 text-white text-[10px] font-label-caps uppercase rounded-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirming(true);
+                  }}
+                  title="Delete package"
+                  className="p-1 text-on-surface-variant hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors"
                 >
-                  {clearPackage.isPending ? "Deleting..." : "Confirm"}
+                  <span className="material-symbols-outlined text-[16px]">delete</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirming(false)}
-                  className="text-[10px] text-on-surface-variant hover:text-primary transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+              ) : (
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[10px] text-on-surface-variant font-code-md">Delete this package?</span>
+                  <button
+                    type="button"
+                    onClick={handleDeletePackage}
+                    disabled={clearPackage.isPending}
+                    className="px-2 py-1 bg-red-600 text-white text-[10px] font-label-caps uppercase rounded-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {clearPackage.isPending ? "Deleting..." : "Confirm"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(false)}
+                    className="text-[10px] text-on-surface-variant hover:text-primary transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
+          {deleteError && (
+            <div
+              className="px-2 py-1.5 bg-red-50 border border-red-200 text-red-700 text-[11px] font-code-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Delete failed: {deleteError}
+            </div>
+          )}
         </div>
       </td>
     </tr>
