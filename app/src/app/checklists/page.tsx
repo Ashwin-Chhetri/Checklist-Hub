@@ -327,7 +327,7 @@ export default function ChecklistsPage() {
                   <div className="flex flex-col gap-0.5">
                     <span
                       className="font-label-caps text-[10px] text-on-surface-variant tracking-wider"
-                      title="Every species row added to this checklist, including pending, rejected, and merged-duplicate ones — the accepted/publishable count (used in metadata and the DwC-A export) can be lower."
+                      title="Accepted, active species only — the same count used in the metadata wizard and DwC-A export. Pending, rejected, and merged-duplicate rows aren't included."
                     >
                       SPECIES
                     </span>
@@ -405,7 +405,7 @@ export default function ChecklistsPage() {
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[12%]">STATUS</th>
                     <th
                       className="px-5 py-4 font-extrabold tracking-wider w-[10%]"
-                      title="Every species row added to this checklist, including pending, rejected, and merged-duplicate ones — the accepted/publishable count (used in metadata and the DwC-A export) can be lower."
+                      title="Accepted, active species only — the same count used in the metadata wizard and DwC-A export. Pending, rejected, and merged-duplicate rows aren't included."
                     >
                       SPECIES COUNT
                     </th>

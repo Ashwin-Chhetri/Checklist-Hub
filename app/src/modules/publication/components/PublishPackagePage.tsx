@@ -556,16 +556,14 @@ export function PublishPackagePage({
   const isTxt = selectedFile.endsWith(".txt");
   const sizeBytes = dwcaPackage ? new TextEncoder().encode(selectedContents).length : 0;
 
-  // Rendering every row as a real <table> row doesn't scale to thousands of
-  // species, so the preview caps at 200 for performance — but the file
-  // itself (and the "Raw" view, and the actual downloaded/published
-  // package) always has every row. `totalRows` lets the UI say so
-  // explicitly instead of silently looking truncated.
+  // Every row in the file, not a capped subset — the edit-mode table below
+  // already renders every row of the same file uncapped, so there's no
+  // performance reason to cap this read-only view differently.
   const previewRows = (() => {
     if (!isTxt || !selectedContents) return null;
     const lines = selectedContents.split("\n").filter(Boolean);
     const [header, ...rows] = lines.map((l) => l.split("\t"));
-    return { header: header ?? [], rows: rows.slice(0, 200), totalRows: rows.length };
+    return { header: header ?? [], rows, totalRows: rows.length };
   })();
 
   return (
@@ -1050,12 +1048,6 @@ export function PublishPackagePage({
                   )}
                 </div>
 
-                {!editMode && viewMode === "preview" && previewRows && previewRows.totalRows > previewRows.rows.length && (
-                  <div className="px-4 py-2 border-t border-surface-dim bg-surface-container-low text-[10px] text-secondary font-code-md">
-                    Showing first {previewRows.rows.length.toLocaleString()} of {previewRows.totalRows.toLocaleString()} rows —
-                    the full file is included in the downloaded/published package. Switch to &ldquo;Raw&rdquo; to see every row inline.
-                  </div>
-                )}
               </div>
             )}
 

@@ -71,6 +71,7 @@ export interface ChecklistPendingInvite {
 }
 
 export interface ChecklistSummary extends Checklist {
+  /** Accepted + active species only — the same set the metadata wizard and DwC-A export count, not every row ever added (pending/rejected/merged-duplicate included). */
   species_count: number;
   collaborator_count: number;
   owner: ChecklistCollaboratorProfile | null;
@@ -106,15 +107,22 @@ export async function listChecklists(): Promise<ChecklistSummary[]> {
   const { data, error } = await supabase
     .from("checklists")
     .select(
-      "*, owner:profiles!checklists_owner_id_fkey(id, full_name, avatar_url), species(count), checklist_collaborators(profile:profiles!checklist_collaborators_user_id_fkey(id, full_name, avatar_url)), checklist_invites(email, status), checklist_publication_drafts(checklist_id, stage, package_storage_path, package_generated_at, updated_at), checklist_metadata(checklist_id, ipt_submitted_at), watchers(is_active, frequency)",
+      // `accepted_species` is filtered (below) to review_status=accepted &
+      // is_active=true — the same set the metadata wizard and DwC-A export
+      // count — via PostgREST's embedded-resource filter syntax, which
+      // still left-joins (a checklist with zero accepted species keeps its
+      // row, just with count 0) rather than excluding it like `!inner` would.
+      "*, owner:profiles!checklists_owner_id_fkey(id, full_name, avatar_url), accepted_species:species(count), checklist_collaborators(profile:profiles!checklist_collaborators_user_id_fkey(id, full_name, avatar_url)), checklist_invites(email, status), checklist_publication_drafts(checklist_id, stage, package_storage_path, package_generated_at, updated_at), checklist_metadata(checklist_id, ipt_submitted_at), watchers(is_active, frequency)",
     )
+    .eq("accepted_species.review_status", "accepted")
+    .eq("accepted_species.is_active", true)
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
 
   return (data ?? []).map((row) => {
     const {
-      species,
+      accepted_species,
       checklist_collaborators,
       checklist_invites,
       checklist_publication_drafts,
@@ -123,7 +131,7 @@ export async function listChecklists(): Promise<ChecklistSummary[]> {
       owner,
       ...checklist
     } = row as Checklist & {
-      species: { count: number }[];
+      accepted_species: { count: number }[];
       checklist_collaborators: { profile: ChecklistCollaboratorProfile | null }[];
       checklist_invites: ChecklistPendingInvite[];
       // checklist_id is the PRIMARY KEY on both these tables (1:1 with
@@ -141,7 +149,7 @@ export async function listChecklists(): Promise<ChecklistSummary[]> {
       .filter((p): p is ChecklistCollaboratorProfile => p !== null);
     return {
       ...checklist,
-      species_count: species?.[0]?.count ?? 0,
+      species_count: accepted_species?.[0]?.count ?? 0,
       collaborator_count: collaborators.length + 1,
       owner,
       collaborators,
