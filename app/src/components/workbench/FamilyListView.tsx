@@ -24,6 +24,11 @@ interface FamilyListViewProps {
   onOpenMap?: () => void;
 }
 
+// The full drill-down sequence — the wheel starts at families and can go
+// all the way down to individual species, one rank per double-click/back
+// step. `path.length` indexes into this directly (0 -> "family", etc.).
+const RANK_SEQUENCE: TaxonGroupRank[] = ["family", "genus", "species"];
+
 // Wedges beyond this are folded into one "Other" wedge in the WHEEL only
 // (see wheelGroups below) — a real multi-order checklist can span dozens of
 // families, and a fixed-size wheel with that many slices stops being
@@ -290,12 +295,15 @@ export default function FamilyListView({
   onOpenMap,
 }: FamilyListViewProps) {
   // Navigation stack — [] at the root (families), [familyName] once drilled
-  // one rank down into that family's genera. Kept as a stack (rather than a
+  // into that family's genera, [familyName, genusName] drilled all the way
+  // to that genus's individual species. Kept as a stack (rather than a
   // single "drilled family" flag) so the breadcrumb trail and back button
-  // fall naturally out of the same state.
+  // fall naturally out of the same state, and so it generalizes to however
+  // many ranks RANK_SEQUENCE lists.
   const [path, setPath] = useState<string[]>([]);
-  const rank: TaxonGroupRank = path.length === 0 ? "family" : "genus";
-  const parent: TaxonGroupParent | null = path.length === 0 ? null : { rank: "family", name: path[0] };
+  const rank: TaxonGroupRank = RANK_SEQUENCE[path.length];
+  const parent: TaxonGroupParent | null =
+    path.length === 0 ? null : { rank: RANK_SEQUENCE[path.length - 1], name: path[path.length - 1] };
   const { groups } = useTaxonGroupStats(checklistId, rank, parent);
 
   const display = groups;
@@ -309,7 +317,7 @@ export default function FamilyListView({
     if (display.length <= WHEEL_MAX_WEDGES) return display;
     const top = display.slice(0, WHEEL_MAX_WEDGES - 1);
     const rest = display.slice(WHEEL_MAX_WEDGES - 1);
-    const otherName = rank === "family" ? "Other families" : "Other genera";
+    const otherName = rank === "family" ? "Other families" : rank === "genus" ? "Other genera" : "Other species";
     const other = rest.reduce(
       (acc, f) => ({ name: otherName, species: acc.species + f.species, occurrences: acc.occurrences + f.occurrences, sampleTaxonKeys: [] as number[] }),
       { name: otherName, species: 0, occurrences: 0, sampleTaxonKeys: [] as number[] },
@@ -420,30 +428,42 @@ export default function FamilyListView({
     card?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
   }
 
-  // Drilling one rank down (family -> genus) is the only level this
-  // supports today — genus is already the last rank above the individual
-  // species rows themselves, so there's nowhere further down to go.
-  function drillInto(name: string) {
-    if (rank !== "family") return;
-    // Guards the wheel's own synthetic "Other families" wedge (see
-    // wheelGroups) — it has no matching real group to drill into.
-    if (!groups.some((g) => g.name === name)) return;
-    setPath([name]);
+  // Jumps to a specific point in the breadcrumb trail — depth 0 is the
+  // family root, depth 1 is the genus level of path[0], etc. Both the "Back"
+  // button and every breadcrumb crumb (wheel-pane and sidebar) funnel
+  // through this so they all reset selection/hover state the same way.
+  function goToDepth(depth: number) {
+    setPath((prev) => prev.slice(0, depth));
     setSelected(null);
     setHovered(null);
     setTooltip(null);
   }
 
-  function goBack() {
-    setPath([]);
+  // Drilling one rank down (family -> genus -> species) — species is the
+  // terminal rank (an individual checklist row, not a further grouping), so
+  // there's nowhere left to drill from there.
+  function drillInto(name: string) {
+    if (rank === "species") return;
+    // Guards the wheel's own synthetic "Other ..." wedge (see wheelGroups)
+    // — it has no matching real group to drill into.
+    if (!groups.some((g) => g.name === name)) return;
+    setPath((prev) => [...prev, name]);
     setSelected(null);
     setHovered(null);
     setTooltip(null);
+  }
+
+  // Steps back exactly one level — a no-op at the root.
+  function goBack() {
+    goToDepth(Math.max(0, path.length - 1));
   }
 
   const activeName = selected ?? hovered;
-  const rankLabel = rank === "family" ? "Families" : "Genera";
-  const unitLabel = (count: number) => (rank === "family" ? (count === 1 ? "family" : "families") : count === 1 ? "genus" : "genera");
+  const unitLabel = (count: number) => {
+    if (rank === "family") return count === 1 ? "family" : "families";
+    if (rank === "genus") return count === 1 ? "genus" : "genera";
+    return "species";
+  };
 
   return (
     <div className="flex h-full w-full" style={{ background: "#ffffff" }}>
@@ -461,16 +481,21 @@ export default function FamilyListView({
               <span className="material-symbols-outlined text-[14px]">arrow_back</span>
               Back
             </button>
-            <div className="text-[11px] mono-text flex items-center" style={{ color: "#6b6a63" }}>
-              <button type="button" onClick={goBack} className="hover:underline" style={{ color: "#6b6a63" }}>
-                Families
-              </button>
-              {path.map((name) => (
-                <span key={name} className="flex items-center">
-                  <span className="mx-1">›</span>
-                  <span className="font-bold" style={{ color: "#1c1c1a" }}>
-                    {name}
-                  </span>
+            <div className="text-[11px] mono-text flex items-center flex-wrap" style={{ color: "#6b6a63" }}>
+              {["Families", ...path].map((label, i, crumbs) => (
+                <span key={i} className="flex items-center">
+                  {i > 0 && <span className="mx-1">›</span>}
+                  <button
+                    type="button"
+                    onClick={() => goToDepth(i)}
+                    className="hover:underline"
+                    style={{
+                      color: i === crumbs.length - 1 ? "#1c1c1a" : "#6b6a63",
+                      fontWeight: i === crumbs.length - 1 ? 700 : 400,
+                    }}
+                  >
+                    {label}
+                  </button>
                 </span>
               ))}
             </div>
@@ -516,15 +541,17 @@ export default function FamilyListView({
                 const barR = radiusForSpecies(f.species);
                 const color = listRampColor(valueT(f.species));
                 const dim = activeName != null && activeName !== f.name;
+                const isSelected = selected === f.name;
                 return (
                   <path
                     key={f.name}
                     d={sectorPath(BAR_INNER_R, barR, start, end)}
                     fill={color}
-                    stroke="#ffffff"
-                    strokeWidth={1.5}
+                    stroke={isSelected ? "#1c1c1a" : "#ffffff"}
+                    strokeWidth={isSelected ? 2.5 : 1.5}
                     opacity={dim ? 0.35 : 1}
                     className="cursor-pointer transition-[filter,opacity] hover:brightness-[1.08] hover:saturate-[1.08]"
+                    style={{ outline: "none" }}
                     tabIndex={0}
                     role="button"
                     aria-label={`${f.name}: ${f.species} species, ${f.occurrences.toLocaleString()} occurrences`}
@@ -576,6 +603,7 @@ export default function FamilyListView({
                       fill={dim ? "#6b6a63" : "#1c1c1a"}
                       textDecoration={isSelected ? "underline" : undefined}
                       className="cursor-pointer"
+                      style={{ outline: "none" }}
                       tabIndex={0}
                       role="button"
                       onMouseEnter={(e) => {
@@ -636,8 +664,29 @@ export default function FamilyListView({
 
       <div className="w-[340px] flex-shrink-0 flex flex-col min-h-0" style={{ borderLeft: "1px solid #dcd9d0" }}>
         <div className="flex-shrink-0 px-4 pt-3.5 pb-2.5">
-          <h3 className="mono-text text-[12px] font-bold uppercase tracking-wider" style={{ color: "#1c1c1a" }}>
-            {rankLabel}
+          {/* Breadcrumb — plain "Families" at the root; each further drill
+              (family -> genus -> species) appends a crumb, and every crumb
+              (this level's own included, a harmless no-op click) jumps
+              straight to that depth — so this header always shows exactly
+              which family/genus the list below belongs to. */}
+          <h3 className="mono-text text-[12px] font-bold uppercase tracking-wider flex items-center gap-1.5 flex-wrap" style={{ color: "#1c1c1a" }}>
+            {["Families", ...path].map((label, i, crumbs) => (
+              <span key={i} className="flex items-center gap-1.5">
+                {i > 0 && (
+                  <span aria-hidden="true" style={{ color: "#6b6a63" }}>
+                    ›
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => goToDepth(i)}
+                  className="hover:underline"
+                  style={{ color: i === crumbs.length - 1 ? "#1c1c1a" : "#6b6a63" }}
+                >
+                  {label}
+                </button>
+              </span>
+            ))}
           </h3>
           <p className="text-[10px] mt-0.5 leading-snug" style={{ color: "#6b6a63" }}>
             {totalSpecies.toLocaleString()} species &middot; {totalOcc.toLocaleString()} occurrences across{" "}

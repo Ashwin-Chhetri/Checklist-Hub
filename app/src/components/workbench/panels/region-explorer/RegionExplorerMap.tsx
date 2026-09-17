@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import { boundaryBbox, type BoundaryGeometry, type RegionBoundaryRequest } from "@/modules/checklist/services/regionApi";
 import { applyMapTheme } from "./mapTheme";
-import { buildMaskGeometry } from "./regionMask";
+import { buildMaskGeometry, maskExcludesPoint } from "./regionMask";
 import {
   addBaseRasterLayers,
   addProtectedAreasLayer,
@@ -35,6 +35,43 @@ const PROTO = {
   inkDim: "#6b6a63",
   brand: "#1f6f43",
 };
+
+function flattenRings(geometry: BoundaryGeometry): number[][][] {
+  return geometry.type === "Polygon" ? geometry.coordinates : geometry.coordinates.flat();
+}
+
+function isPointInRings(lng: number, lat: number, rings: number[][][]): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * Finds one point genuinely inside the region — NOT just its bbox centroid,
+ * which can land outside a concave or crescent-shaped district — by scanning
+ * a coarse grid over the bbox and testing each candidate against the real
+ * rings. Used only to sanity-check the mask (see maskExcludesPoint); falls
+ * back to the bbox centroid if the scan somehow finds nothing; a false
+ * "outside" test point would wrongly disable a perfectly good mask.
+ */
+function findInteriorPoint(boundary: BoundaryGeometry, bbox: Bbox): [number, number] {
+  const rings = flattenRings(boundary);
+  const steps = 12;
+  for (let i = 1; i < steps; i++) {
+    for (let j = 1; j < steps; j++) {
+      const lng = bbox.minLng + ((bbox.maxLng - bbox.minLng) * i) / steps;
+      const lat = bbox.minLat + ((bbox.maxLat - bbox.minLat) * j) / steps;
+      if (isPointInRings(lng, lat, rings)) return [lng, lat];
+    }
+  }
+  return [(bbox.minLng + bbox.maxLng) / 2, (bbox.minLat + bbox.maxLat) / 2];
+}
 
 interface RegionExplorerMapProps {
   boundary: BoundaryGeometry | null;
@@ -229,12 +266,30 @@ export default function RegionExplorerMap({
     if (!map || !mapLoaded || !boundary || !bbox) return;
 
     const maskGeometry = buildMaskGeometry(boundary);
-    const maskSource = map.getSource("region-mask") as maplibregl.GeoJSONSource | undefined;
-    if (maskSource) {
-      maskSource.setData({ type: "Feature", geometry: maskGeometry, properties: {} });
+    const [testLng, testLat] = findInteriorPoint(boundary, bbox);
+    const maskIsSafe = maskExcludesPoint(maskGeometry, testLng, testLat);
+    if (!maskIsSafe) {
+      // The mask layer paints above every other layer with no beforeId (by
+      // design, so it can actually cover the "outside region" area) — if its
+      // hole doesn't actually exclude a point we KNOW is inside the region,
+      // applying it would paint solid over the entire visible map with no
+      // visible symptom other than "nothing renders" (the exact bug this
+      // guards against; see regionMask.ts's maskExcludesPoint doc comment).
+      // Skipping it trades "region isn't clipped" for "region isn't
+      // blanked" — the far safer failure mode — and removes any
+      // already-added mask layer/source so a region that WAS previously
+      // valid but just changed to a bad one doesn't stay stuck masked.
+      console.error("[RegionExplorerMap] mask sanity check failed — region would render fully blank; skipping clip for this region.", { boundary, testLng, testLat });
+      if (map.getLayer("region-mask-layer")) map.removeLayer("region-mask-layer");
+      if (map.getSource("region-mask")) map.removeSource("region-mask");
     } else {
-      map.addSource("region-mask", { type: "geojson", data: { type: "Feature", geometry: maskGeometry, properties: {} } });
-      map.addLayer({ id: "region-mask-layer", type: "fill", source: "region-mask", paint: { "fill-color": "#faf9f5", "fill-opacity": 1 } });
+      const maskSource = map.getSource("region-mask") as maplibregl.GeoJSONSource | undefined;
+      if (maskSource) {
+        maskSource.setData({ type: "Feature", geometry: maskGeometry, properties: {} });
+      } else {
+        map.addSource("region-mask", { type: "geojson", data: { type: "Feature", geometry: maskGeometry, properties: {} } });
+        map.addLayer({ id: "region-mask-layer", type: "fill", source: "region-mask", paint: { "fill-color": "#faf9f5", "fill-opacity": 1 } });
+      }
     }
 
     const boundarySource = map.getSource("boundary") as maplibregl.GeoJSONSource | undefined;

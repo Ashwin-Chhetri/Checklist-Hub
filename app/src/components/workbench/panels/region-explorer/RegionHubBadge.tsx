@@ -9,6 +9,17 @@ import type { Bbox } from "./overpassApi";
 
 const PROTO = { bg: "#efece1", border: "#dcd9d0", ink: "#1c1c1a", inkDim: "#6b6a63", brand: "#1f6f43" };
 
+// Occurrence point marker — a small map-pin glyph (not a plain dot, and not
+// red — red reads as an error/warning accent elsewhere in the app) drawn in
+// its own 24x24 box with the tip at (12, 22), the pin's usual anchor point.
+const PIN_PATH = "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z";
+const PIN_TIP_X = 12;
+const PIN_TIP_Y = 22;
+// Rendered height in hub-badge SVG units — small enough not to blanket the
+// badge when there are many points, still tall enough to read as a pin
+// rather than a blob.
+const PIN_RENDER_SIZE = 6;
+
 interface RegionHubBadgeProps {
   boundary: BoundaryGeometry | null;
   bbox: Bbox | null;
@@ -154,7 +165,17 @@ export default function RegionHubBadge({
           )}
           {points?.map((p) => {
             const [x, y] = projector!.project(p.lng, p.lat);
-            return <circle key={p.key} cx={x} cy={y} r={1.6} className="fill-red-500/85" />;
+            const scale = PIN_RENDER_SIZE / PIN_TIP_Y;
+            return (
+              <path
+                key={p.key}
+                d={PIN_PATH}
+                transform={`translate(${x - PIN_TIP_X * scale}, ${y - PIN_TIP_Y * scale}) scale(${scale})`}
+                fill={PROTO.brand}
+                stroke="#ffffff"
+                strokeWidth={1.2 / scale}
+              />
+            );
           })}
         </g>
         <path

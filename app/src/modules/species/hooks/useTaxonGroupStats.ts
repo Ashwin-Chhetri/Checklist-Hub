@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import type { Species } from "@/types/species.types";
 import { useSpeciesList } from "./useSpecies";
 
 export interface TaxonGroupStat {
@@ -10,27 +11,37 @@ export interface TaxonGroupStat {
    * count, among species that have a resolved taxon key. Backs both the
    * sidebar thumbnail carousel and (for whichever group is selected) the
    * region map's occurrence points. Empty when no species in the group
-   * resolved a taxon key. */
+   * resolved a taxon key. At the "species" rank each group is a single
+   * checklist row, so this holds at most that one species' own key. */
   sampleTaxonKeys: number[];
 }
 
 const MAX_SAMPLE_SPECIES = 10;
 
-export type TaxonGroupRank = "family" | "genus";
+// "species" is the terminal rank — a species-level group is a single
+// checklist row, not a further grouping, so there's nowhere left to drill.
+export type TaxonGroupRank = "family" | "genus" | "species";
 
 export interface TaxonGroupParent {
   rank: TaxonGroupRank;
   name: string;
 }
 
+function fieldForRank(s: Species, rank: TaxonGroupRank): string | null | undefined {
+  if (rank === "family") return s.family;
+  if (rank === "genus") return s.genus;
+  return s.scientific_name;
+}
+
 /**
  * Groups a checklist's active species by the given taxonomic rank, optionally
  * narrowed to a single parent group first (e.g. genus-level stats within one
- * family) — generalizes what useFamilyStats always did at the family level
- * alone, so the List view's wheel can drill one rank further down. No extra
- * network calls — `useSpeciesList` already loads every field this needs, so
- * this is a pure client-side aggregation of data the workbench already has
- * in memory.
+ * family, or species-level stats within one genus) — generalizes what
+ * useFamilyStats always did at the family level alone, so the List view's
+ * wheel can drill all the way down to individual species. No extra network
+ * calls — `useSpeciesList` already loads every field this needs, so this is
+ * a pure client-side aggregation of data the workbench already has in
+ * memory.
  */
 export function useTaxonGroupStats(checklistId: string, rank: TaxonGroupRank, parent?: TaxonGroupParent | null) {
   const speciesQuery = useSpeciesList(checklistId);
@@ -50,11 +61,11 @@ export function useTaxonGroupStats(checklistId: string, rank: TaxonGroupRank, pa
     const byGroup = new Map<string, Building>();
     for (const s of speciesQuery.data ?? []) {
       if (s.is_active === false) continue;
-      if (parentName != null) {
-        const parentVal = (parentRank === "family" ? s.family : s.genus)?.trim() || "Unclassified";
+      if (parentRank != null && parentName != null) {
+        const parentVal = fieldForRank(s, parentRank)?.trim() || "Unclassified";
         if (parentVal !== parentName) continue;
       }
-      const raw = rank === "family" ? s.family : s.genus;
+      const raw = fieldForRank(s, rank);
       const name = raw?.trim() || "Unclassified";
       const entry = byGroup.get(name) ?? { name, species: 0, occurrences: 0, candidates: [] };
       entry.species += 1;
