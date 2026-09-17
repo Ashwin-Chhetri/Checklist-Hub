@@ -1,10 +1,10 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo } from "react";
 import type { BoundaryGeometry } from "@/modules/checklist/services/regionApi";
 import { flattenToRings } from "@/modules/evidence/utils/regionPointFilter";
 import { buildBoundaryProjector } from "@/modules/evidence/utils/regionProjection";
-import { worldcoverWmsUrl } from "./regionExport";
+import { MAP_THEME } from "./mapTheme";
 import type { Bbox } from "./overpassApi";
 
 const PROTO = { bg: "#efece1", border: "#dcd9d0", ink: "#1c1c1a", inkDim: "#6b6a63", brand: "#1f6f43" };
@@ -33,9 +33,7 @@ interface RegionHubBadgeProps {
    * snapshot, not a live map, so "open the real thing" is its only
    * interaction. */
   onOpenMap?: () => void;
-  /** ViewBox size in SVG units — also used, capped by devicePixelRatio, as
-   * the requested WMS image's pixel size. Keep this modest: it directly
-   * controls how much this badge costs to fetch and paint. */
+  /** ViewBox size in SVG units. */
   size?: number;
   /** Occurrence points for whichever taxon group is currently selected in
    * the List view's wheel/sidebar — plotted as small dots clipped to the
@@ -48,29 +46,23 @@ interface RegionHubBadgeProps {
  * Static, non-interactive stand-in for a live region map — used in the List
  * tab's center wheel, where a full second MapLibre instance would mean
  * loading the whole MapLibre GL bundle (and running a second WebGL context)
- * the instant the dialog opens, since List is the dialog's default tab. This
- * renders one clipped ESA WorldCover raster (the same keyless WMS source the
- * Map tab's Vegetation layer and Stats tab already use — see regionStats.ts)
- * instead: a single small PNG fetch, no MapLibre, no WebGL, nothing that can
- * contend with the Map tab's own map instance since the two never share any
- * resource.
- *
- * Clip-before-fetch, same principle as the Map tab's raster layers
- * (mapLayers.ts's `bounds` on every source): the WMS request itself is
- * already bounded to the region's own bbox — never the whole world — and
- * the SVG clipPath on top then hides the bbox rectangle's corners outside
- * the true region shape, mirroring the Map tab's "world rectangle with the
- * region cut out" mask technique.
+ * the instant the dialog opens, since List is the dialog's default tab.
+ * Renders the region silhouette filled with the Map tab's own "Default"
+ * theme background color (mapTheme.ts) — no raster fetch, no MapLibre, no
+ * WebGL, nothing that can contend with the Map tab's own map instance since
+ * the two never share any resource — and, critically, it reads as the same
+ * view most people land on first when they open the real map (the Vegetation
+ * layer this badge used to preview via a clipped ESA WorldCover raster
+ * defaults off there).
  *
  * Deliberately a separate component from RegionOccurrenceMap (the Evidence
  * tab's flat SVG-only renderer) rather than a shared one — the two have
- * different jobs (image + click-through here; SVG boundary + occurrence dots
- * there) and keeping them apart means this work can't regress the Evidence
- * tab's renderer at all.
+ * different jobs (click-through here; SVG boundary + occurrence dots there)
+ * and keeping them apart means this work can't regress the Evidence tab's
+ * renderer at all.
  */
 export default function RegionHubBadge({
   boundary,
-  bbox,
   isBoundaryApproximate = false,
   isBoundaryLoading = false,
   regionName,
@@ -78,9 +70,6 @@ export default function RegionHubBadge({
   size = 200,
   points,
 }: RegionHubBadgeProps) {
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const [imgErrored, setImgErrored] = useState(false);
-
   const rings = useMemo(() => (boundary ? flattenToRings(boundary) : []), [boundary]);
   const projector = useMemo(() => buildBoundaryProjector(rings, size, size), [rings, size]);
 
@@ -96,29 +85,6 @@ export default function RegionHubBadge({
       })
       .join(" ");
   }, [rings, projector]);
-
-  // Maps the WMS image's own rectangular bbox into the exact same
-  // cos(lat)-corrected pixel box the boundary path was projected into, so
-  // the raster lines up with the clip path instead of looking stretched or
-  // offset. See regionProjection.ts's doc comment for why this has to reuse
-  // the same projector rather than a plain linear bbox->box scale.
-  const imageBox = useMemo(() => {
-    if (!projector || !bbox) return null;
-    const [x0, y0] = projector.project(bbox.minLng, bbox.maxLat);
-    const [x1, y1] = projector.project(bbox.maxLng, bbox.minLat);
-    const width = x1 - x0;
-    const height = y1 - y0;
-    if (!(width > 0) || !(height > 0)) return null;
-    return { x: x0, y: y0, width, height };
-  }, [projector, bbox]);
-
-  const imageHref = useMemo(() => {
-    if (!bbox || !imageBox) return null;
-    const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
-    const pxW = Math.max(1, Math.min(480, Math.round(imageBox.width * dpr)));
-    const pxH = Math.max(1, Math.min(480, Math.round(imageBox.height * dpr)));
-    return worldcoverWmsUrl(bbox, pxW, pxH);
-  }, [bbox, imageBox]);
 
   const clipId = `hub-clip-${useId()}`;
   const showLoading = isBoundaryLoading || !projector;
@@ -152,20 +118,11 @@ export default function RegionHubBadge({
           </clipPath>
         </defs>
         <g clipPath={`url(#${clipId})`}>
-          <rect x={0} y={0} width={size} height={size} fill={PROTO.bg} />
-          {imageHref && imageBox && !imgErrored && (
-            <image
-              href={imageHref}
-              x={imageBox.x}
-              y={imageBox.y}
-              width={imageBox.width}
-              height={imageBox.height}
-              preserveAspectRatio="none"
-              style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity 0.2s ease" }}
-              onLoad={() => setImgLoaded(true)}
-              onError={() => setImgErrored(true)}
-            />
-          )}
+          {/* Solid fill matching the Map tab's own "Default" theme background
+              (mapTheme.ts) — this badge used to render a clipped ESA
+              WorldCover raster here, but that read as visually disconnected
+              from the Default map view most people land on first. */}
+          <rect x={0} y={0} width={size} height={size} fill={MAP_THEME.background} />
           {points?.map((p) => {
             const [x, y] = projector!.project(p.lng, p.lat);
             const scale = PIN_RENDER_SIZE / PIN_TIP_Y;
