@@ -4,7 +4,7 @@ import type { StyleSpecification } from "maplibre-gl";
 // ported from the design prototype (prototypes/map-view-phase0-darjeeling.html)
 // so the real Map tab matches the validated design instead of stock
 // OpenFreeMap grays.
-const MAP_THEME = {
+export const MAP_THEME = {
   background: "#6cbd63",
   grass: "#4f9f50",
   forest: "#1f4a24",

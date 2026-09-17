@@ -37,7 +37,7 @@ export default function MapListDialog({ checklistId, checklistTitle, region, onC
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30" onClick={onClose}>
       <div
         className={`bg-white border border-surface-dim rounded-sm shadow-hard max-w-[94vw] max-h-[88vh] overflow-y-auto transition-[width] ${
-          view === "map" ? "w-[1040px]" : "w-[760px]"
+          view === "map" ? "w-[1160px]" : "w-[760px]"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
