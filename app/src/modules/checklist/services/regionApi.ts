@@ -253,6 +253,31 @@ export interface RegionBoundaryRequest {
   boundingBox?: [string, string, string, string] | null;
 }
 
+export interface LngLatBounds {
+  minLng: number;
+  maxLng: number;
+  minLat: number;
+  maxLat: number;
+}
+
+/** Flattens a Polygon/MultiPolygon's rings into a flat lng/lat bounding box, for fitting a map view or building a sample grid. */
+export function boundaryBbox(boundary: BoundaryGeometry): LngLatBounds {
+  const rings = boundary.type === "Polygon" ? boundary.coordinates : boundary.coordinates.flat();
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  for (const ring of rings) {
+    for (const [lng, lat] of ring) {
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+  }
+  return { minLng, maxLng, minLat, maxLat };
+}
+
 /** Builds a rectangular boundary from Nominatim's [south, north, west, east] bbox — the last-resort fallback so the map is never fully empty. */
 function bboxToPolygon(boundingBox: [string, string, string, string]): BoundaryGeometry {
   const [south, north, west, east] = boundingBox.map(Number);

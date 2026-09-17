@@ -1,0 +1,3317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Map View — Phase 0 Prototype (Darjeeling District)</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #faf9f5;
+    --panel: #ffffff;
+    --border: #dcd9d0;
+    --ink: #1c1c1a;
+    --ink-dim: #6b6a63;
+    --brand: #1f6f43;
+    --brand-dim: #1f6f4322;
+    --elev-red: #e2574c;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100vh; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow: hidden; }
+  body { display: flex; flex-direction: column; }
+
+  /* Stage centers the app card in the leftover space between header and
+     footer — sized to fill exactly what's available (no fixed vh guesses),
+     so it can never force the page itself to scroll. */
+  #stage {
+    flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+    background: #eae7de; padding: 20px; overflow: hidden;
+  }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--panel);
+    flex-wrap: wrap; gap: 8px;
+  }
+  header .title-block { display: flex; flex-direction: column; gap: 2px; }
+  header h1 {
+    margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    font-family: var(--mono);
+  }
+  header .region-name { font-size: 11px; color: var(--ink-dim); }
+  header .badge {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 3px 8px; border: 1px solid var(--border); border-radius: 3px; color: var(--ink-dim);
+  }
+
+  /* Sidebar keeps its original full width/type scale below — only the MAP
+     portion is sized here, generously but bounded so the card always fits
+     within the stage's available space (height:100% of stage, capped) with
+     no scrolling. Growing `main`'s width grows just the map, since the
+     sidebar next to it stays a fixed 340px. */
+  /* card-wrap is the sized flex item (same dimensions `main` used to carry
+     directly); `main` now just fills it. Splitting them out gives the
+     view-toggle pill a positioning parent that isn't clipped by main's own
+     overflow:hidden (needed to keep the map's corners inside its
+     border-radius), so the pill can straddle main's top border instead of
+     being cut off. */
+  #card-wrap {
+    position: relative; flex: 0 0 auto; width: 90%; max-width: 1180px;
+    height: 100%; max-height: 680px; min-height: 0;
+  }
+  main {
+    display: flex; width: 100%; height: 100%;
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12); background: var(--panel);
+  }
+
+  /* List/Map view toggle — sits directly on top of card-wrap (bottom:100%,
+     no gap) with no bottom border and no shadow of its own, so its sides
+     read as a continuation of main's own border/corner-radius rather than
+     a separate floating chip. The card's existing border + shadow do the
+     work of grounding it. List (left) is the active view by default; Map
+     (right) is switched to on demand — see switchView(). */
+  #view-toggle {
+    position: absolute; bottom: 100%; left: 18px; z-index: 6;
+    display: flex; flex-direction: row; width: 128px;
+    border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0;
+    overflow: hidden; background: var(--panel);
+  }
+  #view-toggle button {
+    flex: 1; border: none; background: none; cursor: pointer; padding: 6px 0;
+    font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  #view-toggle button:first-child { border-right: 1px solid var(--border); }
+  #view-toggle button:hover { color: var(--brand); }
+  #view-toggle button.active { background: var(--brand); color: #fff; }
+  #map-wrap { flex: 1; position: relative; min-width: 0; }
+  #map { position: absolute; inset: 0; }
+
+  #recenter-btn {
+    position: absolute; top: 12px; left: 12px; z-index: 5;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 6px 10px; cursor: pointer; color: var(--ink);
+  }
+  #recenter-btn:hover { border-color: var(--brand); color: var(--brand); }
+
+  #status-line {
+    /* No `right` inset — a block-level absolutely-positioned element with
+       only `left` set shrinks to fit its content instead of stretching
+       edge-to-edge, so this reads as a small pill hugging the status text
+       rather than a full-width bar. */
+    position: absolute; bottom: 8px; left: 10px; max-width: calc(100% - 40px); z-index: 5;
+    font-family: var(--mono); font-size: 9px; color: var(--ink-dim); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    /* Plain rgba(), not color-mix() — html2canvas (used by the "Capture"
+       crop feature below) throws on modern CSS color functions like
+       color-mix(), silently aborting any capture of an element that has
+       one anywhere in its computed styles. --panel is a fixed white in
+       this prototype (no theme switching), so this is visually identical. */
+    background: rgba(255, 255, 255, 0.88); padding: 3px 7px; border-radius: 3px;
+    pointer-events: none;
+  }
+
+  /* 3D toggle + rotate-nudge controls — real maplibregl.IControl instances
+     (map.addControl(..., "top-right")) so MapLibre stacks them below the
+     built-in zoom/compass group automatically, instead of guessing a fixed
+     pixel offset. Exists so 3D can be turned on with one click instead of
+     the ctrl+drag gesture MapLibre requires by default for pitch/bearing. */
+  .view3d-ctrl button {
+    width: 29px; height: 29px; display: flex; align-items: center; justify-content: center;
+    color: var(--ink); background: var(--panel); border: none; cursor: pointer; padding: 0;
+  }
+  .view3d-ctrl button:hover { color: var(--brand); }
+  .view3d-ctrl.active button { background: var(--elev-red); color: #fff; }
+  /* MapLibre's own default CSS (.maplibregl-ctrl button:not(:disabled):hover)
+     sets a 5%-black hover wash that's more specific than the rule above, so
+     hovering the active red button was replacing the red with grey. This
+     overrides it back to red on hover too. */
+  .view3d-ctrl.active button:hover { background: var(--elev-red) !important; color: #fff; }
+
+  .rotate-ctrl { display: flex !important; flex-direction: row; }
+  .rotate-ctrl button {
+    width: 29px; height: 29px; display: flex; align-items: center; justify-content: center;
+    color: var(--ink); background: var(--panel); border: none; cursor: pointer; font-size: 15px; padding: 0;
+  }
+  .rotate-ctrl button:hover { color: var(--brand); }
+  .rotate-ctrl button:first-child { border-right: 1px solid var(--border); }
+
+  /* Covers the map from first paint until the region has actually been
+     fit — without this, the map briefly shows its fallback center/zoom
+     (a generic, wrong-looking view) and then hard-snaps to the real fitted
+     view once the boundary resolves, which reads as a jarring flash/jump
+     rather than the map just "opening already correct". */
+  #map-loading-veil {
+    position: absolute; inset: 0; z-index: 10; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-dim); transition: opacity 0.25s ease;
+  }
+  #map-loading-veil.hidden { opacity: 0; pointer-events: none; }
+
+  aside {
+    width: 340px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--panel);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+
+  /* Two tabs (Layers / Stats) instead of one long scrolling column — the
+     full stack of toggles + every legend + all stats no longer needs to fit
+     on screen at once, just whichever tab is open. */
+  .tab-bar { display: flex; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    flex: 1; background: none; border: none; padding: 9px 4px; cursor: pointer;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-dim); border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--ink); border-bottom-color: var(--brand); font-weight: 700; }
+  .tab-panel { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+  .tab-panel[hidden] { display: none; }
+
+  .section { margin-bottom: 18px; }
+  .section h2 {
+    margin: 0 0 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-dim); font-family: var(--mono);
+  }
+
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 6px 0; border-bottom: 1px dashed var(--border); gap: 8px;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-dim); }
+  .stat-value { font-family: var(--mono); font-size: 12px; font-weight: 600; text-align: right; }
+  .stat-value.loading { color: var(--ink-dim); font-weight: 400; }
+  .stat-value.err { color: #b3401f; font-weight: 400; font-size: 10px; }
+  .stat-sub { font-size: 9px; color: var(--ink-dim); font-family: var(--mono); }
+
+  .toggle-row {
+    display: flex; align-items: center; gap: 7px; padding: 2px 0; font-size: 11px; cursor: pointer;
+  }
+  .toggle-row input { accent-color: var(--brand); width: 14px; height: 14px; }
+
+  /* Icon-only download button sitting to the right of a layer's own toggle
+     row (Water Bodies / NDVI / Vegetation) — outside the <label> so
+     clicking it doesn't also flip the checkbox. Exports that layer's data
+     in QGIS-ready form: vector layers as a GeoJSON+KML zip, raster
+     overlays as a georeferenced PNG (+ world file) zip. */
+  .layer-row { display: flex; align-items: center; gap: 6px; }
+  .layer-download-btn {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 20px; height: 20px; padding: 0; margin: 1px 0;
+    color: var(--ink-dim); background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer;
+  }
+  .layer-download-btn svg { display: block; }
+  .layer-download-btn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+  /* :not(.loading) so the in-flight spinner (swapped in via setDownloadLoading,
+     while the button is also disabled) stays fully visible instead of fading
+     to the same dim 0.4 opacity as a plain disabled/idle state. */
+  .layer-download-btn:disabled:not(.loading) { opacity: 0.4; cursor: default; }
+  .layer-download-btn.loading { cursor: wait; }
+
+  /* Loading spinner shown next to a layer's own label while its source
+     data is still being fetched (currently: Water Bodies, gated on an
+     Overpass query that can take several seconds). Reuses the same
+     .spinner animation as the stat rows below. */
+  .layer-row .spinner { margin: 0 0 0 6px; }
+
+  /* Icon-only capture tab, mirroring #view-toggle's treatment on the
+     top-right: sits flush on top of card-wrap (bottom:100%, no gap, no
+     bottom border, no shadow of its own) so it reads as an extension of
+     main's border/corner-radius rather than a separate floating chip. */
+  #capture-btn {
+    position: absolute; bottom: 100%; right: 18px; z-index: 6;
+    width: 32px; height: 27px; display: flex; align-items: center; justify-content: center;
+    color: var(--ink); background: var(--panel);
+    border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0;
+    cursor: pointer;
+  }
+  #capture-btn:hover { border-color: var(--brand); color: var(--brand); }
+  #capture-btn:disabled { opacity: 0.6; cursor: default; border-color: var(--border); color: var(--ink-dim); }
+
+  /* Crop overlay — a snipping-tool style region picker shown over `main`
+     when the camera button is clicked, instead of capturing the whole
+     card immediately. Positioned via JS (position:fixed, left/top/width/
+     height copied from main's own getBoundingClientRect) so the drag
+     surface lines up exactly with the area html2canvas will render, and
+     rect coordinates captured during the drag map 1:1 onto the canvas
+     html2canvas returns. */
+  #crop-overlay {
+    display: none; position: fixed; z-index: 50; border-radius: 8px; overflow: hidden;
+  }
+  #crop-overlay.active { display: block; }
+  #crop-hitarea { position: absolute; inset: 0; cursor: crosshair; }
+  /* Default state (before any drag): the whole dialog reads as dimmed/grey
+     right away, with confirm + close already on screen — instead of the
+     dialog looking untouched except for a small hint and a hard-to-notice
+     corner X, which read as "nothing happened" rather than "you're in
+     capture mode". Hidden the moment a drag starts, when #crop-selection's
+     own spotlight effect (below) takes over that dimming job instead. */
+  #crop-scrim {
+    position: absolute; inset: 0; background: rgba(20, 20, 18, 0.55); pointer-events: none;
+  }
+  #crop-hint {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; color: #fff;
+    background: rgba(0, 0, 0, 0.4); padding: 6px 12px; border-radius: 4px;
+    pointer-events: none; white-space: nowrap;
+  }
+  /* Cuts a "spotlight" hole in the dark veil around the selection using a
+     giant box-shadow instead of separate mask divs, then draws marching
+     ants around the edge with four animated linear-gradient backgrounds
+     (a pure-CSS dashed-and-moving border — no SVG needed). */
+  #crop-selection {
+    display: none; position: absolute;
+    box-shadow: 0 0 0 9999px rgba(20, 20, 18, 0.55);
+    background-image:
+      linear-gradient(90deg, #fff 50%, transparent 50%),
+      linear-gradient(90deg, #fff 50%, transparent 50%),
+      linear-gradient(0deg, #fff 50%, transparent 50%),
+      linear-gradient(0deg, #fff 50%, transparent 50%);
+    background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+    background-size: 10px 2px, 10px 2px, 2px 10px, 2px 10px;
+    background-position: 0 0, 0 100%, 0 0, 100% 0;
+    animation: crop-marching-ants 0.4s linear infinite;
+  }
+  @keyframes crop-marching-ants {
+    to { background-position: 10px 0, -10px 100%, 0 -10px, 100% 10px; }
+  }
+  /* One tick + one close, always in the same bottom-center spot until a
+     drag repositions them next to the selection — no second/redundant
+     corner-X anymore (there used to be both a corner X and a toolbar X). */
+  #crop-toolbar {
+    position: absolute; z-index: 2; display: flex; gap: 8px;
+    bottom: 20px; left: 50%; transform: translateX(-50%);
+  }
+  #crop-confirm, #crop-cancel {
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+  #crop-confirm { color: #fff; background: var(--brand); }
+  #crop-confirm:hover { background: #185835; }
+  #crop-cancel { color: #fff; background: #57564f; }
+  #crop-cancel:hover { background: #403f3a; }
+  #crop-confirm:disabled, #crop-cancel:disabled { opacity: 0.6; cursor: default; }
+
+  /* "Map Legend" toggle hides ALL on-map chrome at once — the built-in
+     zoom/compass group, the 3D + rotate controls, the scale control, the
+     recenter button and the status line — for a clean shot of just the
+     map, or ahead of using "Capture" below. Targeting MapLibre's own
+     top-right/bottom-left control containers means every control added to
+     those corners (present or future) is covered by one rule instead of
+     needing to be listed individually. */
+  #map-wrap.legend-hidden .maplibregl-ctrl-top-right,
+  #map-wrap.legend-hidden .maplibregl-ctrl-bottom-left,
+  #map-wrap.legend-hidden .maplibregl-ctrl-bottom-right,
+  #map-wrap.legend-hidden #recenter-btn,
+  #map-wrap.legend-hidden #status-line {
+    display: none !important;
+  }
+
+  /* Redesigned scale bar (the "km" control) — MapLibre's default is a
+     nearly-invisible thin bracket in a generic sans font; this restyles it
+     to match the app's mono/uppercase language and gives it a legible
+     background pill instead of sitting bare on top of the map. */
+  .maplibregl-ctrl-scale {
+    background: rgba(255, 255, 255, 0.85); /* not color-mix() — see #status-line's comment above */
+    border: none; border-radius: 3px;
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
+    color: var(--ink); padding: 2px 7px;
+  }
+
+  /* Google-Maps-style "Map type" picker: square thumbnail + label per
+     button, active one ringed in brand green with a small checkmark badge.
+     Default/Satellite behave as a radio group (mutually exclusive base
+     layer); Terrain is a separate toggle that can be active alongside
+     either one — so its thumbnail card never has the `radio` class the
+     other two share, only `.active` is shared for the highlight look. */
+  .view-mode-row { display: flex; gap: 16px; margin-top: 6px; }
+  .view-mode-btn {
+    flex: 0 0 auto; width: 25%; max-width: 39px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 0; border: none; background: none; cursor: pointer;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--ink-dim); line-height: 1.2;
+  }
+  /* Small "photo card" look (white ring + drop shadow) rather than a flat
+     tinted box — closer to the reference picker's thumbnail style. Actual
+     imagery is the inline <svg> inside, sized to fill via width/height:100%. */
+  .view-mode-thumb {
+    width: 100%; aspect-ratio: 1; border-radius: 5px; position: relative; overflow: hidden;
+    border: 1px solid #fff; box-shadow: 0 0 0 1px var(--border), 0 1px 3px rgba(0, 0, 0, 0.14);
+    transition: box-shadow 0.15s ease; background: #eee;
+  }
+  .view-mode-thumb svg { display: block; width: 100%; height: 100%; }
+  .view-mode-btn:hover .view-mode-thumb { box-shadow: 0 0 0 1px #b7c9ae, 0 1px 3px rgba(0, 0, 0, 0.14); }
+  .view-mode-btn.active .view-mode-thumb { box-shadow: 0 0 0 1.5px var(--brand), 0 1px 3px rgba(0, 0, 0, 0.18); }
+  .view-mode-btn.active { color: var(--brand); font-weight: 700; }
+  .view-mode-check {
+    position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--brand); color: #fff; font-size: 5px; align-items: center; justify-content: center;
+    line-height: 1; display: none;
+  }
+  .view-mode-btn.active .view-mode-check { display: flex; }
+
+  #source-links {
+    flex-shrink: 0; border-top: 1px solid var(--border); padding: 8px 14px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 3px 9px;
+  }
+  #source-links .source-links-label {
+    font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-dim); width: 100%; margin-bottom: 2px;
+  }
+  #source-links a {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.03em;
+    color: var(--ink-dim); text-decoration: none; border-bottom: 1px dotted var(--border);
+  }
+  #source-links a:hover { color: var(--brand); border-bottom-color: var(--brand); }
+
+  .legend-list { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 9.5px; color: var(--ink-dim); }
+  .legend-item .sw { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; border: 1px solid #0002; }
+  .legend-gradient {
+    height: 8px; border-radius: 3px; margin-top: 6px;
+    background: linear-gradient(90deg, #a06a3a, #d9c25c, #8fc93a, #2f7d32, #0b4a17);
+  }
+  .legend-gradient-labels { display: flex; justify-content: space-between; font-size: 8.5px; color: var(--ink-dim); font-family: var(--mono); margin-top: 2px; }
+
+  /* "View Map Details" button lives in the Stats tab's Methodology
+     section; clicking it opens #map-details-dialog (a native <dialog>,
+     so Esc-to-close and focus-trapping come for free) instead of the old
+     always-on footer bar — that bar ate a full row of vertical space on
+     every view for text most people read once, if ever. */
+  #view-map-details-btn {
+    display: flex; align-items: center; gap: 6px; margin-top: 8px;
+    font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+    padding: 6px 9px; cursor: pointer;
+  }
+  #view-map-details-btn:hover { border-color: var(--brand); color: var(--brand); }
+
+  #map-details-dialog {
+    width: 90%; max-width: 640px; max-height: 78vh; padding: 0; margin: auto;
+    border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22);
+    background: var(--panel); color: var(--ink);
+  }
+  #map-details-dialog::backdrop { background: rgba(20, 20, 16, 0.45); }
+  .dialog-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+  }
+  .dialog-header h2 {
+    margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    font-family: var(--mono);
+  }
+  .dialog-close-btn {
+    border: none; background: none; cursor: pointer; color: var(--ink-dim); font-size: 18px; line-height: 1; padding: 2px 4px;
+  }
+  .dialog-close-btn:hover { color: var(--brand); }
+  .dialog-body {
+    overflow-y: auto; max-height: calc(78vh - 45px); padding: 14px 16px;
+    font-size: 10.5px; color: var(--ink-dim); line-height: 1.6;
+  }
+  .dialog-body b { color: var(--ink); }
+  #overpass-note { color: #b3401f; }
+
+  .spinner { display: inline-block; width: 9px; height: 9px; border: 1.5px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 4px; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ==================== List View ====================
+     Hidden by default; #view-toggle's click handler adds .mode-list to
+     `main`, which swaps #map-wrap + aside out for #list-wrap. Reuses this
+     file's own tokens/mono type instead of a separate design system. */
+  #list-wrap { display: none; }
+  main.mode-list #map-wrap, main.mode-list aside { display: none; }
+  main.mode-list #list-wrap { display: flex; }
+
+  /* #list-wrap fills main's full height/width (flex-row default stretch) and
+     lays its two sections out side by side: the wheel on the left flexes to
+     fill whatever width the fixed-width family column on the right doesn't
+     need, both at full height — nothing scrolls except the family column's
+     own list, so the whole view fits the card without a page scrollbar. */
+  #list-wrap {
+    flex: 1; min-width: 0; flex-direction: row; overflow: hidden; background: var(--panel);
+  }
+  .list-chart-section {
+    flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+    padding: 14px 20px 14px 22px;
+  }
+  /* Widened 248 -> 340px per direct feedback — the families column read as
+     cramped (small icon thumbnails, tight text) next to a chart section
+     that had spare room to give up. .list-chart-section is flex:1 1 auto
+     (fills whatever's left), so growing this fixed column automatically
+     takes that width from the chart side, not just from the card overall. */
+  .list-strip-section {
+    flex: 0 0 340px; width: 340px; min-height: 0; display: flex; flex-direction: column;
+    border-left: 1px solid var(--border); padding: 14px 14px 14px 16px;
+  }
+
+  /* Flex-fit, not a fixed max-width: the SVG is sized by height (100% of
+     whatever vertical room this section has), width follows automatically
+     from its square viewBox — so the chart is exactly as big as the
+     available space allows instead of a guessed pixel cap. */
+  .list-chart-wrap {
+    position: relative; flex: 1 1 auto; min-height: 0; width: 100%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .list-chart-wrap svg { display: block; height: 100%; width: auto; max-width: 100%; overflow: visible; }
+
+  /* Fills the foreignObject it's placed in (already sized to LIST_CENTER_R*2
+     by buildListView). Deliberately NOT the clipping element (see
+     .list-map-mask below) — the "Edit map" button needs to float over the
+     circular map without being cropped by its own overflow:hidden. */
+  .list-map-preview { width: 100%; height: 100%; position: relative; }
+  /* The actual circular clip + the map's white backdrop while it loads —
+     this div used to be a free-floating 21%-sized thumbnail centered over
+     the whole chart from an earlier iteration, back before the foreignObject
+     itself was sized to the circle; left at 21% it now shrinks the map to a
+     small disc inside its own already-correctly-sized circular frame.
+     renderListMapPreview() rewrites this div's innerHTML wholesale (pending
+     text <-> the live map container), so nothing that needs to persist
+     across that (like the edit button) lives inside it. */
+  .list-map-mask {
+    width: 100%; height: 100%; border-radius: 50%; overflow: hidden;
+    box-shadow: 0 0 0 1px var(--border);
+    display: flex; align-items: center; justify-content: center; background: #fff;
+  }
+  /* #list-hub-map is a real MapLibre container (see initListHubMap) — the
+     library manages its own canvas sizing via the .maplibregl-map rules in
+     maplibre-gl.css, this just needs to claim the full circular frame. */
+  #list-hub-map { width: 100%; height: 100%; }
+  .list-map-pending {
+    font-family: var(--mono); font-size: 8px; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--ink-dim); text-align: center; padding: 0 8px;
+  }
+  /* Floating "Edit map" button, bottom-right of the hub circle — sits in
+     the non-clipping wrapper (.list-map-preview) so it isn't cropped by the
+     mask's border-radius. Inset 18% (not a token corner-hugging value): a
+     circle inscribed in its bounding square doesn't reach the square's own
+     corners, so anything inset less than ~15% from the corner would sit
+     outside the circle, floating in the clipped-away gap next to it rather
+     than visibly on the map.
+     Hidden until the hub map is actually being interacted with — sitting on
+     screen permanently made it read as a fixed chart decoration rather than
+     a contextual action. Shown on hover/focus of the wrapper (mouse) or
+     focus of the button itself (keyboard, since a hidden button can't be
+     hovered onto); pointer-events stay off while hidden so it doesn't
+     intercept clicks meant for the map underneath. */
+  .list-hub-edit-btn {
+    position: absolute; right: 18%; bottom: 18%; width: 26px; height: 26px; border-radius: 50%;
+    background: #fff; border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+    display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer;
+    color: var(--ink); opacity: 0; pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.12s ease, background 0.12s ease;
+  }
+  .list-map-preview:hover .list-hub-edit-btn,
+  .list-map-preview:focus-within .list-hub-edit-btn {
+    opacity: 1; pointer-events: auto;
+  }
+  .list-hub-edit-btn:hover, .list-hub-edit-btn:focus-visible { background: var(--brand); color: #fff; transform: scale(1.08); }
+  .list-hub-edit-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; opacity: 1; pointer-events: auto; }
+
+  /* Spoke now only ever spans BAR_INNER_R -> that family's own bar radius
+     (see buildListView), so it sits fully underneath the wedge and is never
+     actually visible — kept only as a z-order base so nothing shows through
+     if a wedge is ever made semi-transparent. The visible line beyond the
+     bar is .list-leader alone now, in one solid color, instead of the old
+     grey-then-black handoff between two differently-styled segments. */
+  .list-spoke { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 4; }
+  .list-leader { stroke: #000; stroke-width: 1; opacity: 0.8; }
+
+  /* `outline: none` on the bare (not just :focus-visible) selector — SVG
+     elements don't reliably get Chromium's :focus-visible heuristic the way
+     HTML buttons do, so a plain mouse click on a tabindex="0" wedge can
+     still match `:focus` and paint the browser's default focus indicator:
+     a plain black rectangle around the element's bounding box (not shaped
+     to the wedge), unrelated to and uglier than our own stroke-based
+     hover/selected states below. */
+  .list-wedge { cursor: pointer; stroke: var(--panel); stroke-width: 1.5; outline: none; transition: filter 0.12s ease, opacity 0.12s ease; }
+  .list-wedge:hover, .list-wedge:focus-visible { filter: brightness(1.08) saturate(1.08); }
+  .list-wedge:focus-visible { stroke: var(--ink); stroke-width: 2; }
+  /* Ink, not var(--brand) — the chart's own palette is entirely warm pinks/
+     purples/oranges (see LIST_PALETTE), and the site's green brand accent
+     read as an off-theme clash sitting on top of it. Ink is already this
+     chart's own "highlighted" color (see the :focus-visible rule above),
+     so re-using it here keeps a single consistent accent instead of adding
+     a second, clashing one. */
+  .list-wedge.is-selected { stroke: var(--ink); stroke-width: 2.5; }
+  .list-wedge-group.is-dim .list-wedge { opacity: 0.35; }
+
+  .list-fam-label { font-size: 23px; font-weight: 700; fill: var(--ink); cursor: pointer; }
+  .list-fam-label.is-selected { fill: var(--ink); text-decoration: underline; }
+  .list-wedge-group.is-dim + .list-fam-label,
+  .list-fam-label.is-dim { fill: var(--ink-dim); }
+  /* The species-count sub-line, restyled as a proper subtitle (mono,
+     uppercase, letter-spaced) instead of just a smaller/dimmer copy of the
+     name — matching the app's other subtitle-ish text (.badge, .stat-label)
+     rather than reading as a second, competing title. */
+  .list-fam-label-sub {
+    font-family: var(--mono); font-size: 13px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; fill: var(--ink-dim);
+  }
+
+  .list-strip-head { flex: 0 0 auto; margin: 0 0 10px; }
+  .list-strip-head h2 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--mono); }
+  .list-strip-head .sub { margin: 3px 0 0; font-size: 10px; color: var(--ink-dim); line-height: 1.4; }
+
+  /* Vertical, scrollable family list filling the rest of the right column —
+     top-to-bottom scroll, no paging controls (the mouse wheel does it). Rows
+     are divider-separated, not individually boxed: no per-card border/shadow,
+     just a hairline between consecutive rows. */
+  .list-strip {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+    overflow-y: auto; overflow-x: hidden; padding: 2px 2px 2px 0; scrollbar-width: thin;
+  }
+
+  .list-fam-card {
+    flex: 0 0 auto; width: 100%; display: flex; flex-direction: row; align-items: center; gap: 14px;
+    background: none; border: none; border-bottom: 1px solid var(--border); border-radius: 0;
+    padding: 12px 2px; cursor: pointer; text-align: left; font: inherit; color: inherit;
+    transition: background-color 0.12s ease;
+  }
+  .list-fam-card:last-child { border-bottom: none; }
+  .list-fam-card:hover { background: var(--brand-dim); }
+  .list-fam-card:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+  .list-fam-card.is-selected { background: var(--brand-dim); }
+
+  /* Icon thumbnail bumped 46 -> 60px (icon glyph 24 -> 32px) to actually use
+     the width the wider strip section (248 -> 340px) freed up — at the old
+     size it read as a small token floating in a lot of new empty space. */
+  .list-fam-card .art {
+    position: relative; width: 60px; height: 60px; flex-shrink: 0; border-radius: 8px; background: #efece1;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .list-fam-card .art svg { width: 32px; height: 32px; color: var(--ink); opacity: 0.75; }
+  .list-fam-card .chip { position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #efece1; }
+  .list-fam-card .text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .list-fam-card .name { font-size: 13.5px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list-fam-card .count { font-size: 10.5px; color: var(--ink-dim); }
+  .list-fam-card .occ { font-size: 10.5px; color: var(--ink-dim); font-family: var(--mono); }
+
+  @media (max-width: 860px) {
+    main { flex-direction: column; }
+    aside { width: 100%; border-left: none; border-top: 1px solid var(--border); max-height: 46vh; }
+    #map-wrap { min-height: 360px; }
+    #list-wrap { flex-direction: column; max-height: none; }
+    .list-strip-section { flex: 0 0 auto; width: 100%; max-height: 40vh; border-left: none; border-top: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>Map View — Phase 0 Prototype</h1>
+    <span class="region-name" id="region-name-label">Resolving region…</span>
+  </div>
+  <span class="badge">Not production code — validation only</span>
+</header>
+
+<div id="stage">
+<div id="card-wrap">
+<div id="view-toggle">
+  <button type="button" data-view="list" class="active">List</button>
+  <button type="button" data-view="map">Map</button>
+</div>
+<button type="button" id="capture-btn" title="Select an area to capture">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/>
+    <circle cx="12" cy="14" r="3.4"/>
+  </svg>
+</button>
+<div id="crop-overlay">
+  <div id="crop-hitarea"></div>
+  <div id="crop-scrim"></div>
+  <div id="crop-hint">Press ✓ to capture the whole view, or drag to select just part of it · Esc to cancel</div>
+  <div id="crop-selection"></div>
+  <div id="crop-toolbar">
+    <button type="button" id="crop-confirm" title="Capture">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M4 12.5l5.5 5.5L20 6.5"/>
+      </svg>
+    </button>
+    <button type="button" id="crop-cancel" title="Close">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M5 5l14 14M19 5L5 19"/>
+      </svg>
+    </button>
+  </div>
+</div>
+<main class="mode-list">
+  <div id="map-wrap">
+    <div id="map"></div>
+    <button id="recenter-btn">⤢ Fit to region</button>
+    <div id="status-line">Booting map…</div>
+    <div id="map-loading-veil">
+      <span class="spinner"></span>
+      <span>Loading region…</span>
+    </div>
+  </div>
+
+  <aside>
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="layers" type="button">Layers</button>
+      <button class="tab-btn" data-tab="stats" type="button">Stats</button>
+    </div>
+
+    <div class="tab-panel" data-panel="layers">
+      <div class="section">
+        <h2>Map Type</h2>
+        <div class="view-mode-row">
+          <button type="button" class="view-mode-btn active" data-group="base" data-mode="theme">
+            <span class="view-mode-thumb thumb-default">
+              <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect width="100" height="100" fill="#f1efe4"/>
+                <path d="M-6,8 C10,-4 34,3 38,18 C42,31 28,41 18,47 C6,54 -10,48 -8,35 C-7,25 2,17 -6,8 Z" fill="#6cb7e0"/>
+                <path d="M56,-4 L106,-4 L106,32 C92,36 80,26 71,31 C60,37 58,16 56,-4 Z" fill="#bcdca0"/>
+                <path d="M-6,68 C8,62 4,86 -8,89 L-8,104 L22,104 C15,92 22,78 -6,68 Z" fill="#bcdca0"/>
+                <path d="M-10,98 L46,22" stroke="#8f8d84" stroke-width="10" stroke-linecap="round"/>
+                <path d="M-10,98 L46,22" stroke="#fbfaf6" stroke-width="1.3" stroke-dasharray="4 4" stroke-linecap="round"/>
+                <path d="M46,22 L63,44 M40,30 L58,16" stroke="#a6a49a" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+              </svg>
+              <span class="view-mode-check">&#10003;</span>
+            </span>
+            Default
+          </button>
+          <button type="button" class="view-mode-btn" data-group="base" data-mode="satellite">
+            <span class="view-mode-thumb thumb-satellite">
+              <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect width="100" height="100" fill="#26311c"/>
+                <g fill="#3a4d27">
+                  <circle cx="12" cy="14" r="8"/><circle cx="27" cy="7" r="6.5"/><circle cx="7" cy="31" r="6.5"/>
+                  <circle cx="91" cy="19" r="8"/><circle cx="78" cy="9" r="6.5"/><circle cx="95" cy="35" r="6.5"/>
+                  <circle cx="14" cy="86" r="8"/><circle cx="29" cy="93" r="6.5"/><circle cx="5" cy="71" r="6.5"/>
+                  <circle cx="89" cy="81" r="8"/><circle cx="75" cy="91" r="6.5"/><circle cx="93" cy="67" r="6.5"/>
+                </g>
+                <g fill="#4c6634">
+                  <circle cx="21" cy="21" r="4.5"/><circle cx="5" cy="9" r="4"/><circle cx="35" cy="15" r="4"/>
+                  <circle cx="84" cy="14" r="4.5"/><circle cx="97" cy="27" r="4"/>
+                  <circle cx="21" cy="91" r="4.5"/><circle cx="35" cy="85" r="4"/>
+                  <circle cx="81" cy="87" r="4.5"/><circle cx="97" cy="75" r="4"/>
+                </g>
+                <path d="M-12,0 L112,92" stroke="#54585c" stroke-width="21"/>
+                <path d="M-12,0 L112,92" stroke="#e7e7e4" stroke-width="1.6" stroke-dasharray="5 5"/>
+                <g transform="rotate(48 50 46)">
+                  <rect x="21" y="18" width="5.5" height="10" rx="1.6" fill="#1c1f24"/>
+                  <rect x="40" y="33" width="5.5" height="10" rx="1.6" fill="#20242a"/>
+                  <rect x="55" y="48" width="5.5" height="10" rx="1.6" fill="#a53a2b"/>
+                  <rect x="70" y="61" width="5.5" height="10" rx="1.6" fill="#1c1f24"/>
+                </g>
+              </svg>
+              <span class="view-mode-check">&#10003;</span>
+            </span>
+            Satellite
+          </button>
+          <button type="button" class="view-mode-btn" data-group="terrain" data-mode="terrain">
+            <span class="view-mode-thumb thumb-terrain">
+              <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect width="100" height="100" fill="#dfe7d2"/>
+                <rect x="50" width="50" height="100" fill="#c3d5ac"/>
+                <g fill="none" stroke="#a9bd93" stroke-width="1.4">
+                  <path d="M4,10 C20,18 10,30 26,34 C40,38 30,50 44,56"/>
+                  <path d="M-4,30 C14,36 6,46 22,52 C36,56 26,66 40,72"/>
+                  <path d="M-4,55 C12,60 4,70 18,76 C32,80 24,90 36,96"/>
+                </g>
+                <g fill="none" stroke="#8fa578" stroke-width="1.3">
+                  <path d="M55,4 C66,14 78,10 82,22 C86,34 72,32 76,46"/>
+                  <path d="M52,26 C64,34 76,30 80,42 C84,54 70,52 74,66"/>
+                  <path d="M50,50 C62,58 74,54 78,66 C82,78 68,76 72,90"/>
+                </g>
+                <path d="M0,22 C16,18 20,32 30,40 C42,50 46,66 58,72" fill="none" stroke="#7fb8cf" stroke-width="3" stroke-linecap="round"/>
+              </svg>
+              <span class="view-mode-check">&#10003;</span>
+            </span>
+            Terrain
+          </button>
+        </div>
+      </div>
+
+      <div class="section" id="map-controls-section">
+        <label class="toggle-row">
+          <input type="checkbox" id="toggle-map-legend" checked />
+          Map Legend (on-map icons)
+        </label>
+      </div>
+
+      <div class="section">
+        <h2>Layers</h2>
+        <label class="toggle-row">
+          <input type="checkbox" id="toggle-protected" checked />
+          Protected Areas
+        </label>
+        <div class="layer-row">
+          <label class="toggle-row" style="flex:1" id="toggle-water-label" title="Resolving region — water data loading…">
+            <input type="checkbox" id="toggle-water" disabled />
+            Water Bodies (rivers &amp; lakes)
+            <span class="spinner" id="water-loading-spinner"></span>
+          </label>
+          <button type="button" id="download-water-btn" class="layer-download-btn" disabled
+            title="Resolving region — download will be ready shortly">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/>
+            </svg>
+          </button>
+        </div>
+        <div class="layer-row">
+          <label class="toggle-row" style="flex:1">
+            <input type="checkbox" id="toggle-ndvi" />
+            NDVI (vegetation index)
+          </label>
+          <button type="button" id="download-ndvi-btn" class="layer-download-btn" disabled
+            title="Resolving region — download will be ready shortly">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/>
+            </svg>
+          </button>
+        </div>
+        <div class="layer-row">
+          <label class="toggle-row" style="flex:1">
+            <input type="checkbox" id="toggle-vegetation" />
+            Vegetation / Land Cover (satellite)
+          </label>
+          <button type="button" id="download-vegetation-btn" class="layer-download-btn" disabled
+            title="Resolving region — download will be ready shortly">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Map Theme</h2>
+        <div class="legend-list" id="theme-legend-list"></div>
+      </div>
+
+      <div class="section" id="protected-legend-section" style="display:none">
+        <h2>Protected Areas Legend</h2>
+        <div class="legend-list" id="protected-legend-list"></div>
+      </div>
+
+      <div class="section" id="ndvi-legend-section" style="display:none">
+        <h2>NDVI Legend</h2>
+        <div class="legend-gradient"></div>
+        <div class="legend-gradient-labels"><span>Bare / water</span><span>Dense vegetation</span></div>
+      </div>
+
+      <div class="section" id="veg-legend-section" style="display:none">
+        <h2>Land Cover Legend</h2>
+        <div class="legend-list" id="veg-legend-list"></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="stats" hidden>
+      <div class="section">
+        <h2>Terrain &amp; Elevation</h2>
+        <div class="stat-row">
+          <span class="stat-label">Highest elevation</span>
+          <span class="stat-value loading" id="stat-max-elev"><span class="spinner"></span>loading</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Lowest elevation</span>
+          <span class="stat-value loading" id="stat-min-elev"><span class="spinner"></span>loading</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Mean elevation</span>
+          <span class="stat-value loading" id="stat-mean-elev"><span class="spinner"></span>loading</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Climate</h2>
+        <div class="stat-row">
+          <span class="stat-label">Annual mean temp.</span>
+          <span class="stat-value loading" id="stat-temp"><span class="spinner"></span>loading</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Land Cover &amp; Habitat</h2>
+        <div class="stat-row">
+          <span class="stat-label">Dominant vegetation</span>
+          <span class="stat-value loading" id="stat-veg"><span class="spinner"></span>loading</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Water bodies found</span>
+          <span class="stat-value loading" id="stat-water"><span class="spinner"></span>loading</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Protected areas</span>
+          <span class="stat-value loading" id="stat-protected"><span class="spinner"></span>loading</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Methodology</h2>
+        <p class="stat-sub" id="grid-sample-note"></p>
+        <button type="button" id="view-map-details-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r="0.5" fill="currentColor"/>
+          </svg>
+          View Map Details
+        </button>
+      </div>
+    </div>
+
+    <div id="source-links">
+      <span class="source-links-label">Map data</span>
+      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+      <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>
+      <a href="https://www.esri.com/en-us/legal/terms/data-attributions" target="_blank" rel="noopener">Esri (satellite)</a>
+      <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>
+      <a href="https://esa-worldcover.org/" target="_blank" rel="noopener">ESA WorldCover</a>
+      <a href="https://www.earthdata.nasa.gov/data/tools/gibs" target="_blank" rel="noopener">NASA GIBS</a>
+      <a href="https://overpass-api.de/" target="_blank" rel="noopener">Overpass</a>
+    </div>
+  </aside>
+
+  <div id="list-wrap">
+    <div class="list-chart-section">
+      <div class="list-chart-wrap" id="list-chart-wrap">
+        <svg id="list-chart-svg" viewBox="0 0 2664 2664" role="img" aria-label="Radial chart of species by family"></svg>
+      </div>
+    </div>
+
+    <div class="list-strip-section">
+      <div class="list-strip-head">
+        <h2>Families</h2>
+        <p class="sub">Sample data &mdash; not yet wired to real species</p>
+      </div>
+      <div class="list-strip" id="list-strip"></div>
+    </div>
+  </div>
+</main>
+</div>
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="list-glyph-generic" viewBox="0 0 24 24">
+    <path d="M12 3c-1 0-4.2 3-4.2 7.2C7.8 14 10 17 12 21c2-4 4.2-7 4.2-10.8C16.2 6 13 3 12 3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <circle cx="12" cy="10" r="2.1" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  </symbol>
+</svg>
+
+<dialog id="map-details-dialog">
+  <div class="dialog-header">
+    <h2>Map Details</h2>
+    <button type="button" class="dialog-close-btn" id="close-map-details-btn" aria-label="Close">&times;</button>
+  </div>
+  <div class="dialog-body">
+    <b>Data sources (all keyless/open):</b> boundary &amp; basemap — OpenStreetMap (Nominatim, OpenFreeMap); elevation &amp; temperature — Open-Meteo; water bodies &amp; protected areas — OpenStreetMap via Overpass (<code>boundary=protected_area</code>/<code>national_park</code>, <code>leisure=nature_reserve</code>); NDVI &amp; elevation-relief — NASA GIBS; vegetation/land-cover — ESA WorldCover via VITO Terrascope. Protected-area boundaries stored as OSM relations (e.g. national parks split across many member ways) are assembled into polygons client-side — a production build would do this server-side and cache it, the same as the boundary/water-body caching already planned. Known gap, not yet fixed: OSM's <code>landuse=residential</code> covers only ~1,900 polygons for this district against ~411,000 individual buildings, and the base map's building layer is itself absent below zoom 13 in the underlying tileset (both verified live) — so settlement extent under-represents reality at district zoom. A WorldCover-Built-up-derived overlay was tried and reverted: at real-city density it painted as a solid tan wash indistinguishable from "barren" and buried the building color underneath it, so it needs a different visual treatment (lower opacity, a distinct hue, or zoom-restricted) before it's worth reintroducing.
+    <span id="terrain-note"> · Every raster overlay (3D terrain, vegetation, NDVI) is restricted to the region's own bounding box via each source's <code>bounds</code> — tiles outside it are never requested, not just hidden. The map is also leashed to the region via <code>maxBounds</code>. A fully opaque mask then clips the visible render to the exact region shape. Real elevation data drives the 3D terrain toggle: AWS's <code>elevation-tiles-prod</code> DEM tiles send no CORS headers so a browser can't decode them directly, so this prototype's local dev server proxies them same-origin (see <code>serve-prototype.mjs</code>) — the same fix production will apply via a Next.js API route.</span>
+    <span id="overpass-note"></span>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Config ----------
+  var REGION_QUERY = "Darjeeling District, West Bengal, India";
+  var FALLBACK_CENTER = [88.26, 27.05];
+  // Verified reference values for this specific district — deliberately
+  // NOT derived from the grid-sampling pipeline below. That pipeline (see
+  // generateClippedGrid/fetchElevations) is a coarse ~90-point sample
+  // clipped to the boundary, built for the *mean* elevation and for
+  // spreading environmental samples generally — it has no way to land
+  // exactly on the true summit (Sandakphu, on the Nepal border, a thin
+  // sliver of the district) or the true lowest point (the Terai plains
+  // near Phansidewa), so treating its min/max as "the highest/lowest
+  // elevation" silently reports whatever the sample grid happened to hit
+  // instead of the real answer. These two headline figures are hardcoded
+  // to known values instead.
+  var ELEVATION_EXTREMES = {
+    high: { name: "Sandakphu", lat: 27.1106, lng: 88.0097, elevationM: 3636 },
+    low: { name: "Phansidewa area", lat: 26.6167, lng: 88.2167, elevationM: 98 }
+  };
+  var OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
+  var OVERPASS_MIRRORS = [
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.openstreetmap.fr/api/interpreter",
+    "https://overpass-api.de/api/interpreter"
+  ];
+  // Same origin this page is served from — the local dev server also proxies
+  // AWS's DEM tiles same-origin (see serve-prototype.mjs) so MapLibre can
+  // decode them for real terrain (blocked cross-origin, no CORS on the AWS
+  // bucket itself).
+  var TERRAIN_PROXY_BASE = window.location.origin;
+  var WORLDCOVER_WMS_BASE = "https://titiler.terrascope.be/wms";
+  var WORLDCOVER_LAYER = "esa-worldcover-map-10m-2021-v2_map";
+  // Titiler only accepts WMS 1.3.0 (not 1.1.1) and requires an explicit TIME
+  // even though GetCapabilities lists a default — confirmed by live testing.
+  // 1.3.0 + CRS=EPSG:4326 also uses strict OGC axis order (lat,lon), unlike
+  // 1.1.1's lon,lat — also confirmed by live testing (a lon,lat request
+  // "succeeds" but silently returns a near-empty out-of-coverage tile).
+  var WORLDCOVER_TIME = "2021-01-01";
+
+  var WORLDCOVER_PALETTE = [
+    { code: 10, label: "Tree cover", color: "#006400" },
+    { code: 20, label: "Shrubland", color: "#ffbb22" },
+    { code: 30, label: "Grassland", color: "#ffff4c" },
+    { code: 40, label: "Cropland", color: "#f096ff" },
+    { code: 50, label: "Built-up", color: "#fa0000" },
+    { code: 60, label: "Bare / sparse vegetation", color: "#b4b4b4" },
+    { code: 70, label: "Snow and ice", color: "#f0f0f0" },
+    { code: 80, label: "Permanent water bodies", color: "#0064c8" },
+    { code: 90, label: "Herbaceous wetland", color: "#0096a0" },
+    { code: 95, label: "Mangroves", color: "#00cf75" },
+    { code: 100, label: "Moss and lichen", color: "#fae6a0" }
+  ].map(function (c) {
+    var n = parseInt(c.color.slice(1), 16);
+    c.rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    return c;
+  });
+
+  function setStatus(msg) {
+    document.getElementById("status-line").textContent = msg;
+    console.log("[map-view]", msg);
+  }
+
+  function setStat(id, html, cls) {
+    var el = document.getElementById(id);
+    el.className = "stat-value" + (cls ? " " + cls : "");
+    el.innerHTML = html;
+  }
+
+  function addStatSub(statId, text) {
+    var row = document.getElementById(statId).closest(".stat-row");
+    if (!row) return;
+    var sub = document.createElement("div");
+    sub.className = "stat-sub";
+    sub.style.width = "100%";
+    sub.textContent = text;
+    row.after(sub);
+  }
+
+  // ---------- Geometry helpers ----------
+  function flattenToRings(geometry) {
+    if (!geometry) return [];
+    if (geometry.type === "Polygon") return geometry.coordinates;
+    if (geometry.type === "MultiPolygon") {
+      var rings = [];
+      geometry.coordinates.forEach(function (poly) {
+        poly.forEach(function (ring) { rings.push(ring); });
+      });
+      return rings;
+    }
+    return [];
+  }
+
+  function computeBbox(rings) {
+    var minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    rings.forEach(function (ring) {
+      ring.forEach(function (pt) {
+        var lng = pt[0], lat = pt[1];
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+      });
+    });
+    return { minLng: minLng, maxLng: maxLng, minLat: minLat, maxLat: maxLat };
+  }
+
+  // Even-odd ray casting across ALL rings at once — correctly handles holes
+  // without needing to know which rings are exterior vs. interior.
+  function pointInRings(lng, lat, rings) {
+    var inside = false;
+    rings.forEach(function (ring) {
+      for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        var xi = ring[i][0], yi = ring[i][1];
+        var xj = ring[j][0], yj = ring[j][1];
+        var intersect = ((yi > lat) !== (yj > lat)) &&
+          (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+    });
+    return inside;
+  }
+
+  function generateClippedGrid(rings, bbox, targetPreClipCount, maxPoints) {
+    var area = Math.max((bbox.maxLng - bbox.minLng) * (bbox.maxLat - bbox.minLat), 1e-6);
+    var cell = Math.sqrt(area / targetPreClipCount);
+    var pts = [];
+    for (var lat = bbox.minLat + cell / 2; lat <= bbox.maxLat; lat += cell) {
+      for (var lng = bbox.minLng + cell / 2; lng <= bbox.maxLng; lng += cell) {
+        if (pointInRings(lng, lat, rings)) pts.push([lng, lat]);
+      }
+    }
+    if (pts.length > maxPoints) {
+      var step = Math.ceil(pts.length / maxPoints);
+      pts = pts.filter(function (_, i) { return i % step === 0; }).slice(0, maxPoints);
+    }
+    return pts;
+  }
+
+  function polygonCentroid(bbox) {
+    return [(bbox.minLng + bbox.maxLng) / 2, (bbox.minLat + bbox.maxLat) / 2];
+  }
+
+  /** Expands an existing [[minLng,minLat],[maxLng,maxLat]] bounds array further outward, for reuse (e.g. a looser bound while 3D-tilted) without ever going fully unbounded. */
+  function expandBoundsArray(bounds, factor) {
+    var lngSpan = bounds[1][0] - bounds[0][0];
+    var latSpan = bounds[1][1] - bounds[0][1];
+    return [
+      [bounds[0][0] - lngSpan * factor, bounds[0][1] - latSpan * factor],
+      [bounds[1][0] + lngSpan * factor, bounds[1][1] + latSpan * factor]
+    ];
+  }
+
+  function padBoundsArray(bbox, factor) {
+    var lngPad = (bbox.maxLng - bbox.minLng) * factor;
+    var latPad = (bbox.maxLat - bbox.minLat) * factor;
+    return [[bbox.minLng - lngPad, bbox.minLat - latPad], [bbox.maxLng + lngPad, bbox.maxLat + latPad]];
+  }
+
+  // ---------- "Clip to region" mask ----------
+  // MapLibre has no native raster/vector-clip-to-polygon primitive, so the
+  // standard technique is a single "donut" fill polygon: one giant rectangle
+  // covering the whole world, with the region's own ring(s) cut into it as
+  // holes. Painted in a near-page-background color above every data layer
+  // (base map, terrain relief, NDVI, vegetation, water bodies) but below the
+  // boundary outline, it visually suppresses everything outside the region
+  // while leaving the region itself fully untouched — which also means any
+  // raster overlay placed *below* this mask is automatically clipped to the
+  // region with no extra work.
+  function ringSignedArea(ring) {
+    var sum = 0;
+    for (var i = 0; i < ring.length - 1; i++) {
+      var x1 = ring[i][0], y1 = ring[i][1];
+      var x2 = ring[i + 1][0], y2 = ring[i + 1][1];
+      sum += (x2 - x1) * (y2 + y1);
+    }
+    return sum;
+  }
+
+  function buildMaskGeometry(regionGeometry) {
+    var WORLD = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+    var worldArea = ringSignedArea(WORLD);
+    var holes = [];
+    var exteriorRings = regionGeometry.type === "Polygon"
+      ? [regionGeometry.coordinates[0]]
+      : regionGeometry.coordinates.map(function (poly) { return poly[0]; });
+    exteriorRings.forEach(function (ring) {
+      var area = ringSignedArea(ring);
+      // Force opposite winding from the world ring so it reads as a hole.
+      holes.push(area * worldArea > 0 ? ring.slice().reverse() : ring);
+    });
+    return { type: "Polygon", coordinates: [WORLD].concat(holes) };
+  }
+
+  // ---------- Data fetchers ----------
+  function fetchBoundary(query) {
+    var url = new URL("https://nominatim.openstreetmap.org/search");
+    url.searchParams.set("q", query);
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("polygon_geojson", "1");
+    url.searchParams.set("addressdetails", "1");
+    url.searchParams.set("limit", "1");
+    url.searchParams.set("accept-language", "en");
+    return fetch(url.toString(), {
+      headers: { Accept: "application/json", "User-Agent": "checklist-hub-prototype/0.1 (map-view phase0 validation)" }
+    }).then(function (res) {
+      if (!res.ok) throw new Error("Nominatim failed: " + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (!data.length) throw new Error("No boundary result for \"" + query + "\"");
+      return data[0];
+    });
+  }
+
+  function fetchElevations(points) {
+    var chunkSize = 100;
+    var chunks = [];
+    for (var i = 0; i < points.length; i += chunkSize) chunks.push(points.slice(i, i + chunkSize));
+    return chunks.reduce(function (promise, chunk) {
+      return promise.then(function (acc) {
+        var lats = chunk.map(function (p) { return p[1]; }).join(",");
+        var lons = chunk.map(function (p) { return p[0]; }).join(",");
+        var url = "https://api.open-meteo.com/v1/elevation?latitude=" + lats + "&longitude=" + lons;
+        return fetch(url).then(function (res) {
+          if (!res.ok) throw new Error("Elevation API failed: " + res.status);
+          return res.json();
+        }).then(function (data) { return acc.concat(data.elevation || []); });
+      });
+    }, Promise.resolve([]));
+  }
+
+  function fetchAnnualMeanTemp(lat, lon) {
+    var lastFullYear = new Date().getUTCFullYear() - 1;
+    var start = lastFullYear + "-01-01";
+    var end = lastFullYear + "-12-31";
+    var url = "https://archive-api.open-meteo.com/v1/archive?latitude=" + lat + "&longitude=" + lon +
+      "&start_date=" + start + "&end_date=" + end + "&daily=temperature_2m_mean&timezone=auto";
+    return fetch(url).then(function (res) {
+      if (!res.ok) throw new Error("Climate API failed: " + res.status);
+      return res.json();
+    }).then(function (data) {
+      var vals = ((data.daily && data.daily.temperature_2m_mean) || []).filter(function (v) { return v != null; });
+      if (!vals.length) throw new Error("No climate data returned");
+      var mean = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+      return { mean: mean, year: lastFullYear, sampleDays: vals.length };
+    });
+  }
+
+  // ---------- Protected areas ----------
+  // IUCN protect_class -> label/color. Built to cover the full 1a-6 scale
+  // (not just whatever classes happen to exist in one test region) so it
+  // works for any region worldwide; unrecognized/missing classes fall back
+  // to a neutral entry rather than being dropped.
+  var PROTECTED_AREA_CLASSES = {
+    "1a": { label: "Strict Nature Reserve", color: "#4a2361" },
+    "1b": { label: "Wilderness Area", color: "#5b2a72" },
+    "2": { label: "National Park", color: "#7a3d9c" },
+    "3": { label: "Natural Monument", color: "#8f4aab" },
+    "4": { label: "Habitat / Species Management (Wildlife Sanctuary)", color: "#a663bd" },
+    "5": { label: "Protected Landscape / Seascape", color: "#bc84c9" },
+    "6": { label: "Managed Resource Protected Area", color: "#c9a0d1" },
+    other: { label: "Protected Area (unclassified)", color: "#9c7fa8" }
+  };
+
+  function protectedAreaStyle(protectClass) {
+    return PROTECTED_AREA_CLASSES[protectClass] || PROTECTED_AREA_CLASSES.other;
+  }
+
+  function pointsEqual(a, b) {
+    return Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+  }
+  function isClosedRing(ring) {
+    return ring.length > 2 && pointsEqual(ring[0], ring[ring.length - 1]);
+  }
+
+  /**
+   * Chains an unordered set of way segments (each an array of [lng,lat],
+   * not necessarily closed individually) end-to-end into closed rings —
+   * the standard way OSM stores a large boundary relation as many short
+   * member ways rather than one long one. O(n^2) in segment count, which
+   * is fine for the handful of ways a protected-area boundary is normally
+   * split into.
+   */
+  function assembleRings(segments) {
+    var remaining = segments.map(function (s) { return s.slice(); });
+    var rings = [];
+    while (remaining.length) {
+      var current = remaining.shift();
+      var extended = true;
+      while (extended && !isClosedRing(current)) {
+        extended = false;
+        for (var i = 0; i < remaining.length; i++) {
+          var seg = remaining[i];
+          var segEnd = seg[seg.length - 1];
+          if (pointsEqual(current[current.length - 1], seg[0])) {
+            current = current.concat(seg.slice(1));
+          } else if (pointsEqual(current[current.length - 1], segEnd)) {
+            current = current.concat(seg.slice(0, -1).reverse());
+          } else if (pointsEqual(current[0], segEnd)) {
+            current = seg.slice(0, -1).concat(current);
+          } else if (pointsEqual(current[0], seg[0])) {
+            current = seg.slice(1).reverse().concat(current);
+          } else {
+            continue;
+          }
+          remaining.splice(i, 1);
+          extended = true;
+          break;
+        }
+      }
+      if (current.length >= 4) rings.push(current); // drop unclosable/degenerate fragments
+    }
+    return rings;
+  }
+
+  /**
+   * Converts Overpass elements tagged as protected areas into polygon
+   * features. Handles both simple closed ways (most small sanctuaries) and
+   * multi-way boundary relations (large national parks, split into many
+   * member ways) — dropping the latter would have silently lost the two
+   * biggest protected areas in the Darjeeling test data (Singalila National
+   * Park, Barsey Rhododendron WLS), both stored as relations.
+   */
+  function protectedAreasToGeoJSON(json) {
+    var nodes = {};
+    var ways = {};
+    json.elements.forEach(function (el) {
+      if (el.type === "node") nodes[el.id] = [el.lon, el.lat];
+    });
+    json.elements.forEach(function (el) {
+      if (el.type === "way" && el.nodes) {
+        ways[el.id] = el.nodes.map(function (id) { return nodes[id]; }).filter(Boolean);
+      }
+    });
+
+    var features = [];
+    var usedAsRelationMember = {};
+
+    json.elements.forEach(function (el) {
+      if (el.type !== "relation" || !el.members) return;
+      var tags = el.tags || {};
+      var outerSegments = [];
+      el.members.forEach(function (m) {
+        if (m.type !== "way" || !ways[m.ref]) return;
+        usedAsRelationMember[m.ref] = true;
+        if (m.role !== "inner") outerSegments.push(ways[m.ref]);
+      });
+      var rings = assembleRings(outerSegments).filter(isClosedRing);
+      if (!rings.length) return;
+      var style = protectedAreaStyle(String(tags.protect_class || ""));
+      features.push({
+        type: "Feature",
+        properties: { name: tags.name || tags.full_name || "Protected area", protectClass: tags.protect_class || null, color: style.color, label: style.label },
+        geometry: rings.length === 1 ? { type: "Polygon", coordinates: [rings[0]] } : { type: "MultiPolygon", coordinates: rings.map(function (r) { return [r]; }) }
+      });
+    });
+
+    json.elements.forEach(function (el) {
+      if (el.type !== "way" || !el.tags || usedAsRelationMember[el.id]) return;
+      var coords = ways[el.id];
+      if (!coords || !isClosedRing(coords)) return;
+      var style = protectedAreaStyle(String(el.tags.protect_class || ""));
+      features.push({
+        type: "Feature",
+        properties: { name: el.tags.name || el.tags.full_name || "Protected area", protectClass: el.tags.protect_class || null, color: style.color, label: style.label },
+        geometry: { type: "Polygon", coordinates: [coords] }
+      });
+    });
+
+    return { type: "FeatureCollection", features: features };
+  }
+
+  function fetchProtectedAreas(bbox) {
+    var bboxStr = bbox.minLat + "," + bbox.minLng + "," + bbox.maxLat + "," + bbox.maxLng;
+    var query = "[out:json][timeout:25];(" +
+      "way[\"boundary\"=\"protected_area\"](" + bboxStr + ");" +
+      "way[\"boundary\"=\"national_park\"](" + bboxStr + ");" +
+      "way[\"leisure\"=\"nature_reserve\"](" + bboxStr + ");" +
+      "relation[\"boundary\"=\"protected_area\"](" + bboxStr + ");" +
+      "relation[\"boundary\"=\"national_park\"](" + bboxStr + ");" +
+      "relation[\"leisure\"=\"nature_reserve\"](" + bboxStr + ");" +
+      ");out body;>;out skel qt;";
+    return runOverpassQuery(query, "protected-areas").then(function (r) {
+      return { geojson: protectedAreasToGeoJSON(r.json), source: r.source };
+    });
+  }
+
+  /**
+   * Runs an Overpass QL query across OVERPASS_MIRRORS in order, falling back
+   * to the next mirror on failure/timeout — shared by every Overpass-backed
+   * layer (water bodies, protected areas, ...) instead of each hand-rolling
+   * its own retry loop.
+   */
+  function runOverpassQuery(query, label) {
+    function tryMirror(index) {
+      if (index >= OVERPASS_MIRRORS.length) return Promise.reject(new Error("All Overpass mirrors failed"));
+      var base = OVERPASS_MIRRORS[index];
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, 15000);
+      return fetch(base + "?data=" + encodeURIComponent(query), { signal: controller.signal })
+        .then(function (res) {
+          clearTimeout(timer);
+          if (!res.ok) throw new Error(base + " returned " + res.status);
+          return res.json();
+        })
+        .then(function (json) { return { json: json, source: base }; })
+        .catch(function (err) {
+          clearTimeout(timer);
+          console.warn("[" + label + "] mirror failed:", base, err.message);
+          return tryMirror(index + 1);
+        });
+    }
+    return tryMirror(0);
+  }
+
+  /**
+   * Converts Overpass elements into water-body features: rivers/streams/
+   * canals as lines, everything else (lakes, ponds, reservoirs) as filled
+   * polygons. Mirrors protectedAreasToGeoJSON's relation handling — larger
+   * lakes and reservoirs are very often mapped as multipolygon relations
+   * (several member ways, sometimes with island holes) rather than one
+   * closed way, exactly like Singalila/Barsey were for protected areas.
+   * Only matching ways/relations by `natural=water` missed those entirely;
+   * this also folds in `landuse=reservoir` and the `water=*` subtag so
+   * smaller reservoirs/ponds tagged that way aren't dropped either.
+   */
+  function waterBodiesToGeoJSON(json) {
+    var nodes = {};
+    var ways = {};
+    json.elements.forEach(function (el) {
+      if (el.type === "node") nodes[el.id] = [el.lon, el.lat];
+    });
+    json.elements.forEach(function (el) {
+      if (el.type === "way" && el.nodes) {
+        ways[el.id] = el.nodes.map(function (id) { return nodes[id]; }).filter(Boolean);
+      }
+    });
+
+    function isWaterPolygonTags(tags) {
+      return tags.natural === "water" || tags.landuse === "reservoir" || !!tags.water;
+    }
+
+    var features = [];
+    var usedAsRelationMember = {};
+
+    // Multipolygon relations first (large lakes/reservoirs, occasionally
+    // with island holes via role "inner").
+    json.elements.forEach(function (el) {
+      if (el.type !== "relation" || !el.members) return;
+      var tags = el.tags || {};
+      if (!isWaterPolygonTags(tags)) return;
+      var outerSegments = [], innerSegments = [];
+      el.members.forEach(function (m) {
+        if (m.type !== "way" || !ways[m.ref]) return;
+        usedAsRelationMember[m.ref] = true;
+        (m.role === "inner" ? innerSegments : outerSegments).push(ways[m.ref]);
+      });
+      var outerRings = assembleRings(outerSegments).filter(isClosedRing);
+      if (!outerRings.length) return;
+      var innerRings = assembleRings(innerSegments).filter(isClosedRing);
+      var rings = outerRings.concat(innerRings);
+      features.push({
+        type: "Feature",
+        properties: { kind: "lake", name: tags.name || null },
+        geometry: rings.length === 1 ? { type: "Polygon", coordinates: [rings[0]] } : { type: "MultiPolygon", coordinates: rings.map(function (r) { return [r]; }) }
+      });
+    });
+
+    // Simple ways not already consumed by a relation above.
+    json.elements.forEach(function (el) {
+      if (el.type !== "way" || !el.tags || usedAsRelationMember[el.id]) return;
+      var coords = ways[el.id];
+      if (!coords || coords.length < 2) return;
+      var tags = el.tags;
+      if (isWaterPolygonTags(tags)) {
+        var ring = isClosedRing(coords) ? coords : coords.concat([coords[0]]);
+        if (ring.length < 4) return;
+        features.push({ type: "Feature", properties: { kind: "lake", name: tags.name || null }, geometry: { type: "Polygon", coordinates: [ring] } });
+      } else {
+        features.push({ type: "Feature", properties: { kind: "river", name: tags.name || null }, geometry: { type: "LineString", coordinates: coords } });
+      }
+    });
+
+    return { type: "FeatureCollection", features: features };
+  }
+
+  function fetchWaterBodies(bbox) {
+    var bboxStr = bbox.minLat + "," + bbox.minLng + "," + bbox.maxLat + "," + bbox.maxLng;
+    var query = "[out:json][timeout:25];(" +
+      "way[\"waterway\"~\"^(river|stream|canal)$\"](" + bboxStr + ");" +
+      "way[\"natural\"=\"water\"](" + bboxStr + ");" +
+      "way[\"landuse\"=\"reservoir\"](" + bboxStr + ");" +
+      "relation[\"natural\"=\"water\"](" + bboxStr + ");" +
+      "relation[\"landuse\"=\"reservoir\"](" + bboxStr + ");" +
+      ");out body;>;out skel qt;";
+    return runOverpassQuery(query, "water-bodies").then(function (r) {
+      return { geojson: waterBodiesToGeoJSON(r.json), source: r.source };
+    });
+  }
+
+  function nearestWorldCoverClass(r, g, b) {
+    var best = null, bestDist = Infinity;
+    WORLDCOVER_PALETTE.forEach(function (c) {
+      var d = Math.pow(r - c.rgb[0], 2) + Math.pow(g - c.rgb[1], 2) + Math.pow(b - c.rgb[2], 2);
+      if (d < bestDist) { bestDist = d; best = c; }
+    });
+    return best;
+  }
+
+  function sampleDominantVegetation(bbox, points) {
+    var W = 512, H = 512;
+    // WMS 1.3.0 + CRS=EPSG:4326 uses lat,lon axis order (verified live).
+    var url = WORLDCOVER_WMS_BASE + "?service=WMS&version=1.3.0&request=GetMap&layers=" + WORLDCOVER_LAYER +
+      "&styles=&format=image/png&transparent=true&crs=EPSG:4326&time=" + WORLDCOVER_TIME + "&bbox=" +
+      bbox.minLat + "," + bbox.minLng + "," + bbox.maxLat + "," + bbox.maxLng +
+      "&width=" + W + "&height=" + H;
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { reject(new Error("WorldCover sample image failed to load")); };
+      img.src = url;
+    }).then(function (img) {
+      var canvas = document.createElement("canvas");
+      canvas.width = W; canvas.height = H;
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      var data;
+      try {
+        data = ctx.getImageData(0, 0, W, H).data;
+      } catch (e) {
+        throw new Error("Canvas pixel read blocked (CORS): " + e.message);
+      }
+      var tally = {};
+      points.forEach(function (pt) {
+        var px = Math.round(((pt[0] - bbox.minLng) / (bbox.maxLng - bbox.minLng)) * (W - 1));
+        var py = Math.round(((bbox.maxLat - pt[1]) / (bbox.maxLat - bbox.minLat)) * (H - 1));
+        var idx = (py * W + px) * 4;
+        var r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+        if (a < 10) return;
+        var cls = nearestWorldCoverClass(r, g, b);
+        tally[cls.label] = (tally[cls.label] || 0) + 1;
+      });
+      var dominant = null, max = 0, total = 0;
+      Object.keys(tally).forEach(function (label) {
+        total += tally[label];
+        if (tally[label] > max) { max = tally[label]; dominant = label; }
+      });
+      return { dominant: dominant, pct: total ? Math.round((max / total) * 100) : 0, total: total };
+    });
+  }
+
+  function ndviDateString() {
+    var d = new Date();
+    d.setUTCDate(d.getUTCDate() - 12); // 8-day composite lag safety margin
+    return d.toISOString().slice(0, 10);
+  }
+
+  // ---------- GIS export (per-layer "download for QGIS" buttons) ----------
+  // Water Bodies exports as vector (GeoJSON + KML, zipped); NDVI and
+  // Vegetation/Land Cover are raster WMS overlays, so they export as a
+  // fresh full-bbox PNG plus a world file (.pgw) + .prj, zipped — QGIS
+  // opens a PNG+world-file pair as a georeferenced raster with no GeoTIFF
+  // conversion needed. Kept as prototype-grade GeoJSON/KML/PNG rather than
+  // true ESRI Shapefile: hand-rolling the binary .shp/.shx/.dbf format is
+  // real added surface for a "validation only" build, and GeoJSON already
+  // opens in QGIS at least as cleanly (no 10-char field-name truncation or
+  // encoding gotchas) — worth adding a real shapefile writer later if a
+  // downstream tool specifically requires .shp.
+
+  function slugify(s) {
+    return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "region";
+  }
+
+  function triggerBlobDownload(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // World-Wide-Web-standard EPSG:4326 WKT1, the same string GDAL writes
+  // into a shapefile's .prj — lets QGIS auto-detect the CRS on import
+  // instead of prompting for it.
+  var WGS84_PRJ_WKT = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]';
+
+  // World-file math for a north-up image spanning `bbox` at `width`x`height`
+  // pixels — 6 lines: x-pixel-size, rotation (0), rotation (0), negative
+  // y-pixel-size, then the map-space coordinate of the *center* of the
+  // upper-left pixel (hence the half-pixel offset on both origin terms).
+  function buildWorldFile(bbox, width, height) {
+    var pixelSizeX = (bbox.maxLng - bbox.minLng) / width;
+    var pixelSizeY = -(bbox.maxLat - bbox.minLat) / height;
+    var originX = bbox.minLng + pixelSizeX / 2;
+    var originY = bbox.maxLat + pixelSizeY / 2;
+    return [pixelSizeX, 0, 0, pixelSizeY, originX, originY].map(function (n) { return n.toFixed(12); }).join("\n") + "\n";
+  }
+
+  function hexToKmlColor(hex, alphaHex) {
+    var h = String(hex).replace("#", "");
+    return (alphaHex || "ff") + h.slice(4, 6) + h.slice(2, 4) + h.slice(0, 2); // KML color order is aabbggrr
+  }
+
+  /**
+   * Minimal GeoJSON -> KML 2.2 converter covering the geometry types our
+   * vector layers actually produce (Polygon/MultiPolygon with holes,
+   * LineString/MultiLineString) — enough for Water Bodies, not a general
+   * GeoJSON-to-KML library.
+   */
+  function geojsonToKml(fc, opts) {
+    opts = opts || {};
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function coordStr(coords) {
+      return coords.map(function (pt) { return pt[0] + "," + pt[1] + ",0"; }).join(" ");
+    }
+    function polygonKml(rings) {
+      var outer = "<outerBoundaryIs><LinearRing><coordinates>" + coordStr(rings[0]) + "</coordinates></LinearRing></outerBoundaryIs>";
+      var inner = rings.slice(1).map(function (r) {
+        return "<innerBoundaryIs><LinearRing><coordinates>" + coordStr(r) + "</coordinates></LinearRing></innerBoundaryIs>";
+      }).join("");
+      return "<Polygon><tessellate>1</tessellate>" + outer + inner + "</Polygon>";
+    }
+    function geometryKml(geom) {
+      if (!geom) return "";
+      if (geom.type === "Polygon") return polygonKml(geom.coordinates);
+      if (geom.type === "MultiPolygon") return "<MultiGeometry>" + geom.coordinates.map(polygonKml).join("") + "</MultiGeometry>";
+      if (geom.type === "LineString") return "<LineString><tessellate>1</tessellate><coordinates>" + coordStr(geom.coordinates) + "</coordinates></LineString>";
+      if (geom.type === "MultiLineString") {
+        return "<MultiGeometry>" + geom.coordinates.map(function (l) {
+          return "<LineString><tessellate>1</tessellate><coordinates>" + coordStr(l) + "</coordinates></LineString>";
+        }).join("") + "</MultiGeometry>";
+      }
+      return "";
+    }
+    var placemarks = fc.features.map(function (f, i) {
+      var props = f.properties || {};
+      var name = props.name || (props.kind ? props.kind + " " + (i + 1) : "Feature " + (i + 1));
+      var styleUrl = props.kind ? "#" + props.kind + "Style" : "";
+      return "<Placemark><name>" + esc(name) + "</name>" + (styleUrl ? "<styleUrl>" + styleUrl + "</styleUrl>" : "") + geometryKml(f.geometry) + "</Placemark>";
+    }).join("");
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>' +
+      esc(opts.name || "Export") + "</name>" + (opts.styles || []).join("") + placemarks + "</Document></kml>";
+  }
+
+  /**
+   * Swaps a layer-download-btn's icon for a spinner while its async work
+   * runs (zipping vector data, or fetching a region-wide raster image) —
+   * both can take several seconds, so the disabled icon alone doesn't
+   * signal that anything is actually happening.
+   */
+  function setDownloadLoading(btn, loading) {
+    btn.classList.toggle("loading", loading);
+    if (loading) {
+      btn.dataset.iconHtml = btn.dataset.iconHtml || btn.innerHTML;
+      btn.innerHTML = '<span class="spinner" style="margin:0"></span>';
+    } else if (btn.dataset.iconHtml) {
+      btn.innerHTML = btn.dataset.iconHtml;
+    }
+  }
+
+  function downloadWaterBodiesForQgis(btn) {
+    if (!waterBodiesGeoJSON || typeof JSZip === "undefined") return;
+    var originalTitle = btn.title;
+    btn.disabled = true;
+    setDownloadLoading(btn, true);
+    var base = regionSlug + "-water-bodies";
+    var styles = [
+      '<Style id="lakeStyle"><LineStyle><color>' + hexToKmlColor(MAP_THEME.waterOutline, "ff") + '</color><width>1</width></LineStyle><PolyStyle><color>' + hexToKmlColor(MAP_THEME.water, "8c") + '</color></PolyStyle></Style>',
+      '<Style id="riverStyle"><LineStyle><color>' + hexToKmlColor(MAP_THEME.waterOutline, "ff") + '</color><width>2</width></LineStyle></Style>'
+    ];
+    var zip = new JSZip();
+    zip.file(base + ".geojson", JSON.stringify(waterBodiesGeoJSON, null, 2));
+    zip.file(base + ".kml", geojsonToKml(waterBodiesGeoJSON, { name: regionLabel + " — Water Bodies", styles: styles }));
+    zip.generateAsync({ type: "blob" }).then(function (blob) {
+      triggerBlobDownload(blob, base + "-qgis.zip");
+      setDownloadLoading(btn, false);
+      btn.disabled = false;
+      btn.title = originalTitle;
+    }).catch(function (err) {
+      console.error("[water-bodies download]", err);
+      setDownloadLoading(btn, false);
+      btn.disabled = false;
+      btn.title = "Download failed — " + err.message;
+      setTimeout(function () { btn.title = originalTitle; }, 3000);
+    });
+  }
+
+  /**
+   * Fetches a fresh single-image WMS render of a raster layer across the
+   * whole region bbox (not the tiled z/x/y scheme the map itself uses for
+   * display) and packages it as PNG + world file (+ .prj) — a raster QGIS
+   * can load directly ("Add Raster Layer") without any GeoTIFF conversion.
+   * `longSidePx` sizes the longer of width/height; the other side is
+   * derived from the bbox aspect ratio so pixels stay square in map units.
+   */
+  function downloadRasterForQgis(btn, baseName, wmsUrlBuilder, longSidePx) {
+    if (!regionBbox || typeof JSZip === "undefined") return;
+    var bbox = regionBbox;
+    var aspect = (bbox.maxLng - bbox.minLng) / (bbox.maxLat - bbox.minLat);
+    var longSide = longSidePx || 1024;
+    var width = aspect >= 1 ? longSide : Math.max(1, Math.round(longSide * aspect));
+    var height = aspect >= 1 ? Math.max(1, Math.round(longSide / aspect)) : longSide;
+    var originalTitle = btn.title;
+    btn.disabled = true;
+    btn.title = "Fetching raster…";
+    setDownloadLoading(btn, true);
+    fetch(wmsUrlBuilder(bbox, width, height)).then(function (res) {
+      if (!res.ok) throw new Error("Raster fetch failed: " + res.status);
+      return res.blob();
+    }).then(function (imgBlob) {
+      var zip = new JSZip();
+      zip.file(baseName + ".png", imgBlob);
+      zip.file(baseName + ".pgw", buildWorldFile(bbox, width, height));
+      zip.file(baseName + ".prj", WGS84_PRJ_WKT);
+      return zip.generateAsync({ type: "blob" });
+    }).then(function (zipBlob) {
+      triggerBlobDownload(zipBlob, baseName + "-qgis.zip");
+      setDownloadLoading(btn, false);
+      btn.disabled = false;
+      btn.title = originalTitle;
+    }).catch(function (err) {
+      console.error("[" + baseName + " download]", err);
+      setDownloadLoading(btn, false);
+      btn.disabled = false;
+      btn.title = "Download failed — " + err.message;
+      setTimeout(function () { btn.title = originalTitle; }, 3000);
+    });
+  }
+
+  function ndviWmsUrl(bbox, width, height) {
+    return "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?service=WMS&version=1.3.0&request=GetMap&layers=MODIS_Terra_NDVI_8Day&styles=&format=image/png&transparent=true&crs=EPSG:4326&time=" +
+      ndviDateString() + "&bbox=" + bbox.minLat + "," + bbox.minLng + "," + bbox.maxLat + "," + bbox.maxLng + "&width=" + width + "&height=" + height;
+  }
+
+  function worldcoverWmsUrl(bbox, width, height) {
+    // Same WMS 1.3.0 + EPSG:4326 lat,lon axis order as sampleDominantVegetation above.
+    return WORLDCOVER_WMS_BASE + "?service=WMS&version=1.3.0&request=GetMap&layers=" + WORLDCOVER_LAYER +
+      "&styles=&format=image/png&transparent=true&crs=EPSG:4326&time=" + WORLDCOVER_TIME +
+      "&bbox=" + bbox.minLat + "," + bbox.minLng + "," + bbox.maxLat + "," + bbox.maxLng + "&width=" + width + "&height=" + height;
+  }
+
+  // ---------- Map theme ----------
+  // v6 — v5's contrast level (light↔dark) was right, but the hue drifted
+  // too far toward yellow/lime/olive on both ends — reads as "khaki", not
+  // "green". Same light-to-dark spread as v5, hue pulled back toward true
+  // green (less yellow bias in the light tier, less brown/olive-black in
+  // the dark tier).
+  var MAP_THEME = {
+    background: "#6cbd63",   // undeveloped / open valley floor — bright true green (low vegetation)
+    grass: "#4f9f50",        // low-mid vegetation — parks, grassland
+    forest: "#1f4a24",       // high vegetation — tree cover / wood, dark forest green
+    barren: "#e0cd9e",       // bare / sparse vegetation (sand, quarries) — stays light/tan
+    pitchTurf: "#5cae4a",    // sports pitches / tracks — distinct bright turf green
+    water: "#2a86bd",        // rivers, lakes, canals, ponds — deeper, richer blue
+    waterOutline: "#1a5c82",
+    residential: "#d9a98a",  // built-up "home" ground — dusty terracotta-tan, same
+                              // hue family as `building` so a settlement clearly
+                              // flags itself at any zoom, not just once individual
+                              // buildings render in (zoom 13+)
+    building: "#bf5a42",     // building fill — terracotta red (was cream/white)
+    buildingOutline: "#8a3d2c",
+    road: "#f7eecd",         // minor road fill — brightened for contrast against ground
+    roadCasing: "#c2a462",
+    roadMajor: "#d9d2ba",    // trunk/primary/motorway — neutral warm gray
+    roadMajorCasing: "#96876a",
+    adminBoundary: "#cec296" // other OSM admin lines — kept subtle so our
+                              // own region outline stays the visual focus
+  };
+
+  // Hillshade tint — olive shadow/warm highlight instead of MapLibre's
+  // default grayscale, so the relief texture blends into the greens (like
+  // the reference's mountain shading) rather than sitting on top as gray.
+  var HILLSHADE_THEME = {
+    shadow: "#16261a",       // green-black rather than olive/brown-black, to match
+    highlight: "#f5edc9",
+    accent: "#2e4a30",
+    exaggeration: 0.6
+  };
+
+  // Legend for the *always-on* base theme (as opposed to the optional
+  // overlay legends below, which only show once their toggle is on) — reads
+  // straight from MAP_THEME so it can never drift out of sync with the
+  // actual map colors the way a hand-copied swatch list would.
+  var THEME_LEGEND_ITEMS = [
+    { label: "Open / low vegetation", color: MAP_THEME.background },
+    { label: "Forest / dense vegetation", color: MAP_THEME.forest },
+    { label: "Grassland / parks", color: MAP_THEME.grass },
+    { label: "Barren / sparse vegetation", color: MAP_THEME.barren },
+    { label: "Water — rivers, lakes", color: MAP_THEME.water },
+    { label: "Settlement (built-up area)", color: MAP_THEME.residential },
+    { label: "Buildings", color: MAP_THEME.building },
+    { label: "Roads", color: MAP_THEME.road }
+  ];
+  (function renderThemeLegend() {
+    var list = document.getElementById("theme-legend-list");
+    THEME_LEGEND_ITEMS.forEach(function (item) {
+      var el = document.createElement("div");
+      el.className = "legend-item";
+      el.innerHTML = '<span class="sw" style="background:' + item.color + '"></span>' + item.label;
+      list.appendChild(el);
+    });
+  })();
+
+  // Every paint/zoom-range change applyMapTheme makes gets recorded here
+  // (themed value + the original "stock" OpenFreeMap value it replaced) so
+  // the "ChecklistHub Style" toggle can flip the live map between the two
+  // afterwards via setPaintProperty/setLayerZoomRange, without ever
+  // touching layer/source existence — safe to toggle back and forth freely.
+  var THEME_PAINT_ENTRIES = [];
+  var THEME_ZOOM_RANGE_ENTRIES = [];
+
+  /**
+   * Recolors a fetched OpenFreeMap style object in place to MAP_THEME.
+   * `record` (default true) gates whether stock/themed pairs get logged to
+   * THEME_PAINT_ENTRIES/THEME_ZOOM_RANGE_ENTRIES — pass false when theming a
+   * second, independent style object (e.g. the List View hub preview's own
+   * map instance below) so its layers don't get mixed into the main map's
+   * "ChecklistHub Style" stock/themed toggle bookkeeping.
+   */
+  function applyMapTheme(style, record) {
+    if (record === undefined) record = true;
+    function setPaint(layer, key, themedValue) {
+      if (record) THEME_PAINT_ENTRIES.push({ id: layer.id, key: key, themed: themedValue, stock: layer.paint[key] });
+      layer.paint[key] = themedValue;
+    }
+    style.layers.forEach(function (layer) {
+      var id = layer.id, cls = layer.filter && JSON.stringify(layer.filter);
+      if (layer.type === "background") {
+        setPaint(layer, "background-color", MAP_THEME.background);
+      } else if (id === "landcover_wood") {
+        setPaint(layer, "fill-color", MAP_THEME.forest);
+      } else if (id === "landcover_grass" || id === "park") {
+        setPaint(layer, "fill-color", MAP_THEME.grass);
+      } else if (id === "park_outline") {
+        setPaint(layer, "line-color", MAP_THEME.forest);
+      } else if (id === "landcover_sand") {
+        setPaint(layer, "fill-color", MAP_THEME.barren);
+      } else if (id === "landcover_ice") {
+        setPaint(layer, "fill-color", "#eef0e6");
+      } else if (id === "landuse_residential") {
+        setPaint(layer, "fill-color", MAP_THEME.residential);
+        // The stock style caps this layer at maxzoom 12 (OpenMapTiles' own
+        // generalization choice) while `building` only starts at minzoom
+        // 13 — that 12→13 gap is exactly why settlements "disappeared"
+        // between the two zoom levels in testing. Removing the cap keeps
+        // the settlement wash visible continuously from low zoom straight
+        // through to individual buildings taking over, instead of a blank
+        // gap in between.
+        if (record) THEME_ZOOM_RANGE_ENTRIES.push({ id: id, stockMax: layer.maxzoom, themedMax: 24 });
+        delete layer.maxzoom;
+      } else if (id === "landuse_pitch" || id === "landuse_track") {
+        setPaint(layer, "fill-color", MAP_THEME.pitchTurf);
+      } else if (id && id.indexOf("landuse_") === 0) {
+        setPaint(layer, "fill-color", MAP_THEME.residential);
+      } else if (id === "water") {
+        setPaint(layer, "fill-color", MAP_THEME.water);
+        setPaint(layer, "fill-outline-color", MAP_THEME.waterOutline);
+      } else if (layer["source-layer"] === "waterway") {
+        if (layer.paint && "line-color" in layer.paint) setPaint(layer, "line-color", MAP_THEME.water);
+      } else if (id === "building") {
+        setPaint(layer, "fill-color", MAP_THEME.building);
+        setPaint(layer, "fill-outline-color", MAP_THEME.buildingOutline);
+      } else if (id === "building-3d") {
+        setPaint(layer, "fill-extrusion-color", MAP_THEME.building);
+      } else if (layer["source-layer"] === "transportation" && layer.type === "line") {
+        var major = /motorway|trunk_primary/.test(id);
+        var casing = id.indexOf("_casing") !== -1;
+        var isRail = /rail/.test(id);
+        if (!isRail && layer.paint && "line-color" in layer.paint) {
+          setPaint(layer, "line-color", casing
+            ? (major ? MAP_THEME.roadMajorCasing : MAP_THEME.roadCasing)
+            : (major ? MAP_THEME.roadMajor : MAP_THEME.road));
+        }
+      } else if (id === "boundary_2" || id === "boundary_3" || id === "boundary_disputed") {
+        setPaint(layer, "line-color", MAP_THEME.adminBoundary);
+      }
+    });
+    return style;
+  }
+
+  /**
+   * "ChecklistHub Style" toggle — flips the live map between our themed
+   * colors and the original stock OpenFreeMap ("liberty") look, using the
+   * stock/themed pairs applyMapTheme recorded. Only touches paint
+   * properties and zoom ranges on the base style's own layers — never adds
+   * or removes anything, so it can't disturb the boundary, mask, hillshade,
+   * water bodies, protected areas, etc. added on top of the base style.
+   */
+  function setBaseThemeEnabled(enabled) {
+    THEME_PAINT_ENTRIES.forEach(function (e) {
+      map.setPaintProperty(e.id, e.key, enabled ? e.themed : e.stock);
+    });
+    THEME_ZOOM_RANGE_ENTRIES.forEach(function (e) {
+      map.setLayerZoomRange(e.id, 0, enabled ? e.themedMax : (e.stockMax == null ? 24 : e.stockMax));
+    });
+  }
+
+  // ---------- Map setup ----------
+  var terrainOn = false;
+  var currentBounds = null;
+  var regionMaxBounds = null; // set once the region resolves; relaxed while 3D-tilted (see setTerrainMode)
+  var map; // assigned once the themed style is ready, below
+
+  // GIS-export state for the per-layer "download" buttons (Water Bodies /
+  // NDVI / Vegetation) — regionBbox + regionSlug are set once the boundary
+  // resolves (see initRegion); waterBodiesGeoJSON is cached once that fetch
+  // succeeds. NDVI/Vegetation don't need a cache since their download
+  // re-fetches a fresh full-bbox raster image on demand.
+  var regionBbox = null;
+  var regionSlug = "region";
+  var regionLabel = REGION_QUERY;
+  var waterBodiesGeoJSON = null;
+  // Cached the same way as waterBodiesGeoJSON above, purely so the List View
+  // hub map (see initListHubMap) can add this layer from the already-fetched
+  // data instead of re-querying Overpass a second time for the same region.
+  var protectedAreasGeoJSON = null;
+  // Real boundary geometry, kept around (beyond what initRegion's own local
+  // `geometry` var offers) so the List View's center map preview can project
+  // it into a small circle once it resolves — see renderListMapPreview().
+  var regionGeometry = null;
+  var listViewBuilt = false;
+  // Mirrors every Map-view toggle a viewer can change (base style, protected
+  // areas, water bodies, NDVI, vegetation/land-cover) so the List View hub
+  // map can be kept showing the same layers — see applyMapViewStateTo() and
+  // the "Edit map" button wired in buildListView(). Defaults match each
+  // control's own default state (see the sidebar checkboxes/thumbnails).
+  var mapViewState = {
+    baseMode: "theme",
+    showProtected: true,
+    showWater: false,
+    showNdvi: false,
+    showVegetation: false
+  };
+  // The List View hub's own small MapLibre instance — a real themed map
+  // (same style/hillshade/mask as the main Map View), not a flattened SVG
+  // redraw, so it actually looks like the app's map rather than a schematic
+  // of it. Created once, lazily, the first time the region boundary is
+  // ready and the hub circle exists in the DOM — see renderListMapPreview().
+  var listHubMap = null;
+  var listHubMapInitializing = false;
+  var threeDCtrl, rotateCtrl; // assigned in startMap(), kept in sync by setTerrainMode()
+
+  // Standard isometric-cube "3D" glyph — the same convention Google
+  // Maps/Earth use for their 3D-buildings/3D-view toggle, instead of a
+  // mountain. Outer hexagon is the cube's silhouette; the three inner
+  // strokes from the center vertex are the visible edges between its three
+  // visible faces.
+  var THREE_D_ICON_SVG =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+    'stroke-linejoin="round" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<path d="M12 3 L20 7.5 L20 16.5 L12 21 L4 16.5 L4 7.5 Z"/>' +
+    '<path d="M12 3 L12 12 L20 7.5 M12 12 L4 7.5 M12 12 L12 21"/>' +
+    '</svg>';
+
+  // Small pencil glyph for the List View hub map's "Edit map" button (see
+  // buildListView) — takes the viewer to Map View to change layers/filters,
+  // then the hub reflects whatever they changed there (applyMapViewStateTo).
+  var LIST_EDIT_ICON_SVG =
+    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linejoin="round" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>' +
+    '</svg>';
+
+  // Custom on-map control: a single button that toggles the 3D terrain
+  // tilt (same setTerrainMode() the sidebar's Map Type "Terrain" thumbnail
+  // calls) — added because the only built-in way to pitch/rotate the map
+  // is ctrl+drag (or right-click-drag), which isn't discoverable. The
+  // button's own highlighted state (see .view3d-ctrl.active in CSS) is the
+  // only "enabled" indicator — no separate text label.
+  function ThreeDToggleControl() {}
+  ThreeDToggleControl.prototype.onAdd = function (mapInstance) {
+    var container = document.createElement("div");
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group view3d-ctrl";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.title = "Toggle 3D view";
+    btn.innerHTML = THREE_D_ICON_SVG;
+    btn.addEventListener("click", function () { setTerrainMode(!terrainOn); });
+    container.appendChild(btn);
+    this._container = container;
+    return container;
+  };
+  ThreeDToggleControl.prototype.onRemove = function () {
+    if (this._container.parentNode) this._container.parentNode.removeChild(this._container);
+  };
+
+  // Simple bearing-nudge control ("simple navigation" instead of needing a
+  // drag gesture at all) — only shown while 3D is on, since bearing is
+  // meaningless in the flat top-down view.
+  function RotateNudgeControl() {}
+  RotateNudgeControl.prototype.onAdd = function (mapInstance) {
+    var container = document.createElement("div");
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group rotate-ctrl";
+    container.style.display = "none";
+    var left = document.createElement("button");
+    left.type = "button"; left.title = "Rotate left";
+    left.innerHTML = "&#8634;";
+    left.addEventListener("click", function () { mapInstance.easeTo({ bearing: mapInstance.getBearing() - 20, duration: 250 }); });
+    var right = document.createElement("button");
+    right.type = "button"; right.title = "Rotate right";
+    right.innerHTML = "&#8635;";
+    right.addEventListener("click", function () { mapInstance.easeTo({ bearing: mapInstance.getBearing() + 20, duration: 250 }); });
+    container.appendChild(left);
+    container.appendChild(right);
+    this._container = container;
+    return container;
+  };
+  RotateNudgeControl.prototype.onRemove = function () {
+    if (this._container.parentNode) this._container.parentNode.removeChild(this._container);
+  };
+
+  function firstSymbolLayerId(targetMap) {
+    var layers = (targetMap || map).getStyle().layers || [];
+    for (var i = 0; i < layers.length; i++) if (layers[i].type === "symbol") return layers[i].id;
+    return undefined;
+  }
+
+  fetch(OPENFREEMAP_STYLE)
+    .then(function (res) { return res.json(); })
+    .then(function (style) {
+      map = new maplibregl.Map({
+        container: "map",
+        style: applyMapTheme(style),
+        center: FALLBACK_CENTER,
+        zoom: 8,
+        pitch: 0,
+        maxPitch: 75, // default cap is 60 — too shallow for a real "flying over terrain" 3D view
+        preserveDrawingBuffer: true, // needed so the "Capture" screenshot can read back the WebGL canvas
+        attributionControl: false // the default "MapLibre | OpenFreeMap © OpenMapTiles Data from OpenStreetMap"
+        // bottom-right control is redundant with the sidebar's own "Map data" source links, which already
+        // credit every provider this page uses — removed to declutter the map itself.
+      });
+      startMap();
+    })
+    .catch(function (err) {
+      console.error("[theme] failed to fetch/theme base style, falling back to stock style", err);
+      map = new maplibregl.Map({ container: "map", style: OPENFREEMAP_STYLE, center: FALLBACK_CENTER, zoom: 8, pitch: 0, maxPitch: 75, preserveDrawingBuffer: true, attributionControl: false });
+      startMap();
+    });
+
+  function startMap() {
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    threeDCtrl = new ThreeDToggleControl();
+    map.addControl(threeDCtrl, "top-right");
+    rotateCtrl = new RotateNudgeControl();
+    map.addControl(rotateCtrl, "top-right");
+    // Bottom-right (not bottom-left) so it doesn't sit on top of the
+    // status-line pill, which also anchors bottom-left.
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-right");
+    // Surfaces tile/source failures (e.g. the terrain proxy erroring) in the
+    // console instead of failing silently — MapLibre otherwise just drops a
+    // failed tile with nothing visible to say why.
+    map.on("error", function (e) {
+      console.error("[maplibre]", (e && e.error && e.error.message) || e);
+    });
+    map.on("load", function () {
+      // All region-scoped sources (raster overlays, mask, boundary) are
+      // added inside initRegion() instead of here, once the boundary bbox
+      // is known — every raster source is given an explicit `bounds`, so
+      // MapLibre never requests tiles outside the region's own bounding box
+      // in the first place (not just visually hidden — genuinely never
+      // fetched).
+      initRegion();
+    });
+  }
+
+  // Adds the three optional raster overlays (vegetation, NDVI, terrain
+  // relief), each restricted via `bounds` to the region's own bounding box
+  // so tiles for the rest of the world are never requested. `beforeId` keeps
+  // them below the base style's labels (and, once added, below the region
+  // mask) so labels stay legible and overlays get clipped by the mask.
+  // `targetMap` defaults to the main Map View instance, but the List View
+  // hub map (see initListHubMap) calls this too so its own satellite/NDVI/
+  // vegetation/hillshade layers exist under the same ids and can be kept in
+  // sync via applyMapViewStateTo() instead of duplicating this setup.
+  function addRegionRasterLayers(bbox, beforeId, targetMap) {
+    targetMap = targetMap || map;
+    var boundsArr = [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat];
+
+    // Satellite view-mode basemap (Esri World Imagery — keyless XYZ tiles).
+    // Added first/bottom-most of this raster group so worldcover/ndvi/
+    // hillshade (added below) still layer correctly on top of it on the
+    // rare occasion more than one is visible at once; in normal use the
+    // view-mode switcher keeps this and the vector basemap mutually
+    // exclusive. Same `bounds`-restriction as every other raster source —
+    // imagery tiles for the rest of the world are never requested.
+    targetMap.addSource("satellite", {
+      type: "raster",
+      tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      tileSize: 256,
+      maxzoom: 19,
+      bounds: boundsArr
+    });
+    targetMap.addLayer({
+      id: "satellite-layer", type: "raster", source: "satellite",
+      paint: { "raster-opacity": 1 },
+      layout: { visibility: "none" }
+    }, beforeId);
+
+    targetMap.addSource("worldcover", {
+      type: "raster",
+      tiles: [WORLDCOVER_WMS_BASE + "?service=WMS&version=1.3.0&request=GetMap&layers=" + WORLDCOVER_LAYER +
+        "&styles=&format=image/png&transparent=true&crs=EPSG:3857&time=" + WORLDCOVER_TIME +
+        "&width=256&height=256&bbox={bbox-epsg-3857}"],
+      tileSize: 256,
+      bounds: boundsArr
+    });
+    // Best-effort palette softening: WorldCover's tiles are pre-rendered
+    // PNGs (a scientific class palette — bright pink cropland, red built-up,
+    // etc.) that can't be recolored pixel-by-pixel client-side the way the
+    // vector base map layers above were, since there's no per-class vector
+    // data to target, only flat images. Desaturating/darkening nudges it
+    // toward this theme without misrepresenting the underlying classes.
+    targetMap.addLayer({
+      id: "worldcover-layer", type: "raster", source: "worldcover",
+      paint: { "raster-opacity": 0.75, "raster-saturation": -0.35, "raster-contrast": -0.1, "raster-brightness-max": 0.92 },
+      layout: { visibility: "none" }
+    }, beforeId);
+
+    var ndviDate = ndviDateString();
+    targetMap.addSource("ndvi", {
+      type: "raster",
+      tiles: ["https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_8Day/default/" + ndviDate + "/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png"],
+      tileSize: 256, maxzoom: 9,
+      bounds: boundsArr
+    });
+    // Same pixel-remap limitation as WorldCover above: GIBS serves this as a
+    // pre-colored image (brown-to-lime-to-green), not raw NDVI values, so it
+    // can't be truly recolored client-side. The perceptual problem flagged
+    // for the default theme applies here too — GIBS' ramp puts moderate
+    // vegetation at a bright lime that reads as "low" rather than "medium" —
+    // so this darkens/deepens the whole image as a best-effort correction in
+    // the same direction, not a real fix. A true fix means fetching NDVI as
+    // raw single-band data (not this pre-rendered "best" visualization) and
+    // applying MapLibre's `raster-color` value-ramp, which needs a different
+    // GIBS/data product than this — worth a follow-up if pixel-accurate
+    // density color matters more than what this gets close enough for now.
+    // GIBS' NDVI tiles top out at zoom 9 (its native resolution — see
+    // `maxzoom` above); MapLibre's default behavior past a source's
+    // maxzoom is to keep stretching that same z9 tile to fill the screen,
+    // which is exactly the giant blurry, muddy-tan rectangular patch this
+    // was flagged as a real bug for — a single oversampled tile spanning a
+    // huge area, read as "barren land" because that's the closest color in
+    // GIBS' ramp for the smeared-out, low-detail result. Fading the opacity
+    // out past z9 hides that artifact instead of pretending it's usable
+    // detail; the layer is still fully visible at the district-overview
+    // zoom where its actual resolution is meaningful.
+    targetMap.addLayer({
+      id: "ndvi-layer", type: "raster", source: "ndvi",
+      paint: {
+        "raster-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.7, 10.5, 0.25, 12, 0],
+        "raster-brightness-max": 0.8, "raster-contrast": 0.15, "raster-saturation": 0.1
+      },
+      layout: { visibility: "none" }
+    }, beforeId);
+
+    // Real DEM terrain, via the local Node server's same-origin proxy (see
+    // serve-prototype.mjs) — AWS's elevation-tiles-prod bucket sends no CORS
+    // headers, so MapLibre can't decode it directly from this page; fetching
+    // it server-to-server through our own tiny proxy sidesteps that, exactly
+    // as production will via a Next.js API route. `raster-dem` builds the
+    // actual elevation mesh map.setTerrain() extrudes; `hillshade` reuses
+    // the same source for real shaded relief instead of a static image.
+    targetMap.addSource("terrain-dem", {
+      type: "raster-dem",
+      tiles: [TERRAIN_PROXY_BASE + "/terrain/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      encoding: "terrarium",
+      maxzoom: 15,
+      bounds: boundsArr
+    });
+    // Always on — this is what gives the theme its "real terrain map" energy
+    // (shaded ridges/valleys over the green fills below) instead of flat
+    // color. The 3D toggle below only adds camera pitch + volumetric
+    // extrusion on top of this; it doesn't control this layer's visibility.
+    targetMap.addLayer({
+      id: "hillshade-layer", type: "hillshade", source: "terrain-dem",
+      paint: {
+        "hillshade-exaggeration": HILLSHADE_THEME.exaggeration,
+        "hillshade-shadow-color": HILLSHADE_THEME.shadow,
+        "hillshade-highlight-color": HILLSHADE_THEME.highlight,
+        "hillshade-accent-color": HILLSHADE_THEME.accent
+      },
+      layout: { visibility: "visible" }
+    }, beforeId);
+  }
+
+  // Adds the protected-areas / water-bodies vector overlays to a given map
+  // instance from already-fetched GeoJSON — shared by the main Map View
+  // (called once its Overpass fetch resolves) and the List View hub map
+  // (called with the cached protectedAreasGeoJSON/waterBodiesGeoJSON as soon
+  // as both the hub map and that data exist, whichever comes second). A
+  // no-op if the source is already there, so either call order is safe.
+  // Initial visibility comes from mapViewState so a hub built after the
+  // viewer already toggled these on the main map opens already matching it.
+  function addProtectedAreasLayers(targetMap, geojson) {
+    if (!targetMap || !geojson || targetMap.getSource("protected-areas")) return;
+    var beforeId = targetMap.getLayer("region-mask-layer") ? "region-mask-layer" : undefined;
+    var vis = mapViewState.showProtected ? "visible" : "none";
+    targetMap.addSource("protected-areas", { type: "geojson", data: geojson });
+    targetMap.addLayer({
+      id: "protected-areas-fill", type: "fill", source: "protected-areas",
+      paint: { "fill-color": ["get", "color"], "fill-opacity": 0.32 },
+      layout: { visibility: vis }
+    }, beforeId);
+    targetMap.addLayer({
+      id: "protected-areas-line", type: "line", source: "protected-areas",
+      paint: { "line-color": ["get", "color"], "line-width": 2, "line-dasharray": [2, 1.5] },
+      layout: { visibility: vis }
+    }, beforeId);
+  }
+  function addWaterBodiesLayers(targetMap, geojson) {
+    if (!targetMap || !geojson || targetMap.getSource("water-bodies")) return;
+    var beforeId = targetMap.getLayer("region-mask-layer") ? "region-mask-layer" : undefined;
+    var vis = mapViewState.showWater ? "visible" : "none";
+    var polygonFilter = ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "MultiPolygon"]];
+    targetMap.addSource("water-bodies", { type: "geojson", data: geojson });
+    targetMap.addLayer({ id: "water-fill", type: "fill", source: "water-bodies", filter: polygonFilter, paint: { "fill-color": MAP_THEME.water, "fill-opacity": 0.55 }, layout: { visibility: vis } }, beforeId);
+    targetMap.addLayer({ id: "water-fill-outline", type: "line", source: "water-bodies", filter: polygonFilter, paint: { "line-color": MAP_THEME.waterOutline, "line-width": 1 }, layout: { visibility: vis } }, beforeId);
+    targetMap.addLayer({ id: "water-line", type: "line", source: "water-bodies", filter: ["==", ["geometry-type"], "LineString"], paint: { "line-color": MAP_THEME.waterOutline, "line-width": 1.6 }, layout: { visibility: vis } }, beforeId);
+  }
+
+  // Pushes the current mapViewState onto any map instance that already has
+  // the relevant layers (checked individually since the hub map may still
+  // be missing protected-areas/water-bodies if that data hasn't arrived
+  // yet). Called on every toggle change (main map) and every time List View
+  // is shown, so the hub always ends up matching whatever was last set in
+  // Map View.
+  function applyMapViewStateTo(targetMap) {
+    if (!targetMap) return;
+    var satelliteOn = mapViewState.baseMode === "satellite";
+    if (targetMap.getLayer("satellite-layer")) targetMap.setLayoutProperty("satellite-layer", "visibility", satelliteOn ? "visible" : "none");
+    if (targetMap.getLayer("hillshade-layer")) targetMap.setLayoutProperty("hillshade-layer", "visibility", satelliteOn ? "none" : "visible");
+    if (targetMap.getLayer("protected-areas-fill")) {
+      var pv = mapViewState.showProtected ? "visible" : "none";
+      targetMap.setLayoutProperty("protected-areas-fill", "visibility", pv);
+      targetMap.setLayoutProperty("protected-areas-line", "visibility", pv);
+    }
+    if (targetMap.getLayer("water-fill")) {
+      var wv = mapViewState.showWater ? "visible" : "none";
+      ["water-fill", "water-fill-outline", "water-line"].forEach(function (id) {
+        targetMap.setLayoutProperty(id, "visibility", wv);
+      });
+    }
+    if (targetMap.getLayer("ndvi-layer")) targetMap.setLayoutProperty("ndvi-layer", "visibility", mapViewState.showNdvi ? "visible" : "none");
+    if (targetMap.getLayer("worldcover-layer")) targetMap.setLayoutProperty("worldcover-layer", "visibility", mapViewState.showVegetation ? "visible" : "none");
+  }
+
+  function initRegion() {
+    setStatus("Resolving \"" + REGION_QUERY + "\" boundary via OpenStreetMap (Nominatim)…");
+    fetchBoundary(REGION_QUERY).then(function (result) {
+      document.getElementById("region-name-label").textContent = result.display_name;
+      var geometry = result.geojson;
+      regionGeometry = geometry;
+      var rings = flattenToRings(geometry);
+      var bbox = rings.length ? computeBbox(rings) : {
+        minLng: parseFloat(result.boundingbox[2]), maxLng: parseFloat(result.boundingbox[3]),
+        minLat: parseFloat(result.boundingbox[0]), maxLat: parseFloat(result.boundingbox[1])
+      };
+      currentBounds = [[bbox.minLng, bbox.minLat], [bbox.maxLng, bbox.maxLat]];
+
+      // GIS-export state ready: NDVI/Vegetation download only need the
+      // bbox (they re-fetch a raster image on demand), so enable those two
+      // buttons here rather than waiting on anything else to load.
+      regionBbox = bbox;
+      regionLabel = result.display_name || REGION_QUERY;
+      regionSlug = slugify(REGION_QUERY.split(",")[0]);
+      ["download-ndvi-btn", "download-vegetation-btn"].forEach(function (id) {
+        var btn = document.getElementById(id);
+        btn.disabled = false;
+        btn.title = "Download georeferenced raster (PNG + world file) for QGIS";
+      });
+
+      // Raster overlays first (bounds-restricted — see addRegionRasterLayers),
+      // then the mask (so it sits above every data layer, base map included,
+      // but below the boundary outline), then the outline on top of that.
+      addRegionRasterLayers(bbox, firstSymbolLayerId());
+      if (rings.length) {
+        map.addSource("region-mask", { type: "geojson", data: { type: "Feature", geometry: buildMaskGeometry(geometry), properties: {} } });
+        // Fully opaque: nothing outside the region renders at all, not even
+        // a dimmed basemap — matches "don't show the rest of the world".
+        map.addLayer({ id: "region-mask-layer", type: "fill", source: "region-mask", paint: { "fill-color": "#faf9f5", "fill-opacity": 1 } });
+      }
+      map.addSource("boundary", { type: "geojson", data: { type: "Feature", geometry: geometry, properties: {} } });
+      map.addLayer({ id: "boundary-line", type: "line", source: "boundary", paint: { "line-color": "#232323", "line-width": 2, "line-dasharray": [3, 2] } });
+
+      // IMPORTANT: setMaxBounds must never be tighter than what fitBounds
+      // actually needs, or MapLibre silently clamps the zoom-out and the
+      // region gets cut off. A fixed percentage padding on the raw region
+      // bbox isn't safe for that, because fitBounds' required zoom depends
+      // on the *container's* aspect ratio too — Darjeeling is tall and
+      // narrow, this card is wide, so fitting the full height requires
+      // showing much more width than the bbox itself has. Instead: let
+      // fitBounds settle first, then derive maxBounds from the view it
+      // actually produced (which already accounts for that mismatch),
+      // padded further out for some extra pan room.
+      map.fitBounds(currentBounds, { padding: 24, duration: 0 });
+      var settled = map.getBounds();
+      var fittedBbox = {
+        minLng: settled.getWest(), maxLng: settled.getEast(),
+        minLat: settled.getSouth(), maxLat: settled.getNorth()
+      };
+      regionMaxBounds = padBoundsArray(fittedBbox, 0.4);
+      map.setMaxBounds(regionMaxBounds);
+      // fitBounds above used duration:0 (instant, no animation) specifically
+      // so this happens in the same tick — the veil never lifts on the
+      // fallback center/zoom the map briefly held before this point, only
+      // on the already-correct fitted view. That's what fixes the
+      // "flashes zoomed-in, then suddenly snaps to fit" symptom: there's
+      // nothing uncovered to flash.
+      document.getElementById("map-loading-veil").classList.add("hidden");
+      setStatus("Boundary resolved (" + result.osm_type + " " + result.osm_id + "). Sampling environmental data…");
+
+      // Highest/lowest elevation — set immediately from the verified
+      // ELEVATION_EXTREMES constants above, not from the grid-sampling
+      // pipeline below (which is for the *mean* and for spreading generic
+      // environmental samples, and has no way to reliably land on a real
+      // named summit/valley). Independent of any network call, so these
+      // are correct even if Open-Meteo's elevation API is slow/down.
+      setStat("stat-max-elev", ELEVATION_EXTREMES.high.elevationM.toLocaleString() + " m");
+      setStat("stat-min-elev", ELEVATION_EXTREMES.low.elevationM.toLocaleString() + " m");
+      addStatSub("stat-max-elev", ELEVATION_EXTREMES.high.name);
+      addStatSub("stat-min-elev", ELEVATION_EXTREMES.low.name);
+
+      var grid = rings.length ? generateClippedGrid(rings, bbox, 220, 90) : [polygonCentroid(bbox)];
+      document.getElementById("grid-sample-note").textContent =
+        grid.length + " sample points clipped to the region boundary (Open-Meteo batch limit: 100/request) — used for mean elevation, vegetation and climate sampling only, not the highest/lowest figures above.";
+
+      var centroid = polygonCentroid(bbox);
+
+      // Mean elevation only — the grid-sampling approximation is
+      // appropriate here (there's no single "correct" mean to hardcode the
+      // way there is for a named summit/valley).
+      fetchElevations(grid).then(function (elevations) {
+        var valid = elevations.filter(function (v) { return typeof v === "number" && isFinite(v); });
+        if (!valid.length) throw new Error("No elevation values returned");
+        var mean = valid.reduce(function (a, b) { return a + b; }, 0) / valid.length;
+        setStat("stat-mean-elev", Math.round(mean) + " m");
+      }).catch(function (err) {
+        console.error("[elevation]", err);
+        setStat("stat-mean-elev", "unavailable", "err");
+      });
+
+      // Temperature
+      fetchAnnualMeanTemp(centroid[1], centroid[0]).then(function (r) {
+        setStat("stat-temp", r.mean.toFixed(1) + " °C");
+        document.getElementById("stat-temp").insertAdjacentHTML(
+          "afterend", ""
+        );
+        var row = document.getElementById("stat-temp").closest(".stat-row");
+        if (row && !row.querySelector(".stat-sub")) {
+          var sub = document.createElement("div");
+          sub.className = "stat-sub";
+          sub.style.width = "100%";
+          sub.textContent = r.year + " annual mean, " + r.sampleDays + " days sampled at region centroid";
+          row.after(sub);
+        }
+      }).catch(function (err) {
+        console.error("[temperature]", err);
+        setStat("stat-temp", "unavailable", "err");
+      });
+
+      // Water bodies
+      fetchWaterBodies(bbox).then(function (result) {
+        var count = result.geojson.features.length;
+        setStat("stat-water", count + " features");
+        var row = document.getElementById("stat-water").closest(".stat-row");
+        var sub = document.createElement("div");
+        sub.className = "stat-sub";
+        sub.style.width = "100%";
+        sub.textContent = "via " + result.source.replace("https://", "").split("/")[0];
+        row.after(sub);
+
+        waterBodiesGeoJSON = result.geojson;
+        var downloadBtn = document.getElementById("download-water-btn");
+        downloadBtn.disabled = !count;
+        downloadBtn.title = count
+          ? "Download water-body vector data (GeoJSON + KML) for QGIS"
+          : "No water-body features found in this region";
+
+        // The layer/source only exist from this point on, so the toggle
+        // stays disabled (with a spinner) until here — otherwise checking
+        // it earlier would silently do nothing (map.getLayer would miss)
+        // with no sign anything was still loading.
+        document.getElementById("water-loading-spinner").style.display = "none";
+        var waterCheckbox = document.getElementById("toggle-water");
+        var waterLabel = document.getElementById("toggle-water-label");
+        waterCheckbox.disabled = !count;
+        waterLabel.title = count ? "" : "No water-body features found in this region";
+
+        // Inserted *below* the region mask (if it exists) so water bodies
+        // outside the boundary get clipped away the same as every other
+        // data layer — only the mask and boundary outline stay on top.
+        addWaterBodiesLayers(map, result.geojson);
+        // Mirror onto the List View hub map too, if it already exists —
+        // otherwise initListHubMap picks up waterBodiesGeoJSON itself once
+        // the hub is built.
+        if (listHubMap) addWaterBodiesLayers(listHubMap, result.geojson);
+      }).catch(function (err) {
+        console.error("[water-bodies]", err);
+        setStat("stat-water", "unavailable (rate-limited)", "err");
+        document.getElementById("overpass-note").textContent =
+          " · Live note: every configured Overpass mirror failed for this request (fair-use rate limiting) — production caches these results server-side precisely to absorb this.";
+        document.getElementById("water-loading-spinner").style.display = "none";
+        document.getElementById("toggle-water-label").title = "Water-body data unavailable (rate-limited)";
+      });
+
+      // Protected areas (national parks, wildlife sanctuaries, reserves —
+      // OSM boundary=protected_area/national_park + leisure=nature_reserve).
+      // Default ON: unlike the other optional overlays, this is core to why
+      // a biodiversity checklist tool would open Map View at all.
+      fetchProtectedAreas(bbox).then(function (result) {
+        var features = result.geojson.features;
+        setStat("stat-protected", features.length + (features.length === 1 ? " area" : " areas"));
+        var row = document.getElementById("stat-protected").closest(".stat-row");
+        var sub = document.createElement("div");
+        sub.className = "stat-sub";
+        sub.style.width = "100%";
+        sub.textContent = features.length
+          ? features.map(function (f) { return f.properties.name; }).join(", ")
+          : "none found in this region";
+        row.after(sub);
+
+        protectedAreasGeoJSON = result.geojson;
+        addProtectedAreasLayers(map, result.geojson);
+        // Mirror onto the List View hub map too, if it already exists —
+        // otherwise initListHubMap picks up protectedAreasGeoJSON itself
+        // once the hub is built.
+        if (listHubMap) addProtectedAreasLayers(listHubMap, result.geojson);
+
+        // Legend only lists classes actually present in this region, plus a
+        // click handler so clicking an area names it (useful once several
+        // overlap — protected areas nest and overlap far more than most GIS
+        // layers, e.g. a wildlife sanctuary inside a national park).
+        var presentClasses = {};
+        features.forEach(function (f) { presentClasses[f.properties.protectClass || "other"] = true; });
+        var legendList = document.getElementById("protected-legend-list");
+        Object.keys(presentClasses).forEach(function (cls) {
+          var style = protectedAreaStyle(cls);
+          var item = document.createElement("div");
+          item.className = "legend-item";
+          item.innerHTML = '<span class="sw" style="background:' + style.color + '"></span>' + style.label;
+          legendList.appendChild(item);
+        });
+        if (features.length) document.getElementById("protected-legend-section").style.display = "block";
+
+        map.on("click", "protected-areas-fill", function (e) {
+          var f = e.features[0];
+          new maplibregl.Popup({ closeButton: true })
+            .setLngLat(e.lngLat)
+            .setHTML('<strong>' + f.properties.name + '</strong><br/>' + f.properties.label)
+            .addTo(map);
+        });
+        map.on("mouseenter", "protected-areas-fill", function () { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "protected-areas-fill", function () { map.getCanvas().style.cursor = ""; });
+      }).catch(function (err) {
+        console.error("[protected-areas]", err);
+        setStat("stat-protected", "unavailable (rate-limited)", "err");
+      });
+
+      // Dominant vegetation stat. (A real settlement-cells overlay derived
+      // from this same WorldCover scan was tried here — see the git history
+      // / prior prototype notes — to address landuse=residential's coverage
+      // gap. Reverted: at real-city density (Siliguri) it painted such a
+      // large, near-continuous tan wash that it read as "barren ground"
+      // rather than "settlement" and visually buried the red building
+      // layer it was meant to reinforce. The underlying data problem it was
+      // solving is real and documented in the footer note below; the fix
+      // just needs a different visual treatment than "solid fill at scale"
+      // before it's worth reintroducing.)
+      sampleDominantVegetation(bbox, grid).then(function (r) {
+        if (!r.dominant) throw new Error("No classifiable pixels sampled");
+        setStat("stat-veg", r.dominant + " (~" + r.pct + "%)");
+      }).catch(function (err) {
+        console.error("[vegetation/settlement]", err);
+        setStat("stat-veg", "unavailable", "err");
+      });
+
+      setStatus("Live — Darjeeling District, West Bengal, India");
+      if (listViewBuilt) renderListMapPreview();
+    }).catch(function (err) {
+      console.error("[boundary]", err);
+      setStatus("Failed to resolve region boundary: " + err.message);
+      document.getElementById("region-name-label").textContent = "Boundary resolution failed";
+      document.getElementById("map-loading-veil").classList.add("hidden");
+    });
+  }
+
+  // ---------- List View ----------
+  // Sample family/species/occurrence data — this prototype has no species
+  // table of its own (only region/GIS layers), so this stands in for what
+  // the real workbench's family aggregation will eventually feed in.
+  var LIST_FAMILIES = [
+    { id: "nymphalidae",  name: "Nymphalidae",  species: 135, occurrences: 5670 },
+    { id: "lycaenidae",   name: "Lycaenidae",   species: 96,  occurrences: 1380 },
+    { id: "hesperiidae",  name: "Hesperiidae",  species: 68,  occurrences: 840 },
+    { id: "pieridae",     name: "Pieridae",     species: 31,  occurrences: 1120 },
+    { id: "papilionidae", name: "Papilionidae", species: 24,  occurrences: 610 },
+    { id: "riodinidae",   name: "Riodinidae",   species: 7,   occurrences: 90 },
+    { id: "libytheidae",  name: "Libytheidae",  species: 2,   occurrences: 35 }
+  ];
+  // 10-stop ramp, ordered low -> high value (mauve/purple for the smallest
+  // families through to peach/orange for the largest), interpolated
+  // continuously by each family's species count rather than assigned by
+  // array position.
+  var LIST_PALETTE = [
+    [0x9d, 0x7a, 0x96],
+    [0xa7, 0x7f, 0x9a],
+    [0xc4, 0x7f, 0x9d],
+    [0xde, 0x84, 0x9f],
+    [0xe4, 0x67, 0x80],
+    [0xe4, 0x6f, 0x85],
+    [0xee, 0x76, 0x8e],
+    [0xf5, 0x80, 0x95],
+    [0xf5, 0x8a, 0x96],
+    [0xfe, 0xaf, 0x8f]
+  ];
+  function listRampColor(t) {
+    t = Math.max(0, Math.min(1, t));
+    var segs = LIST_PALETTE.length - 1;
+    var pos = t * segs;
+    var i = Math.min(segs - 1, Math.floor(pos));
+    var localT = pos - i;
+    var a = LIST_PALETTE[i], b = LIST_PALETTE[i + 1];
+    function lerp(x, y) { return Math.round(x + (y - x) * localT); }
+    return "rgb(" + lerp(a[0], b[0]) + "," + lerp(a[1], b[1]) + "," + lerp(a[2], b[2]) + ")";
+  }
+  function listValueT(v) { return Math.max(0, Math.min(1, v / LIST_SCALE_MAX)); }
+
+  // LIST_CX (below) grew across several rounds purely to keep labels from
+  // wrapping as the font and bars grew — but CENTER_R/OUTER_R kept growing
+  // *slower* than LIST_CX each time (both are set relative to it), so the
+  // wheel kept shrinking relative to its own, steadily-growing canvas even
+  // though nothing about the wheel itself shrank. This pass deliberately
+  // grows CENTER_R and the bar range (OUTER_R - BAR_INNER_R) as a much
+  // bigger fraction of TEXT_R than before (hub now ~0.71x TEXT_R, was
+  // ~0.67x; bar range ~200, was ~160) so the wheel visibly fills more of
+  // whatever LIST_CX the label-fit math (see LIST_VB_SIZE further down)
+  // ends up needing, instead of the two growing in lockstep and canceling
+  // each other out.
+  var LIST_CENTER_R = 665, LIST_BAR_INNER_R = 680, LIST_OUTER_R = 880, LIST_LEADER_R = 910, LIST_TEXT_R = 930;
+  // Reference config every label-related size below (font-size, tspan
+  // line-height, the small dx/dy nudges in listLabelAnchor, and LIST_CX
+  // itself) is scaled from: CX=620/TEXT_R=433 was the last config where
+  // every family's name was hand-verified to fit its slot on one line at a
+  // 23px font. Deriving LIST_CX from LIST_TEXT_R via this same ratio (~0.70,
+  // rather than picking LIST_CX independently and separately re-deriving
+  // "how much label margin is actually needed") means any TEXT_R keeps the
+  // exact geometry that was verified to work, just uniformly bigger or
+  // smaller — that's also why the font/dy scale below is keyed off the same
+  // two numbers: growing LIST_CX to fit a bigger wheel used to leave the
+  // label font/spacing pixel values unchanged, which is exactly what made
+  // them silently render smaller on screen every time.
+  var LIST_LABEL_SCALE_REF_CX = 620;
+  var LIST_LABEL_SCALE_REF_TEXT_R = 433;
+  var LIST_CX = Math.round(LIST_TEXT_R * (LIST_LABEL_SCALE_REF_CX / LIST_LABEL_SCALE_REF_TEXT_R));
+  var LIST_CY = LIST_CX;
+  var LIST_LABEL_SCALE = LIST_CX / LIST_LABEL_SCALE_REF_CX;
+  var LIST_SCALE_MAX = 150;
+  // Gap narrowed 10 -> 6deg — the reference's wedges sit close enough to read
+  // as one continuous ring broken by hairline gaps, not separate islands.
+  var LIST_GAP_DEG = 6;
+  var LIST_N = LIST_FAMILIES.length;
+  var LIST_SLOT = 360 / LIST_N;
+
+  function listPolar(r, angleDeg) {
+    var rad = angleDeg * Math.PI / 180;
+    return { x: LIST_CX + r * Math.sin(rad), y: LIST_CY - r * Math.cos(rad) };
+  }
+  function listSectorPath(rInner, rOuter, startDeg, endDeg) {
+    var p1 = listPolar(rOuter, startDeg), p2 = listPolar(rOuter, endDeg);
+    var p3 = listPolar(rInner, endDeg), p4 = listPolar(rInner, startDeg);
+    var large = (endDeg - startDeg) > 180 ? 1 : 0;
+    return "M " + p1.x + " " + p1.y + " A " + rOuter + " " + rOuter + " 0 " + large + " 1 " + p2.x + " " + p2.y +
+      " L " + p3.x + " " + p3.y + " A " + rInner + " " + rInner + " 0 " + large + " 0 " + p4.x + " " + p4.y + " Z";
+  }
+  // Cube-root radius scale on top of a raised floor (35% of the full travel
+  // range) — the floor alone would flatten the two smallest families
+  // (2 and 7 species) to the same height, so the cube-root curve is applied
+  // to the remaining 65% above it: every family still gets a distinct
+  // height, but the smallest ones sit far closer to the largest than a pure
+  // exponent curve would put them.
+  var LIST_RADIUS_EXP = 1 / 3;
+  var LIST_MIN_BAR_FRAC = 0.35;
+  function listRadiusForSpecies(v) {
+    var t = listValueT(v);
+    var range = LIST_OUTER_R - LIST_BAR_INNER_R;
+    var frac = LIST_MIN_BAR_FRAC + (1 - LIST_MIN_BAR_FRAC) * Math.pow(t, LIST_RADIUS_EXP);
+    return LIST_BAR_INNER_R + frac * range;
+  }
+  // The SVG's own viewBox (see the <svg> tag) is sized off LIST_CX, which in
+  // turn is derived from whatever LIST_TEXT_R ends up being above — this is
+  // the actual "does the longest name fit at the tightest slot" budget
+  // (alongside LIST_LABEL_MARGIN) used by buildListView's wrap/break
+  // fallback and orderFamiliesToFitSlots. The two slots nearest true
+  // horizontal (~103°/257° for 7 evenly-spaced families) are the binding
+  // constraint: at CX == TEXT_R (no margin at all) they'd have under 12
+  // units of room there — less than a single character — so CX has to run
+  // meaningfully ahead of TEXT_R, not just past it.
+  var LIST_VB_SIZE = LIST_CX * 2;
+  var LIST_LABEL_MARGIN = 14;
+  // dy values tuned for the label's 2-line layout (name, then a smaller
+  // species-count line below it via <tspan dy=...> — see buildListView) —
+  // top/bottom push the whole 2-line block further clear of the ring than a
+  // single line needed; left/right shift up slightly so the block centers
+  // vertically on the leader line instead of sitting low.
+  function listLabelAnchor(angle) {
+    var norm = ((angle % 360) + 360) % 360;
+    var s = LIST_LABEL_SCALE;
+    if (norm < 6 || norm > 354) return { anchor: "middle", dx: 0, dy: -27 * s };
+    if (Math.abs(norm - 180) < 6) return { anchor: "middle", dx: 0, dy: 22 * s };
+    if (norm > 180) return { anchor: "end", dx: -8 * s, dy: -3 * s };
+    return { anchor: "start", dx: 8 * s, dy: -3 * s };
+  }
+  function listSvgEl(tag, attrs) {
+    var e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // How much horizontal room a label AT THIS SLOT ANGLE has before it runs
+  // into the chart's edge — purely a function of the slot's geometry (via
+  // listLabelAnchor), not of which family ends up there. Shared by the
+  // pre-render slot-fitting pass (orderFamiliesToFitSlots) and the per-label
+  // wrap/break fallback in the render loop, so both agree on the same
+  // number instead of recomputing it slightly differently in two places.
+  function listSlotAvail(mid) {
+    var tp = listPolar(LIST_TEXT_R, mid);
+    var a = listLabelAnchor(mid);
+    var labelX = tp.x + a.dx;
+    if (a.anchor === "start") return (LIST_VB_SIZE - LIST_LABEL_MARGIN) - labelX;
+    if (a.anchor === "end") return labelX - LIST_LABEL_MARGIN;
+    return 2 * Math.min(labelX - LIST_LABEL_MARGIN, (LIST_VB_SIZE - LIST_LABEL_MARGIN) - labelX);
+  }
+
+  // How much radial room a slot has before its own ray exits the chart's
+  // square canvas. A circle inscribed in a square only reaches the square's
+  // edge at its half-size (LIST_CX) along the four cardinal directions
+  // (0°/90°/180°/270°) — along the four diagonals (45°/135°/225°/315°), the
+  // corners sit LIST_CX*sqrt(2) away, i.e. ~41% further out. Bars are all
+  // capped at one shared LIST_OUTER_R regardless of angle, so a slot near a
+  // cardinal direction is sitting on top of a lot of otherwise-unused
+  // corner space, while a slot near a diagonal is right where that space
+  // actually is.
+  function listSlotBoundaryR(mid) {
+    var rad = mid * Math.PI / 180;
+    return LIST_CX / Math.max(Math.abs(Math.sin(rad)), Math.abs(Math.cos(rad)));
+  }
+
+  // Puts the biggest bars (by species count) at the slots with the most
+  // spare room around them — the diagonal/corner-facing ones, per
+  // listSlotBoundaryR — and the smallest bars at the tight cardinal-facing
+  // slots, which don't need that extra clearance anyway. This is
+  // independent of label fit: listSlotAvail's margin (see LIST_VB_SIZE)
+  // already gives every current name room regardless of which slot it
+  // lands in, and the wrap/break fallback in the render loop below still
+  // catches any name that doesn't, whatever order this produces.
+  function orderFamiliesToFitSlots(families) {
+    var bySize = families.slice().sort(function (a, b) { return b.species - a.species; });
+    var slots = [];
+    for (var i = 0; i < LIST_N; i++) slots.push({ index: i, boundaryR: listSlotBoundaryR(i * LIST_SLOT) });
+    slots.sort(function (a, b) { return b.boundaryR - a.boundaryR; });
+
+    var arrangement = new Array(LIST_N);
+    for (var k = 0; k < LIST_N; k++) arrangement[slots[k].index] = bySize[k];
+    return arrangement;
+  }
+
+  var listSelected = null;
+  var listWedgeEls = [];
+
+  function buildListView() {
+    listViewBuilt = true;
+    var svg = document.getElementById("list-chart-svg");
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    // Set from LIST_VB_SIZE here rather than left as a static HTML
+    // attribute — LIST_VB_SIZE is itself derived from LIST_CX, which is
+    // derived from LIST_TEXT_R (see its own comment above), so the markup's
+    // viewBox would otherwise need manually re-syncing by hand every time
+    // any of those change, exactly the kind of drift that caused labels to
+    // render at the wrong scale earlier.
+    svg.setAttribute("viewBox", "0 0 " + LIST_VB_SIZE + " " + LIST_VB_SIZE);
+
+    // Appended now (empty) purely to fix z-order — spoke behind wedge behind
+    // leader/label — populated inside the family loop below instead of its
+    // own separate pass, since the spoke's length now depends on each
+    // family's own bar radius (barR), computed in that loop.
+    var spokeGroup = listSvgEl("g", {});
+    svg.appendChild(spokeGroup);
+
+    // Center: real region-map preview clipped to a circle (see
+    // renderListMapPreview — shows a "Resolving…" placeholder until the
+    // real boundary this page already fetches for Map View resolves).
+    var fo = listSvgEl("foreignObject", { x: LIST_CX - LIST_CENTER_R, y: LIST_CY - LIST_CENTER_R, width: LIST_CENTER_R * 2, height: LIST_CENTER_R * 2 });
+    var foDiv = document.createElement("div");
+    foDiv.id = "list-map-preview";
+    foDiv.className = "list-map-preview";
+    // The circular clip has to live on an INNER div — renderListMapPreview()
+    // rewrites this div's innerHTML wholesale (pending text <-> the live
+    // map), and the "Edit map" button below needs to survive that, sitting
+    // on top of the map rather than getting wiped out along with it.
+    var maskDiv = document.createElement("div");
+    maskDiv.id = "list-map-mask";
+    maskDiv.className = "list-map-mask";
+    foDiv.appendChild(maskDiv);
+    var editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.id = "list-hub-edit-btn";
+    editBtn.className = "list-hub-edit-btn";
+    editBtn.title = "Edit map — switch to Map view";
+    editBtn.setAttribute("aria-label", "Edit map");
+    editBtn.innerHTML = LIST_EDIT_ICON_SVG;
+    editBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      switchView("map");
+    });
+    foDiv.appendChild(editBtn);
+    fo.appendChild(foDiv);
+    svg.appendChild(fo);
+    svg.appendChild(listSvgEl("circle", { cx: LIST_CX, cy: LIST_CY, r: LIST_CENTER_R, fill: "none", stroke: "#dcd9d0", "stroke-width": 1 }));
+    renderListMapPreview();
+
+    var wedgeGroup = listSvgEl("g", {});
+    var leaderGroup = listSvgEl("g", {});
+    // Both appended (empty) right away, before the loop, so every label is
+    // live in the rendered document the instant it's appended below — that's
+    // what makes getComputedTextLength()/getSubStringLength() below return
+    // real, reliable measurements instead of stale/zero values.
+    svg.appendChild(wedgeGroup);
+    svg.appendChild(leaderGroup);
+
+    // Real clipping boundary for the wrap/break logic below, in the same
+    // viewBox-unit coordinate space as labelX — NOT the SVG's own 0..
+    // LIST_VB_SIZE box. The SVG is laid out square (height:100%, width:auto)
+    // inside a wider flex row that centers it (.list-chart-wrap), so most of
+    // the time there's real blank card space on both sides of the SVG's own
+    // edge before a label would actually reach `#list-wrap`'s overflow:
+    // hidden. Treating the SVG's own edge as that boundary (the previous
+    // approach) wrapped/broke names like "Libytheidae"/"Riodinidae" far
+    // earlier than necessary. Falls back to the SVG's own box if the section
+    // can't be found or hasn't been laid out yet (width 0), which reproduces
+    // the old, safe-but-conservative behavior instead of dividing by zero.
+    var svgRect = svg.getBoundingClientRect();
+    var sectionRect = document.querySelector(".list-chart-section");
+    sectionRect = sectionRect ? sectionRect.getBoundingClientRect() : null;
+    var vbScale = svgRect.width ? svgRect.width / LIST_VB_SIZE : 1;
+    var leftBoundVB = 0, rightBoundVB = LIST_VB_SIZE;
+    if (sectionRect && svgRect.width) {
+      leftBoundVB = (sectionRect.left - svgRect.left) / vbScale;
+      rightBoundVB = (sectionRect.right - svgRect.left) / vbScale;
+    }
+
+    listWedgeEls = [];
+    // Render order != LIST_FAMILIES order — see orderFamiliesToFitSlots —
+    // arrangement[i] is whichever family got assigned to slot angle i.
+    var listArrangement = orderFamiliesToFitSlots(LIST_FAMILIES);
+    listArrangement.forEach(function (f, i) {
+      var mid = i * LIST_SLOT;
+      var start = mid - (LIST_SLOT - LIST_GAP_DEG) / 2;
+      var end = mid + (LIST_SLOT - LIST_GAP_DEG) / 2;
+      var barR = listRadiusForSpecies(f.species);
+      var color = listRampColor(listValueT(f.species));
+      var wedge = listSvgEl("path", {
+        class: "list-wedge", d: listSectorPath(LIST_BAR_INNER_R, barR, start, end), fill: color,
+        tabindex: "0", role: "button", "aria-label": f.name + ": " + f.species + " species, " + f.occurrences.toLocaleString() + " occurrences"
+      });
+      wedge.dataset.id = f.id;
+      wedgeGroup.appendChild(wedge);
+      listWedgeEls.push({ id: f.id, wedge: wedge });
+
+      // Spoke now stops exactly at this family's own bar tip (barR), not the
+      // fixed LIST_OUTER_R every family used to share — a short bar used to
+      // leave a grey dashed "track" running on past its own tip up to
+      // LIST_OUTER_R before the (differently-styled, black) leader line
+      // picked up, which read as one dotted line switching color partway
+      // through. Since barR now matches the wedge's own outer edge exactly,
+      // this segment sits fully hidden underneath it.
+      var s1 = listPolar(LIST_BAR_INNER_R, mid), s2 = listPolar(barR, mid);
+      spokeGroup.appendChild(listSvgEl("line", { class: "list-spoke", x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y }));
+
+      // Leader now originates at the bar's own tip (barR) instead of the
+      // fixed LIST_OUTER_R, so it visibly starts right where the colored
+      // wedge ends rather than floating past a gap of empty/grey track.
+      var lp1 = listPolar(barR, mid), lp2 = listPolar(LIST_LEADER_R, mid);
+      leaderGroup.appendChild(listSvgEl("line", { class: "list-leader", x1: lp1.x, y1: lp1.y, x2: lp2.x, y2: lp2.y }));
+      var tp = listPolar(LIST_TEXT_R, mid);
+      var a = listLabelAnchor(mid);
+      var labelX = tp.x + a.dx;
+      var label = listSvgEl("text", { class: "list-fam-label", x: labelX, y: tp.y + a.dy, "text-anchor": a.anchor, tabindex: "0", role: "button" });
+      label.dataset.id = f.id;
+      // Font-size set inline, scaled by LIST_LABEL_SCALE, rather than left
+      // to the CSS class's flat 23px — see LIST_LABEL_SCALE's comment above
+      // buildListView for why a fixed px number silently shrinks on screen
+      // whenever LIST_CX changes.
+      label.style.fontSize = (23 * LIST_LABEL_SCALE) + "px";
+
+      var nameLine = listSvgEl("tspan", { x: labelX });
+      nameLine.textContent = f.name;
+      label.appendChild(nameLine);
+      leaderGroup.appendChild(label);
+
+      // Safety net only now that orderFamiliesToFitSlots has already put the
+      // longest names in the roomiest slots — wraps (or, failing that,
+      // breaks) a name that still doesn't fit its slot's available width,
+      // instead of letting it run past the edge and get clipped by `main`'s
+      // own overflow:hidden.
+      var avail = listSlotAvail(mid);
+      var wrapDy = 24 * LIST_LABEL_SCALE;
+      var wrapLine = null;
+      if (nameLine.getComputedTextLength() > avail && f.name.length > 1) {
+        // Binary-search the longest prefix of the name that still fits —
+        // whole name if there's a natural place for it, otherwise this ends
+        // up splitting mid-word, which is the explicitly-requested fallback
+        // when there simply isn't room for it as one word.
+        var lo = 1, hi = f.name.length, fit = 1;
+        while (lo <= hi) {
+          var mid2 = (lo + hi) >> 1;
+          nameLine.textContent = f.name.slice(0, mid2);
+          if (nameLine.getComputedTextLength() <= avail) { fit = mid2; lo = mid2 + 1; }
+          else hi = mid2 - 1;
+        }
+        nameLine.textContent = f.name.slice(0, fit);
+        wrapLine = listSvgEl("tspan", { x: labelX, dy: wrapDy });
+        wrapLine.textContent = f.name.slice(fit);
+        label.appendChild(wrapLine);
+      }
+
+      // Two lines, not "Name [N species]" run together on one — that single-
+      // line form was wide enough (at this font size) to push the leftmost
+      // labels' text past the card's edge. Both tspans repeat the shared x
+      // so text-anchor (start/middle/end) aligns each line independently.
+      var countLine = listSvgEl("tspan", { class: "list-fam-label-sub", x: labelX, dy: 18 * LIST_LABEL_SCALE });
+      countLine.style.fontSize = (13 * LIST_LABEL_SCALE) + "px";
+      countLine.textContent = f.species + " species";
+      label.appendChild(countLine);
+
+      // The top label slot grows its lines upward (dy starts negative, see
+      // listLabelAnchor) so that a longer 2-line block still clears the ring
+      // by the same margin a short one does. If wrapping added a 3rd line,
+      // shift the whole block up one more line-height so it keeps that same
+      // clearance instead of creeping down toward the ring.
+      if (wrapLine && a.anchor === "middle" && a.dy < 0) {
+        label.setAttribute("y", tp.y + a.dy - wrapDy);
+      }
+
+      [wedge, label].forEach(function (node) {
+        node.addEventListener("click", function () { selectListFamily(f.id); });
+        node.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectListFamily(f.id); } });
+      });
+    });
+
+    buildListStrip();
+    applyListSelection();
+  }
+
+  // Renders the SAME real boundary that Map View fetches into the hub
+  // circle — but as an actual small MapLibre instance running the app's
+  // real themed style + hillshade terrain + region mask/boundary (exactly
+  // the setup startMap()/initRegion() give the main map), not a flattened
+  // custom SVG redraw. Called once on first List View build, and again once
+  // the boundary resolves if the user opened List before then; the map
+  // itself is only ever created once (see initListHubMap) and left running.
+  function renderListMapPreview() {
+    var host = document.getElementById("list-map-mask");
+    if (!host) return;
+    if (!regionGeometry || !regionBbox) {
+      host.innerHTML = '<span class="list-map-pending">Resolving region…</span>';
+      return;
+    }
+    if (listHubMap) {
+      // Already built (boundary resolved after the hub map was created) —
+      // just make sure it's sized correctly for its current DOM box.
+      listHubMap.resize();
+      return;
+    }
+    if (listHubMapInitializing) return;
+    listHubMapInitializing = true;
+    host.innerHTML = "";
+    var mapDiv = document.createElement("div");
+    mapDiv.id = "list-hub-map";
+    host.appendChild(mapDiv);
+    initListHubMap(mapDiv);
+  }
+
+  // Builds the hub's own small MapLibre map: same base style + theme +
+  // hillshade terrain + region mask/boundary the main map uses, fitted
+  // tight to the region so it fills the circle edge-to-edge like the
+  // reference. Fetches its own copy of the base style (rather than reusing
+  // the main map's already-themed style object) since a style object is
+  // consumed by the Map instance it's given to — sharing one between two
+  // live maps risks one map's internal mutations bleeding into the other.
+  function initListHubMap(container) {
+    fetch(OPENFREEMAP_STYLE)
+      .then(function (res) { return res.json(); })
+      .then(function (style) {
+        listHubMap = new maplibregl.Map({
+          container: container,
+          style: applyMapTheme(style, false),
+          center: FALLBACK_CENTER,
+          zoom: 8,
+          pitch: 0,
+          interactive: true,
+          // cooperativeGestures: a bare scroll over this small embedded hub
+          // shouldn't hijack the page's scroll — it requires ctrl/cmd+scroll
+          // to zoom instead, same as any map embedded in a scrollable page.
+          cooperativeGestures: true,
+          dragRotate: false,
+          pitchWithRotate: false,
+          touchPitch: false,
+          attributionControl: false
+        });
+        listHubMap.touchZoomRotate.disableRotation();
+        listHubMap.on("load", function () {
+          // Same satellite/worldcover/ndvi/hillshade stack the main map
+          // builds — reusing addRegionRasterLayers (rather than duplicating
+          // just the hillshade piece, as this used to) is what lets the
+          // "Edit map" round trip actually work: whichever of these the
+          // viewer turns on in Map View has a same-id layer here to toggle
+          // too. applyMapViewStateTo() below then sets their visibility to
+          // match the current state instead of this function's own
+          // (all-off-except-hillshade) defaults.
+          addRegionRasterLayers(regionBbox, firstSymbolLayerId(listHubMap), listHubMap);
+          // Protected areas / water bodies use whatever's already been
+          // fetched by the main map (see fetchProtectedAreas/fetchWaterBodies
+          // in initRegion) — a no-op here if that hasn't resolved yet; the
+          // main map's own fetch handlers add these to the hub directly if
+          // it already exists by the time they resolve instead.
+          if (protectedAreasGeoJSON) addProtectedAreasLayers(listHubMap, protectedAreasGeoJSON);
+          if (waterBodiesGeoJSON) addWaterBodiesLayers(listHubMap, waterBodiesGeoJSON);
+
+          // Same "world rectangle with the region cut out as a hole"
+          // technique as the main map's region-mask-layer — painted white
+          // (not MAP_THEME.background) so only the region itself reads as
+          // "map"; everything outside its shape is blank page, not a green
+          // undeveloped-terrain wash filling the whole circle.
+          var rings = flattenToRings(regionGeometry);
+          if (rings.length) {
+            listHubMap.addSource("region-mask", { type: "geojson", data: { type: "Feature", geometry: buildMaskGeometry(regionGeometry), properties: {} } });
+            listHubMap.addLayer({ id: "region-mask-layer", type: "fill", source: "region-mask", paint: { "fill-color": "#ffffff", "fill-opacity": 1 } });
+          }
+          listHubMap.addSource("boundary", { type: "geojson", data: { type: "Feature", geometry: regionGeometry, properties: {} } });
+          listHubMap.addLayer({ id: "boundary-line", type: "line", source: "boundary", paint: { "line-color": "#232323", "line-width": 1.4, "line-dasharray": [2, 1.6] } });
+
+          // fitBounds(boundsArr) alone fits the region's rectangular bbox
+          // snugly to the (square) container — but the visible area is a
+          // CIRCLE inscribed in that square, and a rectangle's edges/corners
+          // sit outside its own inscribed circle except at the four edge
+          // midpoints. For a shape like Darjeeling's — tall bbox, with the
+          // northern tip sitting off-center within it — that clipped the
+          // top of the district against the circle. Fit a square window
+          // sized to the region's actual max radius from its own center
+          // instead (same "circumscribing circle" math the old flat-SVG
+          // preview used, boxR*0.92), so every vertex of the true shape —
+          // not just whichever bbox edge fitBounds treats as the limiting
+          // dimension — lands inside the visible circle with an 8% margin,
+          // regardless of how off-center the shape is within its bbox.
+          var cLng = (regionBbox.minLng + regionBbox.maxLng) / 2;
+          var cLat = (regionBbox.minLat + regionBbox.maxLat) / 2;
+          var lngScale = Math.cos(cLat * Math.PI / 180) || 1;
+          var maxR = 0;
+          rings.forEach(function (ring) {
+            ring.forEach(function (pt) {
+              var dx = (pt[0] - cLng) * lngScale, dy = pt[1] - cLat;
+              var r = Math.sqrt(dx * dx + dy * dy);
+              if (r > maxR) maxR = r;
+            });
+          });
+          var latHalf = maxR / 0.92, lngHalf = latHalf / lngScale;
+          listHubMap.fitBounds(
+            [[cLng - lngHalf, cLat - latHalf], [cLng + lngHalf, cLat + latHalf]],
+            { padding: 0, duration: 0 }
+          );
+
+          // Correct any layer whose just-added default (all off except
+          // hillshade/protected areas) doesn't match what's currently set
+          // in Map View — e.g. the viewer already switched to Satellite or
+          // turned on NDVI there before ever opening List View.
+          applyMapViewStateTo(listHubMap);
+        });
+      })
+      .catch(function (err) {
+        console.error("[list-hub-map]", err);
+        var host = document.getElementById("list-map-mask");
+        if (host) host.innerHTML = '<span class="list-map-pending">Map failed to load</span>';
+      });
+  }
+
+  function selectListFamily(id) {
+    listSelected = listSelected === id ? null : id;
+    applyListSelection();
+    if (listSelected) {
+      var card = document.querySelector('.list-fam-card[data-fam="' + listSelected + '"]');
+      if (card) card.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+  }
+  function applyListSelection() {
+    listWedgeEls.forEach(function (w) { w.wedge.classList.toggle("is-selected", w.id === listSelected); });
+    document.querySelectorAll(".list-fam-label").forEach(function (l) { l.classList.toggle("is-selected", l.dataset.id === listSelected); });
+    document.querySelectorAll(".list-fam-card").forEach(function (c) { c.classList.toggle("is-selected", c.dataset.fam === listSelected); });
+  }
+
+  // Vertical family list (right column) — each row: icon thumb, name, then
+  // species/occurrence counts. No paging controls; it's just a normal
+  // scrollable column now that it's not competing for width with the wheel.
+  function buildListStrip() {
+    var strip = document.getElementById("list-strip");
+    strip.innerHTML = "";
+    LIST_FAMILIES.forEach(function (f) {
+      var color = listRampColor(listValueT(f.species));
+      var card = document.createElement("button");
+      card.type = "button";
+      card.className = "list-fam-card";
+      card.dataset.fam = f.id;
+      card.innerHTML =
+        '<div class="art"><span class="chip" style="background:' + color + '"></span><svg width="18" height="18"><use href="#list-glyph-generic"></use></svg></div>' +
+        '<div class="text">' +
+        '<div class="name">' + f.name + '</div>' +
+        '<div class="count">(' + f.species + ' species)</div>' +
+        '<div class="occ">' + f.occurrences.toLocaleString() + ' occurrences</div>' +
+        '</div>';
+      card.addEventListener("click", function () { selectListFamily(f.id); });
+      strip.appendChild(card);
+    });
+  }
+
+  // ---------- UI wiring ----------
+  var mainElForToggle = document.querySelector("main");
+  // Shared by the List/Map toggle buttons below AND the hub map's own
+  // "Edit map" button (see buildListView), so clicking that button switches
+  // tabs exactly the way the sidebar toggle does. Re-entering List View
+  // re-syncs the hub map to mapViewState — covers a viewer changing layers
+  // in Map View, then coming back, without needing to rebuild the hub.
+  function switchView(view) {
+    document.querySelectorAll("#view-toggle button").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-view") === view);
+    });
+    mainElForToggle.classList.toggle("mode-list", view === "list");
+    if (view === "list") {
+      if (!listViewBuilt) buildListView();
+      else applyMapViewStateTo(listHubMap);
+    } else if (view === "map" && map) {
+      // List is now the default view, so the main map sits at zero size
+      // (display:none) through its own creation and initial load — MapLibre
+      // needs an explicit resize() once it's actually visible again to pick
+      // up real container dimensions instead of the zero/stale size it had
+      // the last time it was measured.
+      map.resize();
+      if (currentBounds) map.fitBounds(currentBounds, { padding: 24, duration: 0 });
+    }
+  }
+  document.querySelectorAll("#view-toggle button").forEach(function (btn) {
+    btn.addEventListener("click", function () { switchView(btn.getAttribute("data-view")); });
+  });
+  switchView("list");
+
+  document.querySelectorAll(".tab-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b === btn); });
+      document.querySelectorAll(".tab-panel").forEach(function (p) {
+        p.hidden = p.getAttribute("data-panel") !== btn.getAttribute("data-tab");
+      });
+    });
+  });
+
+  window.addEventListener("resize", function () {
+    map.resize();
+    if (currentBounds) map.fitBounds(currentBounds, { padding: 24, duration: 0 });
+  });
+
+  document.getElementById("recenter-btn").addEventListener("click", function () {
+    if (currentBounds) map.fitBounds(currentBounds, { padding: 24, duration: 600 });
+  });
+
+  // Map type picker: two independent axes, not one mutually-exclusive set —
+  // matches Google Maps' own "Map type" picker, where Default/Satellite is
+  // the base layer choice (radio — `data-group="base"`) and Terrain is a
+  // separate toggle (`data-group="terrain"`) that layers on top of
+  // *either* base, so "Default + Terrain" and "Satellite + Terrain" are
+  // both valid combined states. Hillshade stays on under Default (part of
+  // the terrain-map look) but switches off under Satellite, which already
+  // carries its own real relief shading.
+  //
+  // Root cause of the earlier "3D only shows a flat tilted layer" / "not
+  // working" reports: `regionMaxBounds` (set once the region resolves)
+  // constrains the camera to a flat top-down rectangle. Pitching to 60°+
+  // needs to show ground well beyond that rectangle (tilting reveals
+  // terrain toward the horizon), and MapLibre enforces maxBounds during
+  // pitched views too — so it was fighting the tilt, at best allowing a
+  // token pitch with no real elevation data in view, at worst blocking it
+  // outright.
+  //
+  // Fix is a *looser* bound while tilted, not *no* bound — clearing bounds
+  // entirely (an earlier attempt) let the camera pan anywhere if dragged
+  // while pitched, which would make the base map start fetching tiles for
+  // wherever it panned to: exactly the "only process this region, not the
+  // whole world" rule this whole feature is built around. Expanding the
+  // already-computed region bounds gives the pitched camera the extra room
+  // it needs while still keeping a real (just larger) limit in place.
+  function setBaseMode(mode) {
+    document.querySelectorAll('.view-mode-btn[data-group="base"]').forEach(function (btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-mode") === mode);
+    });
+    mapViewState.baseMode = mode;
+    var satelliteOn = mode === "satellite";
+    if (map.getLayer("satellite-layer")) map.setLayoutProperty("satellite-layer", "visibility", satelliteOn ? "visible" : "none");
+    if (map.getLayer("hillshade-layer")) map.setLayoutProperty("hillshade-layer", "visibility", satelliteOn ? "none" : "visible");
+    setBaseThemeEnabled(mode === "theme");
+    // Keep the List View hub map's own basemap in step so switching back
+    // there shows whatever was just picked here — see applyMapViewStateTo().
+    applyMapViewStateTo(listHubMap);
+  }
+
+  // "Enabled"/"disabled" here means the CAMERA TILT only (pitched 3D view
+  // vs. flat top-down) — not the terrain DEM source itself. Once terrain
+  // has been turned on once, `map.setTerrain(...)` is left in place even
+  // when the button is toggled off again; only the camera eases back to
+  // pitch 0. Calling `map.setTerrain(null)` here (an earlier version of
+  // this function did that on disable) was wrong: it tore down the actual
+  // elevation mesh every time, not just the viewing angle.
+  function setTerrainMode(enabled) {
+    terrainOn = enabled;
+    var terrainBtn = document.querySelector('.view-mode-btn[data-group="terrain"]');
+    if (terrainBtn) terrainBtn.classList.toggle("active", enabled);
+    // Keep the on-map 3D button/label and rotate-nudge buttons in sync
+    // regardless of which control triggered the change (sidebar thumbnail
+    // or the on-map button itself). Visibility of the whole control stack
+    // is handled separately by the "Map Legend" toggle (see
+    // toggle-map-legend below) via a class on #map-wrap, so this only needs
+    // to track whether 3D itself is on.
+    if (threeDCtrl && threeDCtrl._container) threeDCtrl._container.classList.toggle("active", enabled);
+    if (rotateCtrl && rotateCtrl._container) rotateCtrl._container.style.display = enabled ? "" : "none";
+    if (enabled) {
+      if (regionMaxBounds) map.setMaxBounds(expandBoundsArray(regionMaxBounds, 1.5));
+      if (map.getSource("terrain-dem")) map.setTerrain({ source: "terrain-dem", exaggeration: 1.8 });
+      map.easeTo({ pitch: 68, bearing: -18, duration: 900 });
+    } else {
+      map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
+      if (regionMaxBounds) map.setMaxBounds(regionMaxBounds);
+    }
+  }
+
+  document.querySelectorAll(".view-mode-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.getAttribute("data-group") === "terrain") {
+        setTerrainMode(!terrainOn);
+      } else {
+        setBaseMode(btn.getAttribute("data-mode"));
+      }
+    });
+  });
+
+  document.getElementById("toggle-water").addEventListener("change", function (e) {
+    mapViewState.showWater = e.target.checked;
+    var vis = e.target.checked ? "visible" : "none";
+    ["water-fill", "water-fill-outline", "water-line"].forEach(function (id) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+    });
+    applyMapViewStateTo(listHubMap);
+  });
+
+  // Per-layer "download for QGIS" buttons — independent of each layer's
+  // own visibility toggle, so the data can be pulled even while the layer
+  // itself is switched off on the map.
+  document.getElementById("download-water-btn").addEventListener("click", function () {
+    downloadWaterBodiesForQgis(this);
+  });
+  document.getElementById("download-ndvi-btn").addEventListener("click", function () {
+    downloadRasterForQgis(this, regionSlug + "-ndvi-" + ndviDateString(), ndviWmsUrl);
+  });
+  document.getElementById("download-vegetation-btn").addEventListener("click", function () {
+    downloadRasterForQgis(this, regionSlug + "-worldcover-landcover", worldcoverWmsUrl);
+  });
+
+  document.getElementById("toggle-protected").addEventListener("change", function (e) {
+    mapViewState.showProtected = e.target.checked;
+    var vis = e.target.checked ? "visible" : "none";
+    ["protected-areas-fill", "protected-areas-line"].forEach(function (id) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+    });
+    applyMapViewStateTo(listHubMap);
+  });
+
+  // Hides every on-map control at once (see the #map-wrap.legend-hidden
+  // CSS rule) rather than toggling individual containers — one class
+  // covers the zoom/compass group, the 3D + rotate controls, the scale
+  // control, the recenter button and the status line together.
+  document.getElementById("toggle-map-legend").addEventListener("change", function (e) {
+    document.getElementById("map-wrap").classList.toggle("legend-hidden", !e.target.checked);
+  });
+
+  // "Map Details" dialog — data-source attribution + methodology notes,
+  // moved off the always-visible footer bar (Stats tab > Methodology >
+  // View Map Details) and into a native <dialog> so it only takes up
+  // screen space when someone actually asks for it. showModal() gives Esc-
+  // to-close and focus trapping for free; the click-on-backdrop-to-close
+  // handler checks e.target === dialog because the backdrop pseudo-element
+  // isn't a real click target of its own.
+  var mapDetailsDialog = document.getElementById("map-details-dialog");
+  document.getElementById("view-map-details-btn").addEventListener("click", function () {
+    mapDetailsDialog.showModal();
+  });
+  document.getElementById("close-map-details-btn").addEventListener("click", function () {
+    mapDetailsDialog.close();
+  });
+  mapDetailsDialog.addEventListener("click", function (e) {
+    if (e.target === mapDetailsDialog) mapDetailsDialog.close();
+  });
+
+  // Clicking the camera icon opens a snipping-tool style crop overlay over
+  // `main` instead of capturing it outright: drag out a dashed selection,
+  // then confirm (✓) to render just that region as a PNG or cancel (✕) to
+  // back out without capturing anything. Needs preserveDrawingBuffer:true
+  // on the Map (set above) so the WebGL canvas still has pixels in it by
+  // the time html2canvas reads it back; every raster source this page uses
+  // (OpenFreeMap, Esri, GIBS, WorldCover, the same-origin terrain proxy)
+  // already sends CORS headers, so the canvas stays readable rather than
+  // tainted.
+  (function () {
+    var cameraBtn = document.getElementById("capture-btn");
+    var overlay = document.getElementById("crop-overlay");
+    var hitarea = document.getElementById("crop-hitarea");
+    var scrim = document.getElementById("crop-scrim");
+    var hint = document.getElementById("crop-hint");
+    var selection = document.getElementById("crop-selection");
+    var toolbar = document.getElementById("crop-toolbar");
+    var confirmBtn = document.getElementById("crop-confirm");
+    var cancelBtn = document.getElementById("crop-cancel");
+    var mainEl = document.querySelector("main");
+
+    var dragging = false;
+    var startX = 0, startY = 0;
+    var rect = null; // a drawn sub-selection, in px relative to main's own box; null = "capture everything"
+
+    // Selection coordinates are measured relative to the overlay, and the
+    // overlay is sized/positioned to exactly match main's own
+    // getBoundingClientRect() below — so rect.left/top land in the same
+    // coordinate space main's own top-left corner does, which is also
+    // where html2canvas's returned canvas starts from.
+    //
+    // Opens straight into a ready-to-go state — the whole dialog already
+    // dimmed (via #crop-scrim) and the tick/close pair already on screen —
+    // instead of an unchanged-looking dialog with just a hint and a small
+    // corner X, which read as "nothing happened" rather than "capture mode
+    // is on". Pressing the tick with nothing dragged just captures the
+    // whole dialog; dragging narrows it to a sub-region.
+    function openCropMode() {
+      var mainRect = mainEl.getBoundingClientRect();
+      overlay.style.left = mainRect.left + "px";
+      overlay.style.top = mainRect.top + "px";
+      overlay.style.width = mainRect.width + "px";
+      overlay.style.height = mainRect.height + "px";
+      overlay.classList.add("active");
+      scrim.style.display = "block";
+      selection.style.display = "none";
+      hint.style.display = "block";
+      rect = null;
+    }
+
+    function closeCropMode() {
+      overlay.classList.remove("active");
+      dragging = false;
+      rect = null;
+    }
+
+    cameraBtn.addEventListener("click", openCropMode);
+    cancelBtn.addEventListener("click", closeCropMode);
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && overlay.classList.contains("active")) closeCropMode();
+    });
+
+    hitarea.addEventListener("mousedown", function (e) {
+      dragging = true;
+      var overlayRect = overlay.getBoundingClientRect();
+      startX = e.clientX - overlayRect.left;
+      startY = e.clientY - overlayRect.top;
+      selection.style.left = startX + "px";
+      selection.style.top = startY + "px";
+      selection.style.width = "0px";
+      selection.style.height = "0px";
+      scrim.style.display = "none";
+      selection.style.display = "block";
+      hint.style.display = "none";
+      e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", function (e) {
+      if (!dragging) return;
+      var overlayRect = overlay.getBoundingClientRect();
+      var curX = Math.max(0, Math.min(e.clientX - overlayRect.left, overlayRect.width));
+      var curY = Math.max(0, Math.min(e.clientY - overlayRect.top, overlayRect.height));
+      var left = Math.min(startX, curX);
+      var top = Math.min(startY, curY);
+      var width = Math.abs(curX - startX);
+      var height = Math.abs(curY - startY);
+      selection.style.left = left + "px";
+      selection.style.top = top + "px";
+      selection.style.width = width + "px";
+      selection.style.height = height + "px";
+      rect = { left: left, top: top, width: width, height: height };
+    });
+
+    document.addEventListener("mouseup", function () {
+      if (!dragging) return;
+      dragging = false;
+      // Below this size it almost certainly started as an accidental click
+      // rather than a drag — fall back to the default "capture everything"
+      // state instead of leaving a sliver selected. The tick/close pair
+      // never moves either way, so there's nothing else to reset.
+      if (!rect || rect.width < 12 || rect.height < 12) {
+        selection.style.display = "none";
+        scrim.style.display = "block";
+        hint.style.display = "block";
+        rect = null;
+      }
+    });
+
+    confirmBtn.addEventListener("click", function () {
+      var r = rect;
+      if (!r) {
+        var overlayRect = overlay.getBoundingClientRect();
+        r = { left: 0, top: 0, width: overlayRect.width, height: overlayRect.height };
+      }
+      captureSelection(r);
+    });
+
+    function captureSelection(r) {
+      if (typeof html2canvas === "undefined") {
+        console.error("[capture] html2canvas failed to load");
+        closeCropMode();
+        return;
+      }
+      confirmBtn.disabled = true;
+      cancelBtn.disabled = true;
+      var scale = window.devicePixelRatio || 1;
+      html2canvas(mainEl, {
+        backgroundColor: "#faf9f5",
+        useCORS: true,
+        scale: scale
+      }).then(function (canvas) {
+        var cropCanvas = document.createElement("canvas");
+        cropCanvas.width = Math.round(r.width * scale);
+        cropCanvas.height = Math.round(r.height * scale);
+        var ctx = cropCanvas.getContext("2d");
+        ctx.drawImage(
+          canvas,
+          Math.round(r.left * scale), Math.round(r.top * scale),
+          Math.round(r.width * scale), Math.round(r.height * scale),
+          0, 0, cropCanvas.width, cropCanvas.height
+        );
+        cropCanvas.toBlob(function (blob) {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          a.href = url;
+          a.download = "checklisthub-map-clip-darjeeling.png";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          confirmBtn.disabled = false;
+          cancelBtn.disabled = false;
+          closeCropMode();
+        }, "image/png");
+      }).catch(function (err) {
+        console.error("[capture]", err);
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+        closeCropMode();
+      });
+    }
+  })();
+
+  document.getElementById("toggle-ndvi").addEventListener("change", function (e) {
+    mapViewState.showNdvi = e.target.checked;
+    var vis = e.target.checked ? "visible" : "none";
+    if (map.getLayer("ndvi-layer")) map.setLayoutProperty("ndvi-layer", "visibility", vis);
+    document.getElementById("ndvi-legend-section").style.display = e.target.checked ? "block" : "none";
+    applyMapViewStateTo(listHubMap);
+  });
+
+  document.getElementById("toggle-vegetation").addEventListener("change", function (e) {
+    mapViewState.showVegetation = e.target.checked;
+    var vis = e.target.checked ? "visible" : "none";
+    if (map.getLayer("worldcover-layer")) map.setLayoutProperty("worldcover-layer", "visibility", vis);
+    document.getElementById("veg-legend-section").style.display = e.target.checked ? "block" : "none";
+    applyMapViewStateTo(listHubMap);
+  });
+
+  // Vegetation legend
+  var legendList = document.getElementById("veg-legend-list");
+  WORLDCOVER_PALETTE.forEach(function (c) {
+    var item = document.createElement("div");
+    item.className = "legend-item";
+    item.innerHTML = '<span class="sw" style="background:' + c.color + '"></span>' + c.label;
+    legendList.appendChild(item);
+  });
+})();
+</script>
+</body>
+</html>

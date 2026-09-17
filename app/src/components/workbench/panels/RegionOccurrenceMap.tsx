@@ -31,10 +31,22 @@ interface RegionOccurrenceMapProps {
   /** True while occurrence points (and/or the boundary itself) are still
    * being fetched — shows a spinner instead of implying "no data here". */
   isLoading?: boolean;
+  /** Tailwind height class for the map's box — defaults to the Evidence
+   * panel's compact "h-32"; callers embedding this at a larger size (e.g. a
+   * dedicated region-map dialog) can pass a taller class instead. The SVG's
+   * own viewBox/projection is unaffected — only the rendered box grows. */
+  heightClassName?: string;
+  /** viewBox dimensions the boundary is projected into — defaults to the
+   * Evidence panel's wide, short 320x128 box. A caller rendering this at a
+   * much taller aspect (e.g. a full-size map dialog) should pass a squarer
+   * viewBox too, or the region ends up letterboxed inside the old 2.5:1
+   * shape instead of actually using the extra vertical room. */
+  viewBoxWidth?: number;
+  viewBoxHeight?: number;
 }
 
-const WIDTH = 320;
-const HEIGHT = 128;
+const DEFAULT_WIDTH = 320;
+const DEFAULT_HEIGHT = 128;
 const PAD = 8;
 
 const SOURCE_COLORS: Record<OccurrenceSource, { dot: string; focused: string }> = {
@@ -66,7 +78,7 @@ interface BoundaryProjector {
  * like it's "outside" the region. Longitude is corrected by cos(latitude) so
  * the shape isn't stretched away from its true aspect ratio.
  */
-function buildBoundaryProjector(rings: Ring[]): BoundaryProjector | null {
+function buildBoundaryProjector(rings: Ring[], width: number, height: number): BoundaryProjector | null {
   const boundaryPoints = rings.flat();
   if (boundaryPoints.length === 0) return null;
 
@@ -86,8 +98,8 @@ function buildBoundaryProjector(rings: Ring[]): BoundaryProjector | null {
   const lngScale = Math.cos(meanLatRad) || 1;
   const adjustedSpanLng = spanLng * lngScale;
 
-  const availW = WIDTH - PAD * 2;
-  const availH = HEIGHT - PAD * 2;
+  const availW = width - PAD * 2;
+  const availH = height - PAD * 2;
   const scale = Math.min(availW / adjustedSpanLng, availH / spanLat);
 
   const offsetX = PAD + (availW - adjustedSpanLng * scale) / 2;
@@ -101,9 +113,9 @@ function buildBoundaryProjector(rings: Ring[]): BoundaryProjector | null {
   return { project, minLng, maxLng, minLat, maxLat };
 }
 
-function MapSpinner({ label }: { label: string }) {
+function MapSpinner({ label, heightClassName }: { label: string; heightClassName: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 h-32 border border-surface-dim bg-surface-container-low/40">
+    <div className={`flex items-center justify-center gap-2 ${heightClassName} border border-surface-dim bg-surface-container-low/40`}>
       <span className="material-symbols-outlined text-brand text-[16px] animate-spin">progress_activity</span>
       <span className="text-[9px] text-slate-400 uppercase tracking-widest mono-text">{label}</span>
     </div>
@@ -119,18 +131,24 @@ export default function RegionOccurrenceMap({
   onHoverPoint,
   onClickPoint,
   isLoading = false,
+  heightClassName = "h-32",
+  viewBoxWidth = DEFAULT_WIDTH,
+  viewBoxHeight = DEFAULT_HEIGHT,
 }: RegionOccurrenceMapProps) {
   const rings = useMemo(() => (boundary ? flattenToRings(boundary) : []), [boundary]);
-  const boundaryProjector = useMemo(() => buildBoundaryProjector(rings), [rings]);
+  const boundaryProjector = useMemo(
+    () => buildBoundaryProjector(rings, viewBoxWidth, viewBoxHeight),
+    [rings, viewBoxWidth, viewBoxHeight],
+  );
   const outsideRegionCount = useMemo(
     () => (rings.length > 0 ? points.filter((p) => !isPointInRegion(p.lng, p.lat, rings)).length : 0),
     [points, rings],
   );
 
   if (!boundary || !boundaryProjector) {
-    if (isLoading) return <MapSpinner label="Loading region map…" />;
+    if (isLoading) return <MapSpinner label="Loading region map…" heightClassName={heightClassName} />;
     return (
-      <div className="h-32 flex items-center justify-center border border-surface-dim bg-surface-container-low/40 text-[9px] text-slate-400 uppercase tracking-widest mono-text">
+      <div className={`${heightClassName} flex items-center justify-center border border-surface-dim bg-surface-container-low/40 text-[9px] text-slate-400 uppercase tracking-widest mono-text`}>
         No region boundary available
       </div>
     );
@@ -159,8 +177,8 @@ export default function RegionOccurrenceMap({
           </div>
         )}
         <svg
-          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-          className="h-32 w-full border border-surface-dim bg-surface-container-low/30"
+          viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
+          className={`${heightClassName} w-full border border-surface-dim bg-surface-container-low/30`}
           preserveAspectRatio="xMidYMid meet"
         >
         <path

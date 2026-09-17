@@ -20,6 +20,8 @@ import SpeciesPanel from "@/components/workbench/SpeciesPanel";
 import SettingsModal from "@/components/workbench/SettingsModal";
 import AddSpeciesDialog from "@/components/workbench/AddSpeciesDialog";
 import TeamModal from "@/components/workbench/TeamModal";
+import MapListDialog from "@/components/workbench/MapListDialog";
+import MapViewButton from "@/components/shared/MapViewButton";
 import WatcherSetupDialog, { WatcherResultsDialog } from "@/components/workbench/WatcherDialog";
 import ExportDialog from "@/components/workbench/ExportDialog";
 import ActivityPanel, { type ActivityPanelMode } from "@/components/workbench/panels/ActivityPanel";
@@ -420,6 +422,7 @@ export default function WorkbenchPage() {
   const [activityMode, setActivityMode] = useState<ActivityPanelMode | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addSpeciesOpen, setAddSpeciesOpen] = useState(false);
+  const [mapViewOpen, setMapViewOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
   const [watcherSetupOpen, setWatcherSetupOpen] = useState(false);
   const [watcherResultsRunId, setWatcherResultsRunId] = useState<string | null>(null);
@@ -821,6 +824,7 @@ export default function WorkbenchPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <MapViewButton variant="labeled" onClick={() => setMapViewOpen(true)} />
           <button className="btn-primary" onClick={() => setAddSpeciesOpen(true)}>
             <span className="material-symbols-outlined text-[11px]">add</span> Add Species
           </button>
@@ -1638,6 +1642,23 @@ export default function WorkbenchPage() {
           checklist={checklist}
           existingSpecies={allSpecies ?? []}
           onClose={() => setAddSpeciesOpen(false)}
+        />
+      )}
+
+      {mapViewOpen && checklist && (
+        <MapListDialog
+          checklistId={checklistId}
+          checklistTitle={checklist.title}
+          region={{
+            gadmId: checklist.region_gadm_id ?? null,
+            name: checklist.region_name ?? null,
+            country: checklist.region_country ?? null,
+            state: checklist.region_state ?? null,
+            district: checklist.region_district ?? null,
+            osmType: checklist.region_osm_type ?? null,
+            osmId: checklist.region_osm_id ?? null,
+          }}
+          onClose={() => setMapViewOpen(false)}
         />
       )}
 

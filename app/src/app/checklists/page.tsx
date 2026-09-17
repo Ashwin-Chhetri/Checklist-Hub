@@ -8,6 +8,8 @@ import Avatar from "@/components/shared/Avatar";
 import CollaboratorAvatarStack from "@/components/shared/CollaboratorAvatarStack";
 import NotificationBell from "@/components/shared/NotificationBell";
 import TeamModal from "@/components/workbench/TeamModal";
+import MapListDialog from "@/components/workbench/MapListDialog";
+import MapViewButton from "@/components/shared/MapViewButton";
 import { useChecklists } from "@/modules/checklist/hooks/useChecklists";
 import { useChecklistCollaborators } from "@/modules/checklist/hooks/useChecklist";
 import { useChecklistsRealtime } from "@/modules/checklist/hooks/useChecklistsRealtime";
@@ -103,6 +105,9 @@ export default function ChecklistsPage() {
   const [teamChecklistId, setTeamChecklistId] = useState<string | null>(null);
   const teamChecklist = checklists?.find((c) => c.id === teamChecklistId);
   const { data: teamCollaborators } = useChecklistCollaborators(teamChecklistId ?? "");
+
+  const [mapViewChecklistId, setMapViewChecklistId] = useState<string | null>(null);
+  const mapViewChecklist = checklists?.find((c) => c.id === mapViewChecklistId);
 
   function openDeleteDialog(e: React.MouseEvent, checklistId: string) {
     e.preventDefault();
@@ -301,13 +306,16 @@ export default function ChecklistsPage() {
                       {formatScope(checklist.taxonomic_scope)}
                     </span>
                   </div>
-                  <button
-                    title="Delete checklist"
-                    className="shrink-0 p-1.5 text-on-surface-variant hover:text-red-600 hover:bg-red-50 rounded-sm"
-                    onClick={(e) => openDeleteDialog(e, checklist.id)}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">delete</span>
-                  </button>
+                  <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <MapViewButton variant="icon" onClick={() => setMapViewChecklistId(checklist.id)} />
+                    <button
+                      title="Delete checklist"
+                      className="shrink-0 p-1.5 text-on-surface-variant hover:text-red-600 hover:bg-red-50 rounded-sm"
+                      onClick={(e) => openDeleteDialog(e, checklist.id)}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -401,31 +409,32 @@ export default function ChecklistsPage() {
               <table className="w-full table-fixed text-left border-collapse">
                 <thead className="bg-surface-container-low border-b border-outline-variant">
                   <tr className="font-label-caps text-label-caps text-on-surface-variant">
-                    <th className="px-5 py-4 font-extrabold tracking-wider w-[25%]">CHECKLIST</th>
-                    <th className="px-5 py-4 font-extrabold tracking-wider w-[12%]">STATUS</th>
+                    <th className="px-5 py-4 font-extrabold tracking-wider w-[24%]">CHECKLIST</th>
+                    <th className="px-5 py-4 font-extrabold tracking-wider w-[11%]">STATUS</th>
                     <th
-                      className="px-5 py-4 font-extrabold tracking-wider w-[10%]"
+                      className="px-5 py-4 font-extrabold tracking-wider w-[9%]"
                       title="Accepted, active species only — the same count used in the metadata wizard and DwC-A export. Pending, rejected, and merged-duplicate rows aren't included."
                     >
                       SPECIES COUNT
                     </th>
-                    <th className="px-5 py-4 font-extrabold tracking-wider w-[15%]">REGION</th>
-                    <th className="px-5 py-4 font-extrabold tracking-wider w-[15%]">COLLABORATORS</th>
-                    <th className="px-5 py-4 font-extrabold tracking-wider w-[15%]">LAST MODIFIED</th>
+                    <th className="px-5 py-4 font-extrabold tracking-wider w-[13%]">REGION</th>
+                    <th className="px-5 py-4 font-extrabold tracking-wider w-[14%]">COLLABORATORS</th>
+                    <th className="px-5 py-4 font-extrabold tracking-wider w-[14%]">LAST MODIFIED</th>
+                    <th className="px-5 py-4 font-extrabold tracking-wider w-[7%] text-center">MAP</th>
                     <th className="px-5 py-4 w-[8%]" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant font-code-md text-code-md">
                   {isLoading && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-on-surface-variant">
+                      <td colSpan={8} className="px-6 py-10 text-center text-on-surface-variant">
                         Loading checklists...
                       </td>
                     </tr>
                   )}
                   {!isLoading && (visibleChecklists?.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-on-surface-variant">
+                      <td colSpan={8} className="px-6 py-10 text-center text-on-surface-variant">
                         {activeTab === "shared"
                           ? "No checklists have been shared with you yet."
                           : activeTab === "watching"
@@ -493,6 +502,9 @@ export default function ChecklistsPage() {
                           <span className="font-code-md text-code-md text-on-surface-variant">
                             {formatRelativeTime(checklist.updated_at)}
                           </span>
+                        </td>
+                        <td className="px-2 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <MapViewButton variant="icon" onClick={() => setMapViewChecklistId(checklist.id)} />
                         </td>
                         <td className="px-4 py-4 text-right">
                           <button
@@ -660,6 +672,23 @@ export default function ChecklistsPage() {
           currentUserId={user?.id}
           canManageRoles={teamChecklist?.owner_id === user?.id}
           onClose={() => setTeamChecklistId(null)}
+        />
+      )}
+
+      {mapViewChecklist && (
+        <MapListDialog
+          checklistId={mapViewChecklist.id}
+          checklistTitle={mapViewChecklist.title}
+          region={{
+            gadmId: mapViewChecklist.region_gadm_id ?? null,
+            name: mapViewChecklist.region_name ?? null,
+            country: mapViewChecklist.region_country ?? null,
+            state: mapViewChecklist.region_state ?? null,
+            district: mapViewChecklist.region_district ?? null,
+            osmType: mapViewChecklist.region_osm_type ?? null,
+            osmId: mapViewChecklist.region_osm_id ?? null,
+          }}
+          onClose={() => setMapViewChecklistId(null)}
         />
       )}
     </div>
