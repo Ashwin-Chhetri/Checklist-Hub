@@ -99,7 +99,35 @@ export default function CaptureCropOverlay({ targetRef, regionSlug, onClose }: C
     setCapturing(true);
     try {
       const scale = window.devicePixelRatio || 1;
-      const canvas = await html2canvas(target, { backgroundColor: "#faf9f5", useCORS: true, scale });
+      const canvas = await html2canvas(target, {
+        backgroundColor: "#faf9f5",
+        useCORS: true,
+        scale,
+        // html2canvas re-renders a CLONE of the DOM into a hidden iframe —
+        // cloning a <canvas> element (cloneNode, which is what the DOM spec
+        // gives you) never copies its pixel content, only its attributes.
+        // The Map tab's live MapLibre canvas (and any other canvas on the
+        // page) would otherwise always come out blank, no matter how the
+        // map itself is actually rendering. onclone runs against the real,
+        // still-live original DOM before it's discarded, so drawImage can
+        // still read each canvas's current bitmap here and stamp it onto
+        // its clone — this works for the WebGL map canvas specifically
+        // because it's created with preserveDrawingBuffer: true.
+        onclone: (clonedDoc) => {
+          const originalCanvases = target.querySelectorAll("canvas");
+          const clonedCanvases = clonedDoc.querySelectorAll("canvas");
+          originalCanvases.forEach((original, i) => {
+            const clone = clonedCanvases[i];
+            const ctx = clone?.getContext("2d");
+            if (!ctx) return;
+            try {
+              ctx.drawImage(original, 0, 0, clone.width, clone.height);
+            } catch (err) {
+              console.error("[CaptureCropOverlay] failed to copy canvas content into clone", err);
+            }
+          });
+        },
+      });
       const cropCanvas = document.createElement("canvas");
       cropCanvas.width = Math.round(rect.width * scale);
       cropCanvas.height = Math.round(rect.height * scale);

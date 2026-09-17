@@ -24,6 +24,13 @@ interface FamilyListViewProps {
   onOpenMap?: () => void;
 }
 
+// Wedges beyond this are folded into one "Other" wedge in the WHEEL only
+// (see wheelGroups below) — a real multi-order checklist can span dozens of
+// families, and a fixed-size wheel with that many slices stops being
+// readable (labels collide, gaps vanish) well before it runs out of room
+// for the sidebar list, which has no such limit.
+const WHEEL_MAX_WEDGES = 15;
+
 // Everything below this line is ported 1:1 from the design prototype's own
 // List View (prototypes/map-view-phase0-darjeeling.html, LIST_* constants
 // and buildListView()) — geometry ratios, the cube-root radius curve, the
@@ -293,15 +300,32 @@ export default function FamilyListView({
 
   const display = groups;
 
-  // Render order != display order — biggest bars go to the roomiest
-  // (diagonal-facing) slots, regardless of where they fall in `display`.
-  const arrangement = useMemo(() => orderGroupsToFitSlots(display), [display]);
+  // The wheel is a fixed-size circle — past a certain wedge count the
+  // labels collide and it stops being readable no matter how it's drawn, so
+  // wedges beyond WHEEL_MAX_WEDGES are folded into one "Other" wedge. This
+  // is a WHEEL-ONLY cap: the sidebar list below still shows every group
+  // individually (each with its own real photos), uncapped.
+  const wheelGroups = useMemo<TaxonGroupStat[]>(() => {
+    if (display.length <= WHEEL_MAX_WEDGES) return display;
+    const top = display.slice(0, WHEEL_MAX_WEDGES - 1);
+    const rest = display.slice(WHEEL_MAX_WEDGES - 1);
+    const otherName = rank === "family" ? "Other families" : "Other genera";
+    const other = rest.reduce(
+      (acc, f) => ({ name: otherName, species: acc.species + f.species, occurrences: acc.occurrences + f.occurrences, sampleTaxonKeys: [] as number[] }),
+      { name: otherName, species: 0, occurrences: 0, sampleTaxonKeys: [] as number[] },
+    );
+    return [...top, other];
+  }, [display, rank]);
+
+  // Render order != wheelGroups order — biggest bars go to the roomiest
+  // (diagonal-facing) slots, regardless of where they fall in `wheelGroups`.
+  const arrangement = useMemo(() => orderGroupsToFitSlots(wheelGroups), [wheelGroups]);
   const n = arrangement.length || 1;
   const slot = 360 / n;
 
   const totalSpecies = display.reduce((s, f) => s + f.species, 0);
   const totalOcc = display.reduce((s, f) => s + f.occurrences, 0);
-  const speciesMax = Math.max(...display.map((f) => f.species), 1);
+  const speciesMax = Math.max(...wheelGroups.map((f) => f.species), 1);
   const scaleMax = niceCeil(speciesMax * 1.05);
 
   const valueT = (v: number) => Math.max(0, Math.min(1, v / scaleMax));
@@ -401,6 +425,9 @@ export default function FamilyListView({
   // species rows themselves, so there's nowhere further down to go.
   function drillInto(name: string) {
     if (rank !== "family") return;
+    // Guards the wheel's own synthetic "Other families" wedge (see
+    // wheelGroups) — it has no matching real group to drill into.
+    if (!groups.some((g) => g.name === name)) return;
     setPath([name]);
     setSelected(null);
     setHovered(null);
