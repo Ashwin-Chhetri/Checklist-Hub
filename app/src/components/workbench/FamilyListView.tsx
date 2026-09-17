@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BoundaryGeometry } from "@/modules/checklist/services/regionApi";
 import type { FamilyStat } from "@/modules/species/hooks/useFamilyStats";
 import { useSpeciesMedia } from "@/modules/taxonomy/hooks/useSpeciesMedia";
@@ -170,34 +170,70 @@ function FamilyGlyph() {
   );
 }
 
-// Family sidebar thumbnail — shows the family's top species' own photo (via
+// Overall thumbnail footprint — 60px * 1.2, 20% bigger than the original
+// single-photo square, now holding a small mosaic instead of one image.
+const THUMB_SIZE = 72;
+const THUMB_GRID_GAP = 2;
+const MAX_GRID_IMAGES = 4;
+
+// One cell of the family thumbnail mosaic — a single species' own photo (via
 // the same GBIF media lookup the workbench Evidence gallery uses) once it
 // resolves, a shimmer placeholder while that fetch is in flight, and the
 // generic glyph as the final fallback (no taxon key to look up, or the
-// lookup came back with no usable image).
-function FamilyThumb({ taxonKey, color }: { taxonKey: number | null; color: string }) {
+// lookup came back with no usable image). A resolved photo is clickable,
+// opening it full-size via `onOpen`.
+function FamilyThumbCell({ taxonKey, onOpen }: { taxonKey: number | null; onOpen: (url: string) => void }) {
   const { data: mediaItems, isLoading } = useSpeciesMedia(taxonKey);
   const [imgError, setImgError] = useState(false);
   const imageUrl = !imgError ? mediaItems?.[0]?.url : undefined;
 
   return (
-    <div className="relative w-[60px] h-[60px] flex-shrink-0 rounded-lg bg-[#efece1] flex items-center justify-center overflow-hidden">
-      <span
-        className="absolute top-1 right-1 w-2 h-2 rounded-full z-10"
-        style={{ background: color, boxShadow: "0 0 0 1.5px #efece1" }}
-      />
+    <div className="relative w-full h-full bg-[#efece1] flex items-center justify-center overflow-hidden">
       {taxonKey != null && isLoading ? (
         <ImageShimmer className="absolute inset-0" />
       ) : imageUrl ? (
         <img
           src={imageUrl}
           alt=""
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover cursor-zoom-in"
           loading="lazy"
           onError={() => setImgError(true)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen(imageUrl);
+          }}
         />
       ) : (
         <FamilyGlyph />
+      )}
+    </div>
+  );
+}
+
+// Family sidebar thumbnail — a small mosaic of up to MAX_GRID_IMAGES
+// different species' own photos from the family, so the family card reads
+// as representative of the family rather than just its single top species.
+// Falls back to one glyph-only cell when the family has no species with a
+// resolved taxon key at all.
+function FamilyThumbGrid({ taxonKeys, onOpenImage }: { taxonKeys: number[]; onOpenImage: (url: string) => void }) {
+  const slots: Array<number | null> = taxonKeys.length > 0 ? taxonKeys.slice(0, MAX_GRID_IMAGES) : [null];
+
+  return (
+    <div
+      className="relative flex-shrink-0 rounded-lg overflow-hidden bg-[#efece1]"
+      style={{ width: THUMB_SIZE, height: THUMB_SIZE }}
+    >
+      {slots.length === 1 ? (
+        <FamilyThumbCell taxonKey={slots[0]} onOpen={onOpenImage} />
+      ) : (
+        <div
+          className={`grid w-full h-full ${slots.length === 2 ? "grid-cols-2 grid-rows-1" : "grid-cols-2 grid-rows-2"}`}
+          style={{ gap: THUMB_GRID_GAP }}
+        >
+          {slots.map((key, i) => (
+            <FamilyThumbCell key={key ?? `empty-${i}`} taxonKey={key} onOpen={onOpenImage} />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -223,8 +259,8 @@ export default function FamilyListView({
     const top = sorted.slice(0, MAX_WEDGES - 1);
     const rest = sorted.slice(MAX_WEDGES - 1);
     const other = rest.reduce(
-      (acc, f) => ({ name: "Other families", species: acc.species + f.species, occurrences: acc.occurrences + f.occurrences, topSpeciesTaxonKey: null }),
-      { name: "Other families", species: 0, occurrences: 0, topSpeciesTaxonKey: null as number | null },
+      (acc, f) => ({ name: "Other families", species: acc.species + f.species, occurrences: acc.occurrences + f.occurrences, sampleTaxonKeys: [] }),
+      { name: "Other families", species: 0, occurrences: 0, sampleTaxonKeys: [] as number[] },
     );
     return [...top, other];
   }, [families]);
@@ -253,6 +289,18 @@ export default function FamilyListView({
   const [tooltip, setTooltip] = useState<{ x: number; y: number; f: FamilyStat } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+
+  // Family thumbnail lightbox — any resolved photo in the sidebar mosaic
+  // opens full-size here; closes on backdrop click, the X, or Escape.
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightboxUrl(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightboxUrl]);
 
   // Text-fit safety net — mirrors the prototype's binary-search wrap/break:
   // measure each name's actual rendered width against its slot's available
@@ -486,7 +534,6 @@ export default function FamilyListView({
         </div>
         <div ref={stripRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3.5 pb-2">
           {display.map((f) => {
-            const color = listRampColor(valueT(f.species));
             const isSelected = selected === f.name;
             return (
               <button
@@ -506,7 +553,7 @@ export default function FamilyListView({
                   if (!isSelected) e.currentTarget.style.background = "transparent";
                 }}
               >
-                <FamilyThumb taxonKey={f.topSpeciesTaxonKey} color={color} />
+                <FamilyThumbGrid taxonKeys={f.sampleTaxonKeys} onOpenImage={setLightboxUrl} />
                 <div className="min-w-0 flex flex-col gap-0.5">
                   <div className="text-[13.5px] font-bold leading-tight truncate" style={{ color: "#1c1c1a" }} title={f.name}>
                     {f.name}
@@ -523,6 +570,30 @@ export default function FamilyListView({
           })}
         </div>
       </div>
+
+      {/* Family thumbnail lightbox — overlays the whole dialog without
+          touching any of the list's own state; closing it (backdrop click,
+          X, or Escape) just clears lightboxUrl. */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-8"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            onClick={() => setLightboxUrl(null)}
+            title="Close"
+          >
+            <span className="material-symbols-outlined text-3xl">close</span>
+          </button>
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-sm shadow-hard"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
