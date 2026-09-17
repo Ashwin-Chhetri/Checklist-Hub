@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Species } from "@/types/species.types";
 import { useSpeciesMedia } from "@/modules/taxonomy/hooks/useSpeciesMedia";
+import ImageShimmer from "../ImageShimmer";
 import { useEnrichTaxonomy } from "@/modules/taxonomy/hooks/useEnrichTaxonomy";
 import { useTaxonomySuggest, type TaxonomySuggestion } from "@/modules/taxonomy/hooks/useTaxonomySuggest";
 import { useSpeciesList } from "@/modules/species/hooks/useSpecies";
@@ -50,7 +51,7 @@ export default function TaxonomyPanel({ species, checklistId, activeDetailTab }:
   // panel's conflict/synonym option tabs kept showing the pre-enrichment
   // snapshot from whenever that second query last ran.
   const taxonomy = species.taxonomy;
-  const { data: mediaItems = [] } = useSpeciesMedia(species.gbif_taxon_key);
+  const { data: mediaItems = [], isLoading: mediaLoading } = useSpeciesMedia(species.gbif_taxon_key);
 
   // Lightbox: which media item is open full-size, if any. Reset during
   // render (not an effect) when the panel switches to a different species —
@@ -350,7 +351,15 @@ export default function TaxonomyPanel({ species, checklistId, activeDetailTab }:
     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
 
       {/* Species image gallery */}
-      {mediaItems.length > 0 && (
+      {mediaLoading && mediaItems.length === 0 ? (
+        <section>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {[0, 1, 2].map((i) => (
+              <ImageShimmer key={i} className="flex-none w-36 h-28 rounded-sm border border-surface-dim" />
+            ))}
+          </div>
+        </section>
+      ) : mediaItems.length > 0 && (
         <section>
           <div ref={galleryScrollRef} className="flex gap-2 overflow-x-auto pb-1">
             {mediaItems.map((item, idx) => (

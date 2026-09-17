@@ -5,6 +5,12 @@ export interface FamilyStat {
   name: string;
   species: number;
   occurrences: number;
+  /** GBIF taxon key of the family's top species (highest region-scoped
+   * occurrence count among species that have a resolved taxon key) — used to
+   * fetch a representative thumbnail image for the family. Null when no
+   * species in the family has a resolved taxon key (e.g. the synthetic
+   * "Other families" bucket). */
+  topSpeciesTaxonKey: number | null;
 }
 
 /**
@@ -20,12 +26,22 @@ export function useFamilyStats(checklistId: string) {
 
   const families = useMemo<FamilyStat[]>(() => {
     const byFamily = new Map<string, FamilyStat>();
+    // Tracks the occurrence count backing each family's current
+    // topSpeciesTaxonKey pick, separately from `occurrences` above (which is
+    // a running sum across the whole family, not a per-species max).
+    const bestOccByFamily = new Map<string, number>();
     for (const s of speciesQuery.data ?? []) {
       if (s.is_active === false) continue;
       const name = s.family?.trim() || "Unclassified";
-      const entry = byFamily.get(name) ?? { name, species: 0, occurrences: 0 };
+      const entry = byFamily.get(name) ?? { name, species: 0, occurrences: 0, topSpeciesTaxonKey: null };
       entry.species += 1;
-      entry.occurrences += s.evidence?.occurrence_count ?? 0;
+      const occ = s.evidence?.occurrence_count ?? 0;
+      entry.occurrences += occ;
+      const bestOcc = bestOccByFamily.get(name) ?? -1;
+      if (s.gbif_taxon_key != null && occ > bestOcc) {
+        bestOccByFamily.set(name, occ);
+        entry.topSpeciesTaxonKey = s.gbif_taxon_key;
+      }
       byFamily.set(name, entry);
     }
     return Array.from(byFamily.values()).sort((a, b) => b.species - a.species);

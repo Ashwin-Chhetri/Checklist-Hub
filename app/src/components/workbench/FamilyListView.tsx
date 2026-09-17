@@ -3,7 +3,9 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BoundaryGeometry } from "@/modules/checklist/services/regionApi";
 import type { FamilyStat } from "@/modules/species/hooks/useFamilyStats";
+import { useSpeciesMedia } from "@/modules/taxonomy/hooks/useSpeciesMedia";
 import RegionOccurrenceMap from "./panels/RegionOccurrenceMap";
+import ImageShimmer from "./ImageShimmer";
 
 export type { FamilyStat };
 
@@ -162,6 +164,39 @@ function FamilyGlyph() {
   );
 }
 
+// Family sidebar thumbnail — shows the family's top species' own photo (via
+// the same GBIF media lookup the workbench Evidence gallery uses) once it
+// resolves, a shimmer placeholder while that fetch is in flight, and the
+// generic glyph as the final fallback (no taxon key to look up, or the
+// lookup came back with no usable image).
+function FamilyThumb({ taxonKey, color }: { taxonKey: number | null; color: string }) {
+  const { data: mediaItems, isLoading } = useSpeciesMedia(taxonKey);
+  const [imgError, setImgError] = useState(false);
+  const imageUrl = !imgError ? mediaItems?.[0]?.url : undefined;
+
+  return (
+    <div className="relative w-[60px] h-[60px] flex-shrink-0 rounded-lg bg-[#efece1] flex items-center justify-center overflow-hidden">
+      <span
+        className="absolute top-1 right-1 w-2 h-2 rounded-full z-10"
+        style={{ background: color, boxShadow: "0 0 0 1.5px #efece1" }}
+      />
+      {taxonKey != null && isLoading ? (
+        <ImageShimmer className="absolute inset-0" />
+      ) : imageUrl ? (
+        <img
+          src={imageUrl}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          loading="lazy"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <FamilyGlyph />
+      )}
+    </div>
+  );
+}
+
 interface LabelFit {
   line1: string;
   line2?: string;
@@ -179,8 +214,8 @@ export default function FamilyListView({
     const top = sorted.slice(0, MAX_WEDGES - 1);
     const rest = sorted.slice(MAX_WEDGES - 1);
     const other = rest.reduce(
-      (acc, f) => ({ name: "Other families", species: acc.species + f.species, occurrences: acc.occurrences + f.occurrences }),
-      { name: "Other families", species: 0, occurrences: 0 },
+      (acc, f) => ({ name: "Other families", species: acc.species + f.species, occurrences: acc.occurrences + f.occurrences, topSpeciesTaxonKey: null }),
+      { name: "Other families", species: 0, occurrences: 0, topSpeciesTaxonKey: null as number | null },
     );
     return [...top, other];
   }, [families]);
@@ -462,13 +497,7 @@ export default function FamilyListView({
                   if (!isSelected) e.currentTarget.style.background = "transparent";
                 }}
               >
-                <div className="relative w-[60px] h-[60px] flex-shrink-0 rounded-lg bg-[#efece1] flex items-center justify-center overflow-hidden">
-                  <span
-                    className="absolute top-1 right-1 w-2 h-2 rounded-full"
-                    style={{ background: color, boxShadow: "0 0 0 1.5px #efece1" }}
-                  />
-                  <FamilyGlyph />
-                </div>
+                <FamilyThumb taxonKey={f.topSpeciesTaxonKey} color={color} />
                 <div className="min-w-0 flex flex-col gap-0.5">
                   <div className="text-[13.5px] font-bold leading-tight truncate" style={{ color: "#1c1c1a" }} title={f.name}>
                     {f.name}
