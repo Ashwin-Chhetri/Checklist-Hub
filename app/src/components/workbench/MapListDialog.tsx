@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useFamilyStats } from "@/modules/species/hooks/useFamilyStats";
 import { useRegionBoundary } from "@/modules/checklist/hooks/useRegionBoundary";
@@ -13,7 +13,7 @@ import type { ChecklistRegion } from "./SpeciesPanel";
 const RegionExplorerMap = dynamic(() => import("./panels/region-explorer/RegionExplorerMap"), {
   ssr: false,
   loading: () => (
-    <RegionOccurrenceMap boundary={null} points={[]} isLoading heightClassName="h-[440px]" viewBoxWidth={480} viewBoxHeight={480} />
+    <RegionOccurrenceMap boundary={null} points={[]} isLoading heightClassName="h-full" viewBoxWidth={480} viewBoxHeight={480} />
   ),
 });
 
@@ -47,72 +47,98 @@ export default function MapListDialog({ checklistId, checklistTitle, region, onC
       : null,
   );
 
+  // No visible close button — matches the design prototype (a standalone
+  // page with no dialog chrome at all). Backdrop click already closes it;
+  // Escape is added here purely for keyboard/screen-reader users.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-5" onClick={onClose}>
       <div
-        className="rounded-sm shadow-hard max-w-[94vw] max-h-[88vh] overflow-y-auto transition-[width]"
-        style={{ background: PROTO.panel, border: `1px solid ${PROTO.border}`, width: view === "map" ? 1160 : 760 }}
+        role="dialog"
+        aria-label={`Region & species map — ${checklistTitle}`}
+        className="relative w-[92vw] max-w-[1180px] h-[85vh] max-h-[700px]"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* List/Map view toggle — sits directly on the card's top border,
+            no gap, no bottom border — reads as an extension of the card's
+            own corner radius rather than a separate floating chip. */}
         <div
-          className="flex items-center justify-between px-6 pt-6 pb-3 sticky top-0 z-10"
-          style={{ borderBottom: `1px solid ${PROTO.border}`, background: PROTO.panel }}
+          className="absolute left-[18px] bottom-full flex w-32 overflow-hidden rounded-t-md"
+          style={{ border: `1px solid ${PROTO.border}`, borderBottom: "none", background: PROTO.panel }}
         >
-          <div>
-            <h3 className="mono-text text-sm font-bold uppercase tracking-wider" style={{ color: PROTO.ink }}>
-              Region &amp; Species Map
-            </h3>
-            <p className="text-[11px] mt-0.5" style={{ color: PROTO.inkDim }}>
-              {checklistTitle}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex rounded-sm overflow-hidden" style={{ border: `1px solid ${PROTO.border}` }}>
-              <button
-                type="button"
-                onClick={() => setView("list")}
-                className="mono-text text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 transition-colors"
-                style={
-                  view === "list"
-                    ? { background: PROTO.brand, color: "#fff" }
-                    : { color: PROTO.inkDim, borderRight: `1px solid ${PROTO.border}` }
-                }
-              >
-                List
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("map")}
-                className="mono-text text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 transition-colors"
-                style={view === "map" ? { background: PROTO.brand, color: "#fff" } : { color: PROTO.inkDim }}
-              >
-                Map
-              </button>
-            </div>
-            <button onClick={onClose} className="hover:opacity-70" style={{ color: PROTO.inkDim }} title="Close">
-              <span className="material-symbols-outlined text-[20px]">close</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setView("list")}
+            className="flex-1 mono-text text-[11px] font-bold uppercase tracking-wider py-1.5 transition-colors"
+            style={
+              view === "list"
+                ? { background: PROTO.brand, color: "#fff" }
+                : { color: PROTO.inkDim, borderRight: `1px solid ${PROTO.border}` }
+            }
+          >
+            List
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("map")}
+            className="flex-1 mono-text text-[11px] font-bold uppercase tracking-wider py-1.5 transition-colors"
+            style={view === "map" ? { background: PROTO.brand, color: "#fff" } : { color: PROTO.inkDim }}
+          >
+            Map
+          </button>
         </div>
 
-        <div className="p-6" style={{ background: PROTO.bg }}>
+        {/* Capture button — visual parity with the design prototype's
+            snipping-tool icon; the export pipeline itself isn't wired up
+            yet, so it's disabled rather than missing. */}
+        <button
+          type="button"
+          disabled
+          title="Capture a snapshot (coming soon)"
+          className="absolute right-[18px] bottom-full w-8 h-[27px] flex items-center justify-center rounded-t-md"
+          style={{
+            border: `1px solid ${PROTO.border}`,
+            borderBottom: "none",
+            background: PROTO.panel,
+            color: PROTO.inkDim,
+            opacity: 0.6,
+            cursor: "default",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round">
+            <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
+            <circle cx="12" cy="14" r="3.4" />
+          </svg>
+        </button>
+
+        <div
+          className="w-full h-full rounded-sm shadow-hard overflow-hidden flex flex-col"
+          style={{ background: PROTO.panel, border: `1px solid ${PROTO.border}` }}
+        >
           {view === "map" ? (
             <RegionExplorerMap
               boundary={boundaryQuery.data?.geometry ?? null}
               isBoundaryApproximate={boundaryQuery.data?.source === "bbox"}
               isBoundaryLoading={boundaryQuery.isLoading}
               regionName={boundaryQuery.data?.name ?? region.name}
-              heightClassName="h-[440px]"
+              heightClassName="h-full"
             />
           ) : speciesLoading ? (
-            <div className="h-[440px] flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest mono-text" style={{ color: PROTO.inkDim }}>
+            <div className="flex-1 flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest mono-text" style={{ color: PROTO.inkDim }}>
               <span className="material-symbols-outlined text-[16px] animate-spin" style={{ color: PROTO.brand }}>
                 progress_activity
               </span>
               Loading species…
             </div>
           ) : families.length === 0 ? (
-            <div className="h-[440px] flex items-center justify-center text-[10px] uppercase tracking-widest mono-text" style={{ color: PROTO.inkDim }}>
+            <div className="flex-1 flex items-center justify-center text-[10px] uppercase tracking-widest mono-text" style={{ color: PROTO.inkDim }}>
               No species in this checklist yet
             </div>
           ) : (

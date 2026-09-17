@@ -504,7 +504,11 @@ export default function ChecklistsPage() {
                           </span>
                         </td>
                         <td className="px-2 py-4 text-center" onClick={(e) => e.stopPropagation()}>
-                          <MapViewButton variant="icon-labeled" onClick={() => setMapViewChecklistId(checklist.id)} />
+                          <MapViewButton
+                            variant="labeled"
+                            onClick={() => setMapViewChecklistId(checklist.id)}
+                            className="mx-auto"
+                          />
                         </td>
                         <td className="px-4 py-4 text-right">
                           <button

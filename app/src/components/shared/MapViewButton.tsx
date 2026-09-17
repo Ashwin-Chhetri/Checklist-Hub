@@ -27,11 +27,10 @@ function ListMapIcon() {
 
 interface MapViewButtonProps {
   onClick: () => void;
-  /** "labeled" (icon + "Map" text, btn-secondary) for the workbench toolbar;
-   * "icon" (icon-only, for a narrow table cell) for the checklist listing column;
-   * "icon-labeled" (icon + small "Map view" caption stacked below) for the checklist
-   * listing table's MAP column, where a bare icon reads as unclear on its own. */
-  variant?: "labeled" | "icon" | "icon-labeled";
+  /** "labeled" (icon + "Map" text, btn-secondary) for the workbench toolbar and
+   * the checklist listing table's MAP column; "icon" (icon-only) for a
+   * narrower spot such as the mobile card's action row. */
+  variant?: "labeled" | "icon";
   className?: string;
   title?: string;
 }
@@ -51,21 +50,6 @@ export default function MapViewButton({
         className={`inline-flex items-center justify-center w-8 h-8 rounded-sm border border-outline text-on-surface-variant hover:text-primary hover:border-primary transition-colors ${className}`}
       >
         <ListMapIcon />
-      </button>
-    );
-  }
-  if (variant === "icon-labeled") {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        title={title}
-        className={`inline-flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded-sm border border-outline text-on-surface-variant hover:text-primary hover:border-primary transition-colors ${className}`}
-      >
-        <ListMapIcon />
-        <span className="font-label-caps text-[9px] font-bold uppercase tracking-wider leading-none">
-          Map view
-        </span>
       </button>
     );
   }

@@ -58,6 +58,7 @@ export default function RegionExplorerMap({
   const [showWater, setShowWater] = useState(true);
   const [protectedAreasCount, setProtectedAreasCount] = useState<number | null>(null);
   const [waterBodiesCount, setWaterBodiesCount] = useState<number | null>(null);
+  const [legendOn, setLegendOn] = useState(true);
   const overlaysLoading = protectedAreasCount === null && waterBodiesCount === null;
 
   // ---- Map creation (once) ----
@@ -252,20 +253,36 @@ export default function RegionExplorerMap({
     }
   }, [showWater]);
 
+  // "Map Legend (on-map icons)" toggle — hides all on-map chrome at once
+  // (the built-in zoom/compass group + the scale control), matching the
+  // design prototype's #map-wrap.legend-hidden behavior. The Fit-to-Region
+  // button and status line are plain React elements, hidden directly below
+  // instead of through this DOM query.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    const container = map.getContainer();
+    for (const selector of [".maplibregl-ctrl-top-right", ".maplibregl-ctrl-bottom-right", ".maplibregl-ctrl-bottom-left"]) {
+      container.querySelectorAll<HTMLElement>(selector).forEach((el) => {
+        el.style.display = legendOn ? "" : "none";
+      });
+    }
+  }, [legendOn, mapLoaded]);
+
   const showLoading = isBoundaryLoading || !mapLoaded;
 
   return (
-    <div className="flex gap-4">
-      <div className={`relative flex-1 min-w-0 ${heightClassName} rounded-sm overflow-hidden`} style={{ border: `1px solid ${PROTO.border}`, background: PROTO.bg }}>
+    <div className="flex h-full w-full min-h-0">
+      <div className={`relative flex-1 min-w-0 ${heightClassName}`} style={{ background: PROTO.bg }}>
         <div ref={containerRef} className="absolute inset-0" />
-        {mapLoaded && boundary && (
+        {legendOn && mapLoaded && boundary && (
           <button
             type="button"
             onClick={fitToRegion}
             className="absolute top-2 left-2 z-10 mono-text text-[10px] uppercase tracking-wider px-2.5 py-1.5 rounded-sm flex items-center gap-1.5 hover:opacity-80"
             style={{ background: PROTO.panel, border: `1px solid ${PROTO.border}`, color: PROTO.ink }}
           >
-            <span className="material-symbols-outlined text-[13px]">my_location</span>
+            <span aria-hidden="true">⤢</span>
             Fit to Region
           </button>
         )}
@@ -285,7 +302,7 @@ export default function RegionExplorerMap({
             No region boundary available
           </div>
         )}
-        {!showLoading && boundary && (
+        {legendOn && !showLoading && boundary && (
           <div className="absolute bottom-2 left-2 mono-text text-[9px] uppercase tracking-widest" style={{ color: PROTO.inkDim }}>
             {isBoundaryApproximate ? `Approximate boundary${regionName ? ` — ${regionName}` : ""}` : regionName ? `Live — ${regionName}` : ""}
           </div>
@@ -317,6 +334,8 @@ export default function RegionExplorerMap({
           protectedAreasCount={protectedAreasCount}
           waterBodiesCount={waterBodiesCount}
           overlaysLoading={overlaysLoading}
+          legendOn={legendOn}
+          onLegendOnChange={setLegendOn}
         />
       )}
     </div>

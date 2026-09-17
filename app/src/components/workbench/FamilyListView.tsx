@@ -82,8 +82,23 @@ function labelAnchor(angle: number): { anchor: "start" | "end" | "middle"; dx: n
   return { anchor: "start", dx: 8, dy: 4 };
 }
 
-function initials(name: string): string {
-  return name.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || "?";
+// Generic family-card glyph — matches the design prototype's own
+// `#list-glyph-generic` symbol 1:1 (prototypes/map-view-phase0-darjeeling.html)
+// rather than a per-family monogram, since the prototype has no per-family
+// artwork either.
+function FamilyGlyph() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 24 24" style={{ color: "#1c1c1a", opacity: 0.75 }}>
+      <path
+        d="M12 3c-1 0-4.2 3-4.2 7.2C7.8 14 10 17 12 21c2-4 4.2-7 4.2-10.8C16.2 6 13 3 12 3Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10" r="2.1" fill="none" stroke="currentColor" strokeWidth={1.5} />
+    </svg>
+  );
 }
 
 export default function FamilyListView({
@@ -140,34 +155,10 @@ export default function FamilyListView({
   const activeName = selected ?? hovered;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <h3 className="font-label-caps text-[10px] font-bold text-slate-400 tracking-widest uppercase">
-            Species by family
-          </h3>
-          <p className="mono-text text-[10px] text-on-surface-variant mt-1">
-            {totalSpecies.toLocaleString()} species &middot; {totalOcc.toLocaleString()} occurrence records across{" "}
-            {families.length.toLocaleString()} {families.length === 1 ? "family" : "families"}
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-1 w-40 flex-shrink-0">
-          <span className="font-label-caps text-[9px] font-bold text-slate-400 tracking-widest uppercase">
-            Occurrence records
-          </span>
-          <div
-            className="w-full h-2 rounded"
-            style={{ background: `linear-gradient(90deg, ${OCC_RAMP.map((c) => `rgb(${c.join(",")})`).join(", ")})` }}
-          />
-          <div className="w-full flex justify-between mono-text text-[9px] text-slate-400">
-            <span>{occMin.toLocaleString()}</span>
-            <span>{occMax.toLocaleString()}</span>
-          </div>
-        </div>
-      </div>
-
-      <div ref={wrapRef} className="relative mx-auto w-full max-w-[480px]">
-        <svg viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} className="block w-full h-auto overflow-visible">
+    <div className="flex h-full w-full" style={{ background: "#ffffff" }}>
+      <div className="flex-1 min-w-0 flex items-center justify-center p-5">
+        <div ref={wrapRef} className="relative h-full flex items-center justify-center">
+        <svg viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} className="block h-full w-auto max-w-full overflow-visible">
           <g>
             {ringVals.map((v) => {
               const r = radiusForSpecies(v);
@@ -307,38 +298,59 @@ export default function FamilyListView({
             <div className="text-white/70">{tooltip.f.occurrences.toLocaleString()} occurrences</div>
           </div>
         )}
+        </div>
       </div>
 
-      <div>
-        <h3 className="font-label-caps text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-2">
-          Families
-        </h3>
-        <div ref={stripRef} className="flex gap-2.5 overflow-x-auto pb-1.5" style={{ scrollSnapType: "x proximity" }}>
+      <div className="w-[300px] flex-shrink-0 flex flex-col min-h-0" style={{ borderLeft: "1px solid #dcd9d0" }}>
+        <div className="flex-shrink-0 px-4 pt-4 pb-2.5">
+          <h3 className="mono-text text-[12px] font-bold uppercase tracking-wider" style={{ color: "#1c1c1a" }}>
+            Families
+          </h3>
+          <p className="text-[10px] mt-0.5 leading-snug" style={{ color: "#6b6a63" }}>
+            {totalSpecies.toLocaleString()} species &middot; {totalOcc.toLocaleString()} occurrences across{" "}
+            {families.length.toLocaleString()} {families.length === 1 ? "family" : "families"}
+          </p>
+        </div>
+        <div ref={stripRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-2">
           {display.map((f) => {
             const color = rampColor(occT(f.occurrences));
+            const isSelected = selected === f.name;
             return (
               <button
                 key={f.name}
                 type="button"
                 data-fam={f.name}
                 onClick={() => selectFamily(f.name)}
-                style={{ scrollSnapAlign: "start" }}
-                className={`flex-shrink-0 w-28 flex flex-col gap-1.5 rounded-sm border p-2 text-left transition-colors ${
-                  selected === f.name ? "border-brand" : "border-outline hover:border-slate-400"
-                }`}
+                className="w-full flex items-center gap-3.5 py-3 px-0.5 text-left transition-colors last:border-b-0"
+                style={{
+                  borderBottom: "1px solid #dcd9d0",
+                  background: isSelected ? "rgba(31,111,67,0.1)" : "transparent",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) e.currentTarget.style.background = "rgba(31,111,67,0.1)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) e.currentTarget.style.background = "transparent";
+                }}
               >
-                <div className="relative aspect-square rounded-sm bg-[#efece1] flex items-center justify-center overflow-hidden">
+                <div className="relative w-[52px] h-[52px] flex-shrink-0 rounded-lg bg-[#efece1] flex items-center justify-center overflow-hidden">
                   <span
                     className="absolute top-1 right-1 w-2 h-2 rounded-full"
                     style={{ background: color, boxShadow: "0 0 0 1.5px #efece1" }}
                   />
-                  <span className="mono-text font-bold text-lg text-on-surface-variant/70">{initials(f.name)}</span>
+                  <FamilyGlyph />
                 </div>
-                <div className="text-[11.5px] font-bold leading-tight truncate" title={f.name}>
-                  {f.name}
+                <div className="min-w-0 flex flex-col gap-0.5">
+                  <div className="text-[13px] font-bold leading-tight truncate" style={{ color: "#1c1c1a" }} title={f.name}>
+                    {f.name}
+                  </div>
+                  <div className="text-[10.5px]" style={{ color: "#6b6a63" }}>
+                    ({f.species.toLocaleString()} species)
+                  </div>
+                  <div className="text-[10.5px] mono-text" style={{ color: "#6b6a63" }}>
+                    {f.occurrences.toLocaleString()} occurrences
+                  </div>
                 </div>
-                <div className="text-[10px] text-slate-400">({f.species.toLocaleString()} species)</div>
-                <div className="text-[10px] text-slate-400 mono-text">{f.occurrences.toLocaleString()} occurrences</div>
               </button>
             );
           })}
