@@ -12,6 +12,18 @@ import LayersPanel from "./LayersPanel";
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 const FALLBACK_CENTER: [number, number] = [0, 20];
 
+// Matches the design prototype's own palette
+// (prototypes/map-view-phase0-darjeeling.html), not the app's global red
+// brand — see MapListDialog.tsx for why.
+const PROTO = {
+  bg: "#faf9f5",
+  panel: "#ffffff",
+  border: "#dcd9d0",
+  ink: "#1c1c1a",
+  inkDim: "#6b6a63",
+  brand: "#1f6f43",
+};
+
 interface RegionExplorerMapProps {
   boundary: BoundaryGeometry | null;
   isBoundaryApproximate?: boolean;
@@ -122,6 +134,21 @@ export default function RegionExplorerMap({
 
   // ---- Boundary outline + mask + fit bounds ----
   const [bbox, setBbox] = useState<Bbox | null>(null);
+  const bboxRef = useRef<Bbox | null>(null);
+
+  function fitToRegion() {
+    const map = mapRef.current;
+    const box = bboxRef.current;
+    if (!map || !box) return;
+    map.fitBounds(
+      [
+        [box.minLng, box.minLat],
+        [box.maxLng, box.maxLat],
+      ],
+      { padding: 24, duration: 400 },
+    );
+  }
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded || !boundary) return;
@@ -153,6 +180,7 @@ export default function RegionExplorerMap({
 
     const box = boundaryBbox(boundary);
     setBbox(box);
+    bboxRef.current = box;
     addBaseRasterLayers(map, box);
     setBaseMapType(map, baseMapType);
 
@@ -228,22 +256,38 @@ export default function RegionExplorerMap({
 
   return (
     <div className="flex gap-4">
-      <div className={`relative flex-1 min-w-0 ${heightClassName} rounded-sm overflow-hidden border border-surface-dim bg-[#faf9f5]`}>
+      <div className={`relative flex-1 min-w-0 ${heightClassName} rounded-sm overflow-hidden`} style={{ border: `1px solid ${PROTO.border}`, background: PROTO.bg }}>
         <div ref={containerRef} className="absolute inset-0" />
+        {mapLoaded && boundary && (
+          <button
+            type="button"
+            onClick={fitToRegion}
+            className="absolute top-2 left-2 z-10 mono-text text-[10px] uppercase tracking-wider px-2.5 py-1.5 rounded-sm flex items-center gap-1.5 hover:opacity-80"
+            style={{ background: PROTO.panel, border: `1px solid ${PROTO.border}`, color: PROTO.ink }}
+          >
+            <span className="material-symbols-outlined text-[13px]">my_location</span>
+            Fit to Region
+          </button>
+        )}
         {showLoading && (
-          <div className="absolute inset-0 flex items-center justify-center gap-2 bg-[#faf9f5] text-slate-400 text-[10px] uppercase tracking-widest mono-text">
-            <span className="material-symbols-outlined text-brand text-[16px] animate-spin">progress_activity</span>
+          <div
+            className="absolute inset-0 flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest mono-text"
+            style={{ background: PROTO.bg, color: PROTO.inkDim }}
+          >
+            <span className="material-symbols-outlined text-[16px] animate-spin" style={{ color: PROTO.brand }}>
+              progress_activity
+            </span>
             {isBoundaryLoading ? "Resolving region boundary…" : "Loading map…"}
           </div>
         )}
         {!showLoading && !boundary && (
-          <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-[10px] uppercase tracking-widest mono-text">
+          <div className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-widest mono-text" style={{ color: PROTO.inkDim }}>
             No region boundary available
           </div>
         )}
-        {!showLoading && isBoundaryApproximate && (
-          <div className="absolute bottom-2 left-2 bg-white/90 border border-surface-dim rounded-sm px-2 py-1 text-[9px] text-slate-500 uppercase tracking-widest mono-text">
-            Approximate boundary{regionName ? ` — ${regionName}` : ""}
+        {!showLoading && boundary && (
+          <div className="absolute bottom-2 left-2 mono-text text-[9px] uppercase tracking-widest" style={{ color: PROTO.inkDim }}>
+            {isBoundaryApproximate ? `Approximate boundary${regionName ? ` — ${regionName}` : ""}` : regionName ? `Live — ${regionName}` : ""}
           </div>
         )}
         {tileError && (
@@ -252,7 +296,10 @@ export default function RegionExplorerMap({
           </div>
         )}
         {mapLoaded && !tilesRendered && !tileError && (
-          <div className="absolute bottom-2 right-2 bg-white/90 border border-surface-dim rounded-sm px-2 py-1 text-[9px] text-slate-400 uppercase tracking-widest mono-text">
+          <div
+            className="absolute bottom-2 right-2 rounded-sm px-2 py-1 text-[9px] uppercase tracking-widest mono-text"
+            style={{ background: "rgba(255,255,255,0.9)", border: `1px solid ${PROTO.border}`, color: PROTO.inkDim }}
+          >
             Waiting on map tiles…
           </div>
         )}

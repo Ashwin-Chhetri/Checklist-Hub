@@ -24,8 +24,22 @@ interface MapListDialogProps {
   onClose: () => void;
 }
 
+// This dialog intentionally uses the design prototype's own palette
+// (prototypes/map-view-phase0-darjeeling.html: --bg/--panel/--border/--ink/
+// --brand) rather than the app's global red brand — a deliberate,
+// self-contained look for this one feature, matched 1:1 to the validated
+// design rather than the rest of Checklist Hub's chrome.
+const PROTO = {
+  bg: "#faf9f5",
+  panel: "#ffffff",
+  border: "#dcd9d0",
+  ink: "#1c1c1a",
+  inkDim: "#6b6a63",
+  brand: "#1f6f43",
+};
+
 export default function MapListDialog({ checklistId, checklistTitle, region, onClose }: MapListDialogProps) {
-  const [view, setView] = useState<"map" | "list">("map");
+  const [view, setView] = useState<"list" | "map">("list");
   const { families, isLoading: speciesLoading } = useFamilyStats(checklistId);
   const boundaryQuery = useRegionBoundary(
     region.gadmId || (region.osmType && region.osmId)
@@ -36,44 +50,52 @@ export default function MapListDialog({ checklistId, checklistTitle, region, onC
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30" onClick={onClose}>
       <div
-        className={`bg-white border border-surface-dim rounded-sm shadow-hard max-w-[94vw] max-h-[88vh] overflow-y-auto transition-[width] ${
-          view === "map" ? "w-[1160px]" : "w-[760px]"
-        }`}
+        className="rounded-sm shadow-hard max-w-[94vw] max-h-[88vh] overflow-y-auto transition-[width]"
+        style={{ background: PROTO.panel, border: `1px solid ${PROTO.border}`, width: view === "map" ? 1160 : 760 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 pt-6 pb-3 border-b border-surface-dim sticky top-0 bg-white z-10">
+        <div
+          className="flex items-center justify-between px-6 pt-6 pb-3 sticky top-0 z-10"
+          style={{ borderBottom: `1px solid ${PROTO.border}`, background: PROTO.panel }}
+        >
           <div>
-            <h3 className="mono-text text-sm font-bold uppercase tracking-wider text-slate-700">Region &amp; Species Map</h3>
-            <p className="text-[11px] text-on-surface-variant mt-0.5">{checklistTitle}</p>
+            <h3 className="mono-text text-sm font-bold uppercase tracking-wider" style={{ color: PROTO.ink }}>
+              Region &amp; Species Map
+            </h3>
+            <p className="text-[11px] mt-0.5" style={{ color: PROTO.inkDim }}>
+              {checklistTitle}
+            </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex rounded-sm border border-outline overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setView("map")}
-                className={`mono-text text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 ${
-                  view === "map" ? "bg-brand text-white" : "text-on-surface-variant hover:text-brand"
-                }`}
-              >
-                Map
-              </button>
+            <div className="flex rounded-sm overflow-hidden" style={{ border: `1px solid ${PROTO.border}` }}>
               <button
                 type="button"
                 onClick={() => setView("list")}
-                className={`mono-text text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 border-l border-outline ${
-                  view === "list" ? "bg-brand text-white" : "text-on-surface-variant hover:text-brand"
-                }`}
+                className="mono-text text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 transition-colors"
+                style={
+                  view === "list"
+                    ? { background: PROTO.brand, color: "#fff" }
+                    : { color: PROTO.inkDim, borderRight: `1px solid ${PROTO.border}` }
+                }
               >
                 List
               </button>
+              <button
+                type="button"
+                onClick={() => setView("map")}
+                className="mono-text text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 transition-colors"
+                style={view === "map" ? { background: PROTO.brand, color: "#fff" } : { color: PROTO.inkDim }}
+              >
+                Map
+              </button>
             </div>
-            <button onClick={onClose} className="text-slate-400 hover:text-brand" title="Close">
+            <button onClick={onClose} className="hover:opacity-70" style={{ color: PROTO.inkDim }} title="Close">
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6" style={{ background: PROTO.bg }}>
           {view === "map" ? (
             <RegionExplorerMap
               boundary={boundaryQuery.data?.geometry ?? null}
@@ -83,12 +105,14 @@ export default function MapListDialog({ checklistId, checklistTitle, region, onC
               heightClassName="h-[440px]"
             />
           ) : speciesLoading ? (
-            <div className="h-[440px] flex items-center justify-center gap-2 text-slate-400 text-[10px] uppercase tracking-widest mono-text">
-              <span className="material-symbols-outlined text-brand text-[16px] animate-spin">progress_activity</span>
+            <div className="h-[440px] flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest mono-text" style={{ color: PROTO.inkDim }}>
+              <span className="material-symbols-outlined text-[16px] animate-spin" style={{ color: PROTO.brand }}>
+                progress_activity
+              </span>
               Loading species…
             </div>
           ) : families.length === 0 ? (
-            <div className="h-[440px] flex items-center justify-center text-slate-400 text-[10px] uppercase tracking-widest mono-text">
+            <div className="h-[440px] flex items-center justify-center text-[10px] uppercase tracking-widest mono-text" style={{ color: PROTO.inkDim }}>
               No species in this checklist yet
             </div>
           ) : (

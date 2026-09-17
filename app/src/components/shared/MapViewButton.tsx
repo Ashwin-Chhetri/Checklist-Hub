@@ -46,7 +46,7 @@ export default function MapViewButton({
         type="button"
         onClick={onClick}
         title={title}
-        className={`text-on-surface-variant hover:text-primary transition-colors w-8 h-8 flex items-center justify-center ${className}`}
+        className={`inline-flex items-center justify-center w-8 h-8 rounded-sm border border-outline text-on-surface-variant hover:text-primary hover:border-primary transition-colors ${className}`}
       >
         <ListMapIcon />
       </button>
