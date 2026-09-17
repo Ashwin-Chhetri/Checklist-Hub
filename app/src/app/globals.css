@@ -1,6 +1,21 @@
 @import "tailwindcss";
 @import "maplibre-gl/dist/maplibre-gl.css";
 
+/* maplibre-gl.css ships un-layered rules, which always beat Tailwind's
+   @layer utilities regardless of source order/specificity (CSS Cascade
+   Layers spec) — so maplibre-gl.css's own `.maplibregl-map { position:
+   relative }` silently overrides the `absolute inset-0` utility classes on
+   the container div MapLibre tags with that class. That drops the whole
+   map out of absolute positioning, collapses it (and its canvas wrapper) to
+   zero height, and maplibre-gl.css's `overflow: hidden` on the same rule
+   then clips the (perfectly rendering) canvas out of view entirely — no
+   error anywhere, since nothing actually failed. Reasserting these as plain
+   (un-layered) CSS here wins the same way maplibre-gl.css's own rule does. */
+.maplibregl-map {
+  position: absolute;
+  inset: 0;
+}
+
 @theme {
   /* Colors - Technical Documentation Minimalist palette */
   --color-brand: #c63939;

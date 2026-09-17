@@ -5,7 +5,7 @@ import type { BaseMapType } from "./mapLayers";
 import { PROTECTED_AREA_CLASSES, type Bbox } from "./overpassApi";
 import { MAP_THEME } from "./mapTheme";
 import { WORLDCOVER_PALETTE, ndviDateString, type RegionStats } from "./regionStats";
-import { downloadWaterBodiesForQgis, downloadRasterForQgis, ndviWmsUrl, worldcoverWmsUrl, slugify } from "./regionExport";
+import { downloadWaterBodiesForQgis, downloadRasterForQgis, downloadRegionBoundaryForQgis, ndviWmsUrl, worldcoverWmsUrl, slugify } from "./regionExport";
 
 // Matches the design prototype's own palette
 // (prototypes/map-view-phase0-darjeeling.html), not the app's global red
@@ -43,6 +43,8 @@ interface LayersPanelProps {
   /** Region bbox + display name — needed for the NDVI/Vegetation raster downloads (fresh WMS fetch, not the tiled map layer) and for naming the water-bodies export. */
   bbox: Bbox;
   regionName: string | null;
+  /** The region's own boundary geometry — for the "download region shape" button, independent of any data layer. */
+  boundary: GeoJSON.Geometry | null;
 }
 
 // The three "Map Type" thumbnail illustrations — ported verbatim from the
@@ -306,7 +308,7 @@ const SOURCE_LINKS: { label: string; href: string }[] = [
   { label: "Overpass", href: "https://overpass-api.de/" },
 ];
 
-type DownloadKey = "water" | "ndvi" | "vegetation";
+type DownloadKey = "water" | "ndvi" | "vegetation" | "boundary";
 
 export default function LayersPanel({
   baseMapType,
@@ -333,6 +335,7 @@ export default function LayersPanel({
   onOpenMapDetails,
   bbox,
   regionName,
+  boundary,
 }: LayersPanelProps) {
   const [tab, setTab] = useState<"layers" | "stats">("layers");
   const [downloading, setDownloading] = useState<Partial<Record<DownloadKey, boolean>>>({});
@@ -394,6 +397,17 @@ export default function LayersPanel({
                 <input type="checkbox" checked={legendOn} onChange={(e) => onLegendOnChange(e.target.checked)} className="w-3.5 h-3.5" style={{ accentColor: PROTO.brand }} />
                 Map Legend (on-map icons)
               </label>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="flex-1 truncate text-[11px]" style={{ color: PROTO.ink }}>
+                Region Shape
+              </span>
+              <DownloadButton
+                onClick={boundary ? () => runDownload("boundary", () => downloadRegionBoundaryForQgis(boundary, regionName ?? "Region", regionSlug)) : undefined}
+                loading={downloading.boundary}
+                title={downloadError.boundary ?? "Download region shape (GeoJSON + KML) for QGIS"}
+              />
             </div>
 
             <div>

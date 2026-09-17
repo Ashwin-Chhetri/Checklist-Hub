@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import { boundaryBbox, type BoundaryGeometry, type RegionBoundaryRequest } from "@/modules/checklist/services/regionApi";
 import { applyMapTheme } from "./mapTheme";
@@ -115,14 +115,19 @@ export default function RegionExplorerMap({
 
   const [baseMapType, setBaseMapTypeState] = useState<BaseMapType>("default");
   const [terrainEnabled, setTerrainEnabledState] = useState(false);
-  const [showProtected, setShowProtected] = useState(true);
-  const [showWater, setShowWater] = useState(true);
+  const [showProtected, setShowProtected] = useState(false);
+  const [showWater, setShowWater] = useState(false);
   const [showNdvi, setShowNdvi] = useState(false);
   const [showVegetation, setShowVegetation] = useState(false);
   const [legendOn, setLegendOn] = useState(true);
   const [mapDetailsOpen, setMapDetailsOpen] = useState(false);
 
-  const bbox: Bbox | null = boundary ? boundaryBbox(boundary) : null;
+  // Memoized so its reference is stable across re-renders that don't change
+  // `boundary` itself (e.g. toggling a Layers-panel checkbox) — every
+  // effect below keyed on `bbox` (the ResizeObserver, the boundary/mask
+  // effect) would otherwise tear down and re-run on every unrelated
+  // render, since boundaryBbox() returns a new object each call.
+  const bbox: Bbox | null = useMemo(() => (boundary ? boundaryBbox(boundary) : null), [boundary]);
 
   const protectedAreasQuery = useProtectedAreas(bbox, boundaryRequest);
   const waterBodiesQuery = useWaterBodies(bbox, boundaryRequest);
@@ -227,14 +232,36 @@ export default function RegionExplorerMap({
   // container resize (this observer's only trigger) never fires from the
   // user panning/zooming the map itself, so re-fitting here can't fight
   // their own navigation. ----
+  const lastContainerSizeRef = useRef({ w: 0, h: 0 });
+  useEffect(() => {
+    // A new region's own first-fit gets a fresh "was it ever a real size"
+    // slate — see the threshold check below.
+    lastContainerSizeRef.current = { w: 0, h: 0 };
+  }, [bbox]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver((entries) => {
       const map = mapRef.current;
       if (!map) return;
       map.resize();
-      if (bbox) {
+
+      // Only re-fit if the container is RECOVERING from a stale/collapsed
+      // size (the dialog-open-transition problem this observer exists
+      // for) — not on every resize. Toggling a Layers-panel checkbox, an
+      // Overpass request's loading state changing, etc. can all cause a
+      // sibling reflow that pings this observer with no meaningful change
+      // to the map's own box; blindly re-fitting on those wipes out
+      // whatever pan/zoom/rotation the user had set. fitBounds (even with
+      // duration:0) is also a camera jump that stops any in-progress
+      // animation outright — e.g. the 3D toggle's pitch easeTo
+      // (setTerrainEnabled in mapLayers.ts) — freezing it wherever it
+      // happened to be mid-ease, so it's skipped outright while moving too.
+      const rect = entries[0]?.contentRect;
+      const wasCollapsed = lastContainerSizeRef.current.w < 40 || lastContainerSizeRef.current.h < 40;
+      if (rect) lastContainerSizeRef.current = { w: rect.width, h: rect.height };
+      if (bbox && wasCollapsed && !map.isMoving()) {
         map.fitBounds(
           [
             [bbox.minLng, bbox.minLat],
@@ -482,6 +509,7 @@ export default function RegionExplorerMap({
           onOpenMapDetails={() => setMapDetailsOpen(true)}
           bbox={bbox}
           regionName={regionName ?? null}
+          boundary={boundary}
         />
       )}
       <MapDetailsDialog open={mapDetailsOpen} onClose={() => setMapDetailsOpen(false)} sampleCount={regionStats?.gridSampleCount ?? null} />

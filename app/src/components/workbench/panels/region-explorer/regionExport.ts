@@ -100,6 +100,21 @@ function geojsonToKml(fc: GeoJSON.FeatureCollection, opts: { name: string; style
   );
 }
 
+/** Wraps the region's own boundary geometry (not a data layer) as GeoJSON + KML for QGIS — same zip pattern as the water-bodies export above. */
+export async function downloadRegionBoundaryForQgis(boundary: GeoJSON.Geometry, regionLabel: string, regionSlug: string): Promise<void> {
+  const base = `${regionSlug}-boundary`;
+  const fc: GeoJSON.FeatureCollection = {
+    type: "FeatureCollection",
+    features: [{ type: "Feature", geometry: boundary, properties: { name: regionLabel } }],
+  };
+  const zip = new JSZip();
+  zip.file(`${base}.geojson`, JSON.stringify(fc, null, 2));
+  zip.file(`${base}.kml`, geojsonToKml(fc, { name: `${regionLabel} — Region Boundary` }));
+  zip.file(`${base}.prj`, WGS84_PRJ_WKT);
+  const blob = await zip.generateAsync({ type: "blob" });
+  triggerBlobDownload(blob, `${base}-qgis.zip`);
+}
+
 export async function downloadWaterBodiesForQgis(geojson: GeoJSON.FeatureCollection, regionLabel: string, regionSlug: string): Promise<void> {
   const base = `${regionSlug}-water-bodies`;
   const styles = [
