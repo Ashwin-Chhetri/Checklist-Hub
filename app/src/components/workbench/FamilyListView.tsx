@@ -346,7 +346,6 @@ export default function FamilyListView({
 
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; f: TaxonGroupStat } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
 
@@ -416,12 +415,6 @@ export default function FamilyListView({
     setLabelFits(next);
   }, [arrangement, slot]);
 
-  function moveTooltip(e: React.MouseEvent, f: TaxonGroupStat) {
-    const rect = wrapRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, f });
-  }
-
   function selectGroup(name: string) {
     setSelected((prev) => (prev === name ? null : name));
     const card = stripRef.current?.querySelector(`[data-fam="${CSS.escape(name)}"]`);
@@ -436,7 +429,6 @@ export default function FamilyListView({
     setPath((prev) => prev.slice(0, depth));
     setSelected(null);
     setHovered(null);
-    setTooltip(null);
   }
 
   // Drilling one rank down (family -> genus -> species) — species is the
@@ -450,12 +442,26 @@ export default function FamilyListView({
     setPath((prev) => [...prev, name]);
     setSelected(null);
     setHovered(null);
-    setTooltip(null);
   }
 
   // Steps back exactly one level — a no-op at the root.
   function goBack() {
     goToDepth(Math.max(0, path.length - 1));
+  }
+
+  // Single click on a wheel wedge/label now drills straight down the
+  // hierarchy — double-click used to do this but that extra step wasn't
+  // discoverable. Falls back to selectGroup (highlight + show occurrence
+  // points on the hub badge) wherever drilling isn't possible: the species
+  // (terminal) rank, or the wheel's synthetic "Other ..." wedge, which has
+  // no real group to drill into — otherwise the click would silently do
+  // nothing, same as drillInto's own guards above.
+  function handleWedgeClick(name: string) {
+    if (rank === "species" || !groups.some((g) => g.name === name)) {
+      selectGroup(name);
+    } else {
+      drillInto(name);
+    }
   }
 
   const activeName = selected ?? hovered;
@@ -555,21 +561,13 @@ export default function FamilyListView({
                     tabIndex={0}
                     role="button"
                     aria-label={`${f.name}: ${f.species} species, ${f.occurrences.toLocaleString()} occurrences`}
-                    onMouseEnter={(e) => {
-                      setHovered(f.name);
-                      moveTooltip(e, f);
-                    }}
-                    onMouseMove={(e) => moveTooltip(e, f)}
-                    onMouseLeave={() => {
-                      setHovered(null);
-                      setTooltip(null);
-                    }}
-                    onClick={() => selectGroup(f.name)}
-                    onDoubleClick={() => drillInto(f.name)}
+                    onMouseEnter={() => setHovered(f.name)}
+                    onMouseLeave={() => setHovered(null)}
+                    onClick={() => handleWedgeClick(f.name)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        selectGroup(f.name);
+                        handleWedgeClick(f.name);
                       }
                     }}
                   />
@@ -606,16 +604,9 @@ export default function FamilyListView({
                       style={{ outline: "none" }}
                       tabIndex={0}
                       role="button"
-                      onMouseEnter={(e) => {
-                        setHovered(f.name);
-                        moveTooltip(e, f);
-                      }}
-                      onMouseLeave={() => {
-                        setHovered(null);
-                        setTooltip(null);
-                      }}
-                      onClick={() => selectGroup(f.name)}
-                      onDoubleClick={() => drillInto(f.name)}
+                      onMouseEnter={() => setHovered(f.name)}
+                      onMouseLeave={() => setHovered(null)}
+                      onClick={() => handleWedgeClick(f.name)}
                     >
                       <tspan
                         x={labelX}
@@ -648,17 +639,6 @@ export default function FamilyListView({
               })}
             </g>
           </svg>
-
-          {tooltip && (
-            <div
-              className="absolute z-10 pointer-events-none -translate-x-1/2 -translate-y-full rounded-md bg-[#1c1c1a] text-white px-2.5 py-1.5 text-[10.5px] leading-relaxed shadow-lg whitespace-nowrap mono-text"
-              style={{ left: tooltip.x, top: tooltip.y - 10 }}
-            >
-              <div className="font-bold text-[11px]">{tooltip.f.name}</div>
-              <div className="text-white/70">{tooltip.f.species.toLocaleString()} species</div>
-              <div className="text-white/70">{tooltip.f.occurrences.toLocaleString()} occurrences</div>
-            </div>
-          )}
         </div>
       </div>
 

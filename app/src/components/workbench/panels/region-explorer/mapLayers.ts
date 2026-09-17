@@ -162,7 +162,7 @@ export function addWaterBodiesLayer(map: maplibregl.Map, geojson: GeoJSON.Featur
  * be recolored pixel-by-pixel) toward this app's theme. Ported from the
  * design prototype.
  */
-export function addVegetationLayer(map: maplibregl.Map, bbox: Bbox) {
+export function addVegetationLayer(map: maplibregl.Map, bbox: Bbox, visible: boolean) {
   if (map.getSource("worldcover")) return;
   const beforeId = firstSymbolLayerId(map);
   map.addSource("worldcover", {
@@ -181,7 +181,7 @@ export function addVegetationLayer(map: maplibregl.Map, bbox: Bbox) {
       type: "raster",
       source: "worldcover",
       paint: { "raster-opacity": 0.75, "raster-saturation": -0.35, "raster-contrast": -0.1, "raster-brightness-max": 0.92 },
-      layout: { visibility: "none" },
+      layout: { visibility: visible ? "visible" : "none" },
     },
     beforeId,
   );
@@ -195,7 +195,7 @@ export function addVegetationLayer(map: maplibregl.Map, bbox: Bbox) {
  * a blurry, muddy patch, so opacity is faded out over zooms 9-12 instead of
  * showing that artifact. Ported from the design prototype.
  */
-export function addNdviLayer(map: maplibregl.Map, bbox: Bbox) {
+export function addNdviLayer(map: maplibregl.Map, bbox: Bbox, visible: boolean) {
   if (map.getSource("ndvi")) return;
   const beforeId = firstSymbolLayerId(map);
   map.addSource("ndvi", {
@@ -217,7 +217,7 @@ export function addNdviLayer(map: maplibregl.Map, bbox: Bbox) {
         "raster-contrast": 0.15,
         "raster-saturation": 0.1,
       },
-      layout: { visibility: "none" },
+      layout: { visibility: visible ? "visible" : "none" },
     },
     beforeId,
   );

@@ -213,7 +213,14 @@ export function RegionInput({ value, onChange, compact = false }: RegionInputPro
           <RegionField label="country" value={value.region_country} />
           <RegionField label="gadm" value={value.region_gadm_id} valueClassName="text-secondary" />
           {resolvingGadm && !value.region_gadm_id && (
-            <span className="text-on-surface-variant text-xs italic">resolving gadm…</span>
+            <span className="text-on-surface-variant text-xs italic inline-flex items-center gap-0.5">
+              Fetching Region GADM Code
+              <span className="inline-flex">
+                <span className="animate-bounce [animation-delay:-0.3s]">.</span>
+                <span className="animate-bounce [animation-delay:-0.15s]">.</span>
+                <span className="animate-bounce">.</span>
+              </span>
+            </span>
           )}
           {!resolvingGadm && !value.region_gadm_id && gadmFailed && (
             <span className="text-red-700 text-xs italic">

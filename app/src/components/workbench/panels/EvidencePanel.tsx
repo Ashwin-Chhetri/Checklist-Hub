@@ -9,7 +9,8 @@ import { useInatOccurrences } from "@/modules/evidence/hooks/useInatOccurrences"
 import { useRegionBoundary } from "@/modules/checklist/hooks/useRegionBoundary";
 import { EVIDENCE_SOURCE_LABELS } from "@/modules/editor/utils/badges";
 import { flattenToRings, isPointInRegion } from "@/modules/evidence/utils/regionPointFilter";
-import RegionOccurrenceMap, { type OccurrencePoint } from "./RegionOccurrenceMap";
+import EvidenceRegionMap from "./EvidenceRegionMap";
+import type { OccurrencePoint } from "./RegionOccurrenceMap";
 import type { ChecklistRegion } from "../SpeciesPanel";
 
 interface EvidencePanelProps {
@@ -146,7 +147,7 @@ export default function EvidencePanel({ species, checklistId, region }: Evidence
   return (
     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
       <section>
-        <RegionOccurrenceMap
+        <EvidenceRegionMap
           boundary={boundaryQuery.data?.geometry ?? null}
           isApproximate={boundaryQuery.data?.source === "bbox"}
           points={mapPoints}

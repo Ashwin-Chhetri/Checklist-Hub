@@ -118,7 +118,10 @@ export default function RegionExplorerMap({
   const [showProtected, setShowProtected] = useState(false);
   const [showWater, setShowWater] = useState(false);
   const [showNdvi, setShowNdvi] = useState(false);
-  const [showVegetation, setShowVegetation] = useState(false);
+  // Defaults on so the Map tab opens showing the same ESA WorldCover
+  // land-cover view as the List tab's static RegionHubBadge preview,
+  // instead of a plain, visually-disconnected basemap.
+  const [showVegetation, setShowVegetation] = useState(true);
   const [legendOn, setLegendOn] = useState(true);
   const [mapDetailsOpen, setMapDetailsOpen] = useState(false);
 
@@ -336,8 +339,8 @@ export default function RegionExplorerMap({
     }
 
     addBaseRasterLayers(map, bbox);
-    addNdviLayer(map, bbox);
-    addVegetationLayer(map, bbox);
+    addNdviLayer(map, bbox, showNdvi);
+    addVegetationLayer(map, bbox, showVegetation);
     setBaseMapType(map, baseMapType);
 
     // Resize BEFORE fitting, synchronously — fitBounds computes the camera
