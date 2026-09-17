@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BoundaryGeometry } from "@/modules/checklist/services/regionApi";
-import { flattenToRings, isPointInRegion, type Ring } from "@/modules/evidence/utils/regionPointFilter";
+import { flattenToRings, isPointInRegion } from "@/modules/evidence/utils/regionPointFilter";
+import { buildBoundaryProjector } from "@/modules/evidence/utils/regionProjection";
 
 export type OccurrenceSource = "gbif" | "ebird" | "inaturalist";
 
@@ -47,7 +48,6 @@ interface RegionOccurrenceMapProps {
 
 const DEFAULT_WIDTH = 320;
 const DEFAULT_HEIGHT = 128;
-const PAD = 8;
 
 const SOURCE_COLORS: Record<OccurrenceSource, { dot: string; focused: string }> = {
   gbif: { dot: "fill-red-500/80", focused: "fill-red-600" },
@@ -61,57 +61,12 @@ const SOURCE_COLORS: Record<OccurrenceSource, { dot: string; focused: string }> 
 const OUTSIDE_REGION_DOT = "fill-slate-400/60";
 const OUTSIDE_REGION_FOCUSED = "fill-slate-500";
 
-interface BoundaryProjector {
-  project: (lng: number, lat: number) => [number, number];
-  minLng: number;
-  maxLng: number;
-  minLat: number;
-  maxLat: number;
-}
-
-/**
- * Equirectangular fit-to-box projection, scaled from the BOUNDARY's own
- * bounding box only — deliberately not the occurrence points'. A handful of
- * imprecise/mistagged source records sitting far outside the region would
- * otherwise stretch this box to fit them, shrinking the actual region down
- * to a speck in the corner and making every *correctly*-placed point look
- * like it's "outside" the region. Longitude is corrected by cos(latitude) so
- * the shape isn't stretched away from its true aspect ratio.
- */
-function buildBoundaryProjector(rings: Ring[], width: number, height: number): BoundaryProjector | null {
-  const boundaryPoints = rings.flat();
-  if (boundaryPoints.length === 0) return null;
-
-  let minLng = Infinity;
-  let maxLng = -Infinity;
-  let minLat = Infinity;
-  let maxLat = -Infinity;
-  for (const [lng, lat] of boundaryPoints) {
-    if (lng < minLng) minLng = lng;
-    if (lng > maxLng) maxLng = lng;
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-  }
-  const spanLng = Math.max(maxLng - minLng, 0.0001);
-  const spanLat = Math.max(maxLat - minLat, 0.0001);
-  const meanLatRad = ((minLat + maxLat) / 2) * (Math.PI / 180);
-  const lngScale = Math.cos(meanLatRad) || 1;
-  const adjustedSpanLng = spanLng * lngScale;
-
-  const availW = width - PAD * 2;
-  const availH = height - PAD * 2;
-  const scale = Math.min(availW / adjustedSpanLng, availH / spanLat);
-
-  const offsetX = PAD + (availW - adjustedSpanLng * scale) / 2;
-  const offsetY = PAD + (availH - spanLat * scale) / 2;
-
-  const project = (lng: number, lat: number): [number, number] => [
-    offsetX + (lng - minLng) * lngScale * scale,
-    offsetY + (maxLat - lat) * scale,
-  ];
-
-  return { project, minLng, maxLng, minLat, maxLat };
-}
+// buildBoundaryProjector (shared with RegionHubBadge, see regionProjection.ts)
+// is deliberately scaled from the BOUNDARY's own bounding box only — not the
+// occurrence points'. A handful of imprecise/mistagged source records
+// sitting far outside the region would otherwise stretch this box to fit
+// them, shrinking the actual region down to a speck in the corner and making
+// every *correctly*-placed point look like it's "outside" the region.
 
 function MapSpinner({ label, heightClassName }: { label: string; heightClassName: string }) {
   return (

@@ -4,7 +4,8 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BoundaryGeometry } from "@/modules/checklist/services/regionApi";
 import type { FamilyStat } from "@/modules/species/hooks/useFamilyStats";
 import { useSpeciesMedia } from "@/modules/taxonomy/hooks/useSpeciesMedia";
-import RegionOccurrenceMap from "./panels/RegionOccurrenceMap";
+import RegionHubBadge from "./panels/region-explorer/RegionHubBadge";
+import type { Bbox } from "./panels/region-explorer/overpassApi";
 import ImageShimmer from "./ImageShimmer";
 
 export type { FamilyStat };
@@ -12,8 +13,13 @@ export type { FamilyStat };
 interface FamilyListViewProps {
   families: FamilyStat[];
   boundary: BoundaryGeometry | null;
+  bbox: Bbox | null;
   isBoundaryApproximate?: boolean;
   isBoundaryLoading?: boolean;
+  regionName?: string | null;
+  /** Jumps the parent dialog to the Map tab — wired from the center hub
+   * badge's click (it's a static snapshot, not a pannable map). */
+  onOpenMap?: () => void;
 }
 
 // Bars beyond this are folded into "Other families" — a real multi-order
@@ -205,8 +211,11 @@ interface LabelFit {
 export default function FamilyListView({
   families,
   boundary,
+  bbox,
   isBoundaryApproximate = false,
   isBoundaryLoading = false,
+  regionName = null,
+  onOpenMap,
 }: FamilyListViewProps) {
   const display = useMemo<FamilyStat[]>(() => {
     const sorted = [...families].sort((a, b) => b.species - a.species);
@@ -314,14 +323,14 @@ export default function FamilyListView({
           <svg viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} className="block h-full w-auto max-w-full overflow-visible">
             <foreignObject x={CX - CENTER_R} y={CY - CENTER_R} width={CENTER_R * 2} height={CENTER_R * 2}>
               <div className="w-full h-full rounded-full overflow-hidden" style={{ boxShadow: "0 0 0 1px #dcd9d0" }}>
-                <RegionOccurrenceMap
+                <RegionHubBadge
                   boundary={boundary}
-                  points={[]}
-                  isApproximate={isBoundaryApproximate}
-                  isLoading={isBoundaryLoading}
-                  heightClassName="h-full"
-                  viewBoxWidth={200}
-                  viewBoxHeight={200}
+                  bbox={bbox}
+                  isBoundaryApproximate={isBoundaryApproximate}
+                  isBoundaryLoading={isBoundaryLoading}
+                  regionName={regionName}
+                  onOpenMap={onOpenMap}
+                  size={200}
                 />
               </div>
             </foreignObject>

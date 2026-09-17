@@ -10,7 +10,8 @@
     "build:backbone": "node scripts/build-gbif-backbone.mjs",
     "build:gadm": "node scripts/build-gadm.mjs",
     "test:scope": "node scripts/test-scope-suggestions.mjs",
-    "test:gadm-districts": "node scripts/test-gadm-districts.mjs"
+    "test:gadm-districts": "node scripts/test-gadm-districts.mjs",
+    "test:region-map-geometry": "node scripts/test-region-map-geometry.mjs"
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.19.5",
