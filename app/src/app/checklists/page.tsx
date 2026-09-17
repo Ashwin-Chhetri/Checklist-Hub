@@ -409,7 +409,7 @@ export default function ChecklistsPage() {
               <table className="w-full table-fixed text-left border-collapse">
                 <thead className="bg-surface-container-low border-b border-outline-variant">
                   <tr className="font-label-caps text-label-caps text-on-surface-variant">
-                    <th className="px-5 py-4 font-extrabold tracking-wider w-[24%]">CHECKLIST</th>
+                    <th className="px-5 py-4 font-extrabold tracking-wider w-[21%]">CHECKLIST</th>
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[11%]">STATUS</th>
                     <th
                       className="px-5 py-4 font-extrabold tracking-wider w-[9%]"
@@ -420,7 +420,7 @@ export default function ChecklistsPage() {
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[13%]">REGION</th>
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[14%]">COLLABORATORS</th>
                     <th className="px-5 py-4 font-extrabold tracking-wider w-[14%]">LAST MODIFIED</th>
-                    <th className="px-5 py-4 font-extrabold tracking-wider w-[7%] text-center">MAP</th>
+                    <th className="px-5 py-4 font-extrabold tracking-wider w-[10%] text-center">MAP</th>
                     <th className="px-5 py-4 w-[8%]" />
                   </tr>
                 </thead>
@@ -504,7 +504,7 @@ export default function ChecklistsPage() {
                           </span>
                         </td>
                         <td className="px-2 py-4 text-center" onClick={(e) => e.stopPropagation()}>
-                          <MapViewButton variant="icon" onClick={() => setMapViewChecklistId(checklist.id)} />
+                          <MapViewButton variant="icon-labeled" onClick={() => setMapViewChecklistId(checklist.id)} />
                         </td>
                         <td className="px-4 py-4 text-right">
                           <button
@@ -714,7 +714,7 @@ function MetadataSubRow({ checklistId, speciesCount }: { checklistId: string; sp
       onClick={() => !confirming && router.push(`/checklists/${checklistId}/publish?step=metadata`)}
       className="bg-surface-container-low/40 hover:bg-surface-container-low cursor-pointer transition-colors"
     >
-      <td colSpan={7} className="px-5 py-2">
+      <td colSpan={8} className="px-5 py-2">
         <div className="pl-10 flex flex-col gap-1.5 border-t border-dashed border-outline-variant pt-2">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -814,7 +814,7 @@ function PackageSubRow({
       onClick={() => !confirming && router.push(`/checklists/${checklistId}/publish?step=review`)}
       className="bg-surface-container-low/40 hover:bg-surface-container-low cursor-pointer transition-colors"
     >
-      <td colSpan={7} className="px-5 py-2">
+      <td colSpan={8} className="px-5 py-2">
         <div className="pl-10 flex flex-col gap-1.5 border-t border-dashed border-outline-variant pt-2">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -892,7 +892,7 @@ function PublicationStatusSubRow({ checklistId, submittedAt }: { checklistId: st
       onClick={() => router.push(`/checklists/${checklistId}/publish?step=ipt&iptStep=register`)}
       className="bg-surface-container-low/40 hover:bg-surface-container-low cursor-pointer transition-colors"
     >
-      <td colSpan={7} className="px-5 py-2">
+      <td colSpan={8} className="px-5 py-2">
         <div className="pl-10 flex items-center justify-between gap-3 border-t border-dashed border-outline-variant pt-2">
           <div className="flex items-center gap-3">
             <span className="material-symbols-outlined text-[16px] text-secondary">hourglass_top</span>
