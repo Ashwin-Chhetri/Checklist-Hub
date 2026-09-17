@@ -6,18 +6,26 @@ import { callDataService } from "@/lib/dataService.server";
 // cache up front, so the first person to open a brand-new checklist's
 // Evidence tab never waits on this).
 //
-// Two-tier lookup, need-basis: Supabase's `region_boundaries` table is
-// checked first (cheap, and only ever holds regions actual checklists have
-// used), keyed by (source, cache_key) since boundaries now come from two
-// distinct sources:
+// Need-basis lookup: Supabase's `region_boundaries` table is checked first
+// (cheap, and only ever holds regions actual checklists have used), keyed by
+// (source, cache_key) since boundaries now come from three distinct sources:
+//  - "osm-admin": resolved live by NAME ("<district> District, <state>,
+//    <country>") via Nominatim's forward search (see
+//    osmBoundary.server.ts's resolveAdministrativeBoundaryByName) — this is
+//    the app's PRIMARY source, tried before a region's own region_gadm_id,
+//    because GADM's bundled geometry for a district can be a stale/
+//    differently-digitized vintage of the real boundary.
 //  - "gadm": the already-simplified GeoJSON is read straight out of the
 //    local GADM mirror (app/data/gadm.sqlite, built by `npm run
 //    build:gadm` — per AGENTS.md, that full-world reference mirror stays on
 //    the server filesystem, not Supabase). Only ever populated for
-//    level-2 (district) GADM GIDs — see scripts/build-gadm.mjs.
-//  - "osm": fetched live from Nominatim's polygon lookup (see
-//    osmBoundary.server.ts) for regions that have no GADM geometry (any
-//    region whose lookup landed above district level, e.g. Sikkim).
+//    level-2 (district) GADM GIDs — see scripts/build-gadm.mjs. Kept as a
+//    fallback for when osm-admin can't resolve (network issue, ambiguous/
+//    non-English name).
+//  - "osm": fetched live from Nominatim's lookup for one *specific* saved
+//    OSM element (see osmBoundary.server.ts's fetchOsmGeometry) — last-
+//    resort fallback for old regions with no district/state/country on
+//    record to build an osm-admin query from.
 // On a miss, the result is cached into Supabase so every later request for
 // that region skips the local file / external fetch entirely.
 export interface RegionBoundaryResult {
@@ -25,7 +33,7 @@ export interface RegionBoundaryResult {
   name: string | null;
 }
 
-export type BoundarySource = "gadm" | "osm";
+export type BoundarySource = "osm-admin" | "gadm" | "osm";
 
 // GADM mirror lives on the standalone reference-data-service
 // (DigitalOcean) — see reference-data-service/src/gadm.js's readGadmRow().

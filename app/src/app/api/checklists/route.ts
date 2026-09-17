@@ -4,7 +4,7 @@ import { sendInviteEmail } from "@/lib/invites/sendInviteEmail.server";
 import type { Checklist, CreateChecklistInput } from "@/types/checklist.types";
 import { buildSpeciesPayload } from "@/lib/taxonomy/buildSpeciesPayload.server";
 import { ensureRegionBoundaryCached } from "@/lib/regions/ensureRegionBoundaryCached.server";
-import { fetchOsmGeometry } from "@/lib/regions/osmBoundary.server";
+import { fetchOsmGeometry, resolveAdministrativeBoundaryByName } from "@/lib/regions/osmBoundary.server";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -59,24 +59,36 @@ export async function POST(request: NextRequest) {
   }
 
   // Best-effort: decode/fetch + cache this region's boundary GeoJSON now, so
-  // the first person to open this checklist's Evidence tab never waits on
-  // it — same pattern as the invite emails below (do the side work inline
-  // here rather than firing it off unawaited, since this route may run in
-  // an environment that freezes the process right after the response is
-  // sent). Prefer GADM (no external call) when it resolved to a
-  // district-level GID with stored geometry; otherwise fall back to
-  // warming the OSM-sourced cache, since GADM has no geometry at all for
-  // state/country-level GIDs (e.g. Sikkim) — see ensureRegionBoundaryCached.server.ts.
-  let gadmBoundaryFound = false;
-  if (input.region_gadm_id) {
+  // the first person to open this checklist's Map/List/Evidence views never
+  // waits on it — same pattern as the invite emails below (do the side work
+  // inline here rather than firing it off unawaited, since this route may
+  // run in an environment that freezes the process right after the response
+  // is sent). Same tier order as regionApi.ts's fetchRegionBoundary: resolve
+  // by district/state/country name first (Nominatim's actual administrative
+  // boundary — more reliable than GADM's own bundled geometry, see
+  // osmBoundary.server.ts's resolveAdministrativeBoundaryByName), then GADM,
+  // then the specific OSM element the user selected.
+  let boundaryFound = false;
+  if (input.region_district && input.region_country) {
+    try {
+      const cacheKey = `${input.region_country}|${input.region_state ?? ""}|${input.region_district}`.toLowerCase();
+      const result = await ensureRegionBoundaryCached(supabase, "osm-admin", cacheKey, () =>
+        resolveAdministrativeBoundaryByName(input.region_district, input.region_state, input.region_country).then((r) => r ?? { geometry: null, name: null }),
+      );
+      boundaryFound = !!result.geometry;
+    } catch (err) {
+      console.error(`[checklists] Failed to pre-warm admin boundary cache for ${input.region_district}, ${input.region_state}, ${input.region_country}`, err);
+    }
+  }
+  if (!boundaryFound && input.region_gadm_id) {
     try {
       const result = await ensureRegionBoundaryCached(supabase, "gadm", input.region_gadm_id);
-      gadmBoundaryFound = !!result.geometry;
+      boundaryFound = !!result.geometry;
     } catch (err) {
       console.error(`[checklists] Failed to pre-warm GADM boundary cache for gid=${input.region_gadm_id}`, err);
     }
   }
-  if (!gadmBoundaryFound && input.region_osm_type && input.region_osm_id) {
+  if (!boundaryFound && input.region_osm_type && input.region_osm_id) {
     try {
       const cacheKey = `${input.region_osm_type}:${input.region_osm_id}`;
       await ensureRegionBoundaryCached(supabase, "osm", cacheKey, () =>

@@ -31,7 +31,7 @@ export default function EvidencePanel({ species, checklistId, region }: Evidence
   const revisions = evidence?.revisions ?? [];
 
   const boundaryQuery = useRegionBoundary(
-    region ? { gadmId: region.gadmId, osmType: region.osmType, osmId: region.osmId } : null,
+    region ? { gadmId: region.gadmId, osmType: region.osmType, osmId: region.osmId, district: region.district, state: region.state, country: region.country } : null,
   );
   const gbifQuery = useSpeciesOccurrences(species.gbif_taxon_key, region?.gadmId);
   const isAves = species.class?.toLowerCase() === "aves";

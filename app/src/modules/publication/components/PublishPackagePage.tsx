@@ -165,6 +165,9 @@ export function PublishPackagePage({
     gadmId: checklist?.region_gadm_id,
     osmType: checklist?.region_osm_type,
     osmId: checklist?.region_osm_id,
+    district: checklist?.region_district,
+    state: checklist?.region_state,
+    country: checklist?.region_country,
   });
   const regionBoundingBox = regionBoundary?.geometry ? boundingBoxFromGeometry(regionBoundary.geometry) : null;
 

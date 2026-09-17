@@ -243,7 +243,7 @@ export interface RegionBoundary {
   name: string | null;
   /** Which tier actually produced this geometry — "bbox" is a rectangular
    * approximation, not a real outline, so callers can render it differently. */
-  source: "gadm" | "osm" | "bbox" | null;
+  source: "osm-admin" | "gadm" | "osm" | "bbox" | null;
 }
 
 export interface RegionBoundaryRequest {
@@ -251,6 +251,12 @@ export interface RegionBoundaryRequest {
   osmType?: string | null;
   osmId?: string | null;
   boundingBox?: [string, string, string, string] | null;
+  /** District/state/country name triple — lets fetchRegionBoundary resolve
+   * the boundary by NAME (the primary tier, see its doc comment) rather than
+   * by a specific stored GID/OSM element. */
+  district?: string | null;
+  state?: string | null;
+  country?: string | null;
 }
 
 export interface LngLatBounds {
@@ -295,6 +301,16 @@ function bboxToPolygon(boundingBox: [string, string, string, string]): BoundaryG
   };
 }
 
+async function fetchAdminBoundary(district: string, state: string | null | undefined, country: string): Promise<RegionBoundary | null> {
+  const params = new URLSearchParams({ district, country });
+  if (state) params.set("state", state);
+  const response = await fetch(`/api/regions/admin-boundary?${params.toString()}`);
+  if (!response.ok) return null;
+  const data = (await response.json()) as { geometry: BoundaryGeometry | null; name: string | null };
+  if (!data.geometry) return null;
+  return { geometry: data.geometry, name: data.name, source: "osm-admin" };
+}
+
 async function fetchGadmBoundary(gadmId: string): Promise<RegionBoundary | null> {
   const response = await fetch(`/api/regions/gadm-geometry?gid=${encodeURIComponent(gadmId)}`);
   if (!response.ok) return null;
@@ -314,18 +330,35 @@ async function fetchOsmBoundary(osmType: string, osmId: string): Promise<RegionB
 }
 
 /**
- * Resolves a region's boundary GeoJSON for the workbench Evidence panel's
- * map, trying each tier in order:
- *  1. GADM's cached district-level geometry (`/api/regions/gadm-geometry`) —
- *     fastest, no external call, but only ever populated when the region
- *     resolved to a level-2 (district) GADM GID.
- *  2. Nominatim's own boundary for the exact OSM place the user selected
- *     (`/api/regions/osm-boundary`) — works at any admin level worldwide,
- *     covers the state/country-level GADM misses (e.g. Sikkim).
- *  3. A rectangular approximation from Nominatim's bounding box — so the
- *     panel is never fully blank even if both real boundary sources fail.
+ * Resolves a region's boundary GeoJSON for the workbench's Map/List/Evidence
+ * views, trying each tier in order:
+ *  1. Nominatim resolved by NAME — "<district> District, <state>, <country>"
+ *     (`/api/regions/admin-boundary`) — the PRIMARY source. Verified live
+ *     against real data to reliably land on the actual administrative
+ *     boundary relation (not a same-named town/city), and to be more
+ *     current than GADM's own bundled geometry for at least one real
+ *     district (Darjeeling: GADM v4.1's stored shape visibly disagrees with
+ *     OSM's actively-maintained one). Cached after the first resolution, so
+ *     this only costs a live Nominatim round trip once per region ever.
+ *  2. GADM's cached district-level geometry (`/api/regions/gadm-geometry`) —
+ *     fallback for when tier 1 can't resolve (network issue, no district/
+ *     state/country on record). `region_gadm_id` itself is still always
+ *     resolved and stored regardless of which tier wins here — it's the ID
+ *     GBIF occurrence queries scope to, unrelated to which geometry is used
+ *     for display.
+ *  3. Nominatim's own boundary for the exact OSM place the user originally
+ *     selected (`/api/regions/osm-boundary`) — last-resort fallback for
+ *     regions with no district/state/country on record to build tier 1's
+ *     query from (very old checklists).
+ *  4. A rectangular approximation from Nominatim's bounding box — so the
+ *     panel is never fully blank even if every real boundary source fails.
  */
 export async function fetchRegionBoundary(request: RegionBoundaryRequest): Promise<RegionBoundary> {
+  if (request.district && request.country) {
+    const adminBoundary = await fetchAdminBoundary(request.district, request.state, request.country);
+    if (adminBoundary) return adminBoundary;
+  }
+
   if (request.gadmId) {
     const gadmBoundary = await fetchGadmBoundary(request.gadmId);
     if (gadmBoundary) return gadmBoundary;
