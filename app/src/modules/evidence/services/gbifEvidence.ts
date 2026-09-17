@@ -267,6 +267,44 @@ export async function getOccurrenceCoordinates(
 }
 
 /**
+ * Occurrence coordinates for a whole SET of taxa at once — the List view's
+ * family/genus wheel has no single GBIF taxon key of its own for a group
+ * (we only resolve individual species against the backbone), so instead of
+ * one request per species this fires a single query with the group's sample
+ * species' keys repeated as the same `taxonKey` param, which GBIF's search
+ * combines with OR (repeated values of one param are OR'd; different params
+ * are AND'd). Capped to 100 keys — comfortably under any URL length limit
+ * and already far more than the sample sizes this app ever passes in.
+ */
+export async function getOccurrenceCoordinatesForTaxa(
+  taxonKeys: number[],
+  gadmGid?: string,
+  limit = 300,
+): Promise<GbifOccurrencePoint[]> {
+  if (taxonKeys.length === 0) return [];
+  const url = new URL(`${GBIF_API}/occurrence/search`);
+  taxonKeys.slice(0, 100).forEach((key) => url.searchParams.append("taxonKey", String(key)));
+  url.searchParams.set("hasCoordinate", "true");
+  url.searchParams.set("limit", String(Math.min(limit, 300)));
+  if (gadmGid) url.searchParams.set("gadmGid", gadmGid);
+
+  const response = await fetch(url.toString());
+  if (!response.ok) throw new Error(`GBIF occurrence/search failed: ${response.status}`);
+  const data = await response.json();
+  const results: Array<Record<string, unknown>> = data.results ?? [];
+
+  return results
+    .map((r) => ({
+      key: r.key as number,
+      lat: r.decimalLatitude as number,
+      lng: r.decimalLongitude as number,
+      datasetName: (r.datasetName as string) ?? null,
+      eventDate: (r.eventDate as string) ?? null,
+    }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Number.isFinite(p.key));
+}
+
+/**
  * Breakdown of occurrence record counts by basisOfRecord (e.g. HUMAN_OBSERVATION,
  * PRESERVED_SPECIMEN) for a single species within an optional region. Used to
  * gauge evidence strength/quality during evidence review.

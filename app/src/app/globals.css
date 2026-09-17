@@ -445,6 +445,64 @@ html:has([data-modal="true"]) {
   }
 }
 
+/* Region Explorer Map's custom on-map controls (3D toggle + rotate-nudge) —
+   ported verbatim from the design prototype
+   (prototypes/map-view-phase0-darjeeling.html's .view3d-ctrl/.rotate-ctrl),
+   real maplibregl.IControl instances built in mapControls.ts. Kept as plain
+   CSS rather than Tailwind classes since these buttons are plain DOM nodes
+   MapLibre owns, outside React's render tree. */
+.view3d-ctrl button {
+  width: 29px;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1c1c1a;
+  background: #ffffff;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.view3d-ctrl button:hover {
+  color: #1f6f43;
+}
+.view3d-ctrl.active button {
+  background: #e2574c;
+  color: #fff;
+}
+/* MapLibre's own default CSS (.maplibregl-ctrl button:not(:disabled):hover)
+   sets a 5%-black hover wash that's more specific than the rule above, so
+   hovering the active red button was replacing the red with grey. This
+   overrides it back to red on hover too. */
+.view3d-ctrl.active button:hover {
+  background: #e2574c !important;
+  color: #fff;
+}
+
+.rotate-ctrl {
+  display: flex !important;
+  flex-direction: row;
+}
+.rotate-ctrl button {
+  width: 29px;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1c1c1a;
+  background: #ffffff;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 0;
+}
+.rotate-ctrl button:hover {
+  color: #1f6f43;
+}
+.rotate-ctrl button:first-child {
+  border-right: 1px solid #dcd9d0;
+}
+
 .workbench-sidebar-count-alert {
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 9px;

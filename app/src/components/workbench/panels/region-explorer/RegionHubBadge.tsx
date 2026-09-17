@@ -23,6 +23,11 @@ interface RegionHubBadgeProps {
    * the requested WMS image's pixel size. Keep this modest: it directly
    * controls how much this badge costs to fetch and paint. */
   size?: number;
+  /** Occurrence points for whichever taxon group is currently selected in
+   * the List view's wheel/sidebar — plotted as small dots clipped to the
+   * region shape. Omitted (or empty) when nothing is selected, in which
+   * case the badge renders exactly as it always has. */
+  points?: Array<{ key: number; lat: number; lng: number }>;
 }
 
 /**
@@ -57,6 +62,7 @@ export default function RegionHubBadge({
   regionName,
   onOpenMap,
   size = 200,
+  points,
 }: RegionHubBadgeProps) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgErrored, setImgErrored] = useState(false);
@@ -146,6 +152,10 @@ export default function RegionHubBadge({
               onError={() => setImgErrored(true)}
             />
           )}
+          {points?.map((p) => {
+            const [x, y] = projector!.project(p.lng, p.lat);
+            return <circle key={p.key} cx={x} cy={y} r={1.6} className="fill-red-500/85" />;
+          })}
         </g>
         <path
           d={pathD}

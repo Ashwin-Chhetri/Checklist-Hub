@@ -169,9 +169,10 @@ export default function MapListDialog({ checklistId, checklistTitle, region, onC
             </div>
           ) : (
             <FamilyListView
-              families={families}
+              checklistId={checklistId}
               boundary={boundary}
               bbox={bbox}
+              gadmId={region.gadmId}
               isBoundaryApproximate={boundaryQuery.data?.source === "bbox"}
               isBoundaryLoading={boundaryQuery.isLoading}
               regionName={boundaryQuery.data?.name ?? region.name}

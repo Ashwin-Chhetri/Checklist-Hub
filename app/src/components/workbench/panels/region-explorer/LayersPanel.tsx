@@ -189,21 +189,18 @@ function ToggleRow({
   checked,
   onChange,
   label,
-  swatch,
   count,
   disabled,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
-  swatch?: string;
   count?: number | null;
   disabled?: boolean;
 }) {
   return (
     <label className="flex-1 flex items-center gap-2 py-1.5 text-[11px] min-w-0" style={{ opacity: disabled ? 0.45 : 1, cursor: disabled ? "default" : "pointer" }}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="w-3.5 h-3.5 flex-shrink-0" style={{ accentColor: PROTO.brand }} />
-      {swatch && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: swatch }} />}
       <span className="flex-1 truncate" style={{ color: PROTO.ink }}>
         {label}
       </span>
@@ -401,12 +398,11 @@ export default function LayersPanel({
 
             <div>
               <SectionHeading>Layers</SectionHeading>
-              <ToggleRow checked={showProtected} onChange={onShowProtectedChange} label="Protected Areas" swatch={PROTECTED_AREA_CLASSES["2"].color} count={protectedAreasCount} disabled={overlaysLoading} />
+              <ToggleRow checked={showProtected} onChange={onShowProtectedChange} label="Protected Areas" count={protectedAreasCount} disabled={overlaysLoading} />
               <LayerRow
                 checked={showWater}
                 onChange={onShowWaterChange}
                 label="Water Bodies"
-                swatch={MAP_THEME.water}
                 count={waterBodiesCount}
                 disabled={overlaysLoading}
                 download={{

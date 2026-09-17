@@ -17,6 +17,7 @@ import {
 } from "./mapLayers";
 import type { Bbox } from "./overpassApi";
 import { useProtectedAreas, useWaterBodies, useRegionStats } from "./regionQueries";
+import { createThreeDToggleControl, createRotateNudgeControl, type ThreeDToggleControl, type RotateNudgeControl } from "./mapControls";
 import LayersPanel from "./LayersPanel";
 import MapDetailsDialog from "./MapDetailsDialog";
 
@@ -69,6 +70,8 @@ export default function RegionExplorerMap({
 }: RegionExplorerMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const threeDCtrlRef = useRef<ThreeDToggleControl | null>(null);
+  const rotateCtrlRef = useRef<RotateNudgeControl | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [tileError, setTileError] = useState<string | null>(null);
   const [tilesRendered, setTilesRendered] = useState(false);
@@ -125,6 +128,16 @@ export default function RegionExplorerMap({
       }
       mapRef.current = map;
       map.addControl(new maplibregl.NavigationControl(), "top-right");
+      // Stacked below the zoom/compass group by addControl's own ordering —
+      // ported from the design prototype (ThreeDToggleControl/
+      // RotateNudgeControl in map-view-phase0-darjeeling.html) since the
+      // only built-in way to pitch/rotate is an undiscoverable ctrl+drag.
+      const threeDCtrl = createThreeDToggleControl(() => setTerrainEnabledState((prev) => !prev));
+      map.addControl(threeDCtrl, "top-right");
+      threeDCtrlRef.current = threeDCtrl;
+      const rotateCtrl = createRotateNudgeControl();
+      map.addControl(rotateCtrl, "top-right");
+      rotateCtrlRef.current = rotateCtrl;
       map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-right");
       map.on("error", (e) => {
         console.error("[RegionExplorerMap]", e?.error?.message ?? e);
@@ -156,20 +169,47 @@ export default function RegionExplorerMap({
       cancelled = true;
       mapRef.current?.remove();
       mapRef.current = null;
+      threeDCtrlRef.current = null;
+      rotateCtrlRef.current = null;
       setMapLoaded(false);
     };
   }, []);
 
-  // ---- Keep the map correctly sized whenever the container's own box changes
-  // (dialog width transition between Map/List tabs, window resize, etc.) —
-  // MapLibre doesn't always catch this on its own inside a modal. ----
+  // ---- Keep the map correctly sized AND correctly framed whenever the
+  // container's own box changes (dialog width transition between Map/List
+  // tabs, window resize, etc.) — MapLibre doesn't catch either on its own
+  // inside a modal. Re-fitting here (not just resizing) matters: if the very
+  // first fitBounds call below ran while the dialog's open transition (or
+  // the List<->Map tab swap, which unmounts/remounts this container) hadn't
+  // finished sizing the container yet, MapLibre computes that fit from
+  // whatever stale/zero transform size it had at that instant — a later
+  // resize() alone fixes the canvas's pixel size but never recomputes the
+  // camera, leaving it parked near the initial world view where the region
+  // is a barely-visible speck and the cream "outside region" mask fills
+  // almost the entire screen (reads as "nothing rendered"). A genuine
+  // container resize (this observer's only trigger) never fires from the
+  // user panning/zooming the map itself, so re-fitting here can't fight
+  // their own navigation. ----
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => mapRef.current?.resize());
+    const observer = new ResizeObserver(() => {
+      const map = mapRef.current;
+      if (!map) return;
+      map.resize();
+      if (bbox) {
+        map.fitBounds(
+          [
+            [bbox.minLng, bbox.minLat],
+            [bbox.maxLng, bbox.maxLat],
+          ],
+          { padding: 24, duration: 0 },
+        );
+      }
+    });
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [bbox]);
 
   function fitToRegion() {
     const map = mapRef.current;
@@ -218,6 +258,13 @@ export default function RegionExplorerMap({
     addVegetationLayer(map, bbox);
     setBaseMapType(map, baseMapType);
 
+    // Resize BEFORE fitting, synchronously — fitBounds computes the camera
+    // from whatever transform size the map currently has, and the
+    // container (freshly mounted on every List<->Map tab swap) may not have
+    // reported its true final size yet. Getting this order right here means
+    // the very first frame is already correctly framed, rather than relying
+    // solely on the ResizeObserver's correction above.
+    map.resize();
     map.fitBounds(
       [
         [bbox.minLng, bbox.minLat],
@@ -238,6 +285,11 @@ export default function RegionExplorerMap({
 
   useEffect(() => {
     if (mapRef.current && mapLoaded) setTerrainEnabled(mapRef.current, terrainEnabled);
+    // Keep the on-map 3D button + rotate-nudge buttons in sync regardless of
+    // which control triggered the change (sidebar thumbnail or the on-map
+    // button itself) — same pairing the prototype's setTerrainMode() does.
+    threeDCtrlRef.current?.setActive(terrainEnabled);
+    rotateCtrlRef.current?.setVisible(terrainEnabled);
   }, [terrainEnabled, mapLoaded]);
 
   // ---- Push protected areas / water bodies onto the map once fetched ----

@@ -2,18 +2,20 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BoundaryGeometry } from "@/modules/checklist/services/regionApi";
-import type { FamilyStat } from "@/modules/species/hooks/useFamilyStats";
+import { useTaxonGroupStats, type TaxonGroupParent, type TaxonGroupRank, type TaxonGroupStat } from "@/modules/species/hooks/useTaxonGroupStats";
 import { useSpeciesMedia } from "@/modules/taxonomy/hooks/useSpeciesMedia";
+import { useGroupOccurrences } from "@/modules/evidence/hooks/useGroupOccurrences";
 import RegionHubBadge from "./panels/region-explorer/RegionHubBadge";
 import type { Bbox } from "./panels/region-explorer/overpassApi";
 import ImageShimmer from "./ImageShimmer";
 
-export type { FamilyStat };
-
 interface FamilyListViewProps {
-  families: FamilyStat[];
+  checklistId: string;
   boundary: BoundaryGeometry | null;
   bbox: Bbox | null;
+  /** GADM region id — passed straight through to the occurrence-points
+   * lookup for whichever group is selected (see useGroupOccurrences). */
+  gadmId?: string | null;
   isBoundaryApproximate?: boolean;
   isBoundaryLoading?: boolean;
   regionName?: string | null;
@@ -21,13 +23,6 @@ interface FamilyListViewProps {
    * badge's click (it's a static snapshot, not a pannable map). */
   onOpenMap?: () => void;
 }
-
-// Bars beyond this are folded into "Other families" — a real multi-order
-// checklist can span dozens of families, and a wheel with that many wedges
-// stops being readable (labels collide, gaps vanish). The design prototype
-// itself only ever showed 7 sample families; this cap is this app's own
-// accommodation for real data, not something to find an equivalent for.
-const MAX_WEDGES = 14;
 
 // Everything below this line is ported 1:1 from the design prototype's own
 // List View (prototypes/map-view-phase0-darjeeling.html, LIST_* constants
@@ -139,12 +134,12 @@ function slotBoundaryR(mid: number): number {
   return CX / Math.max(Math.abs(Math.sin(rad)), Math.abs(Math.cos(rad)));
 }
 
-function orderFamiliesToFitSlots(families: FamilyStat[]): FamilyStat[] {
-  const n = families.length;
-  const bySize = [...families].sort((a, b) => b.species - a.species);
+function orderGroupsToFitSlots(groups: TaxonGroupStat[]): TaxonGroupStat[] {
+  const n = groups.length;
+  const bySize = [...groups].sort((a, b) => b.species - a.species);
   const slots = Array.from({ length: n }, (_, i) => ({ index: i, boundaryR: slotBoundaryR((360 / n) * i) }));
   slots.sort((a, b) => b.boundaryR - a.boundaryR);
-  const arrangement = new Array<FamilyStat>(n);
+  const arrangement = new Array<TaxonGroupStat>(n);
   slots.forEach((slot, k) => {
     arrangement[slot.index] = bySize[k];
   });
@@ -170,26 +165,57 @@ function FamilyGlyph() {
   );
 }
 
-// Overall thumbnail footprint — 60px * 1.2, 20% bigger than the original
-// single-photo square, now holding a small mosaic instead of one image.
+// Overall thumbnail footprint — 60px * 1.2, 20% bigger than the original.
 const THUMB_SIZE = 72;
-const THUMB_GRID_GAP = 2;
-const MAX_GRID_IMAGES = 4;
 
-// One cell of the family thumbnail mosaic — a single species' own photo (via
-// the same GBIF media lookup the workbench Evidence gallery uses) once it
-// resolves, a shimmer placeholder while that fetch is in flight, and the
-// generic glyph as the final fallback (no taxon key to look up, or the
-// lookup came back with no usable image). A resolved photo is clickable,
-// opening it full-size via `onOpen`.
-function FamilyThumbCell({ taxonKey, onOpen }: { taxonKey: number | null; onOpen: (url: string) => void }) {
-  const { data: mediaItems, isLoading } = useSpeciesMedia(taxonKey);
+// Sidebar thumbnail — one species' own photo at a time (via the same GBIF
+// media lookup the workbench Evidence gallery uses), with prev/next arrows
+// to page through the group's other sample species. A candidate with no
+// usable photo is skipped automatically (not just on manual nav) — several
+// high-ranked species in a group can easily have zero GBIF media each, and
+// stopping on the first one made "photo not found" the common case instead
+// of the exception. Falls back to the generic glyph only once every
+// candidate in the sample has been tried and none had a photo.
+function FamilyThumbCarousel({ taxonKeys, onOpenImage }: { taxonKeys: number[]; onOpenImage: (url: string) => void }) {
+  const [index, setIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
+  const clampedIndex = taxonKeys.length > 0 ? Math.min(index, taxonKeys.length - 1) : 0;
+  const taxonKey = taxonKeys[clampedIndex] ?? null;
+  const { data: mediaItems, isLoading } = useSpeciesMedia(taxonKey);
   const imageUrl = !imgError ? mediaItems?.[0]?.url : undefined;
 
+  // Auto-skip candidates with no usable photo — several high-ranked species
+  // in a group can easily have zero GBIF media each, and stopping on the
+  // first one made "photo not found" the common case instead of the
+  // exception. Adjusted directly during render (React's "adjusting state
+  // when a prop changes" pattern — see
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  // rather than in an effect, since this only reacts to this component's own
+  // already-computed render output, not an external system. `checkedKey`
+  // records which candidate this has already acted on, so it fires at most
+  // once per resolved fetch instead of looping.
+  const [checkedKey, setCheckedKey] = useState<number | null>(null);
+  if (!isLoading && taxonKey !== null && checkedKey !== taxonKey && !imageUrl && clampedIndex < taxonKeys.length - 1) {
+    setCheckedKey(taxonKey);
+    setIndex(clampedIndex + 1);
+  }
+
+  function step(delta: number) {
+    if (taxonKeys.length === 0) return;
+    setImgError(false);
+    setCheckedKey(null);
+    setIndex((i) => (Math.min(i, taxonKeys.length - 1) + delta + taxonKeys.length) % taxonKeys.length);
+  }
+
+  const showShimmer = taxonKey != null && isLoading;
+  const showNav = taxonKeys.length > 1;
+
   return (
-    <div className="relative w-full h-full bg-[#efece1] flex items-center justify-center overflow-hidden">
-      {taxonKey != null && isLoading ? (
+    <div
+      className="relative flex-shrink-0 rounded-lg overflow-hidden bg-[#efece1] group"
+      style={{ width: THUMB_SIZE, height: THUMB_SIZE }}
+    >
+      {showShimmer ? (
         <ImageShimmer className="absolute inset-0" />
       ) : imageUrl ? (
         <img
@@ -197,43 +223,45 @@ function FamilyThumbCell({ taxonKey, onOpen }: { taxonKey: number | null; onOpen
           alt=""
           className="absolute inset-0 w-full h-full object-cover cursor-zoom-in"
           loading="lazy"
-          onError={() => setImgError(true)}
+          onError={() => {
+            setImgError(true);
+            setCheckedKey(null);
+          }}
           onClick={(e) => {
             e.stopPropagation();
-            onOpen(imageUrl);
+            onOpenImage(imageUrl);
           }}
         />
       ) : (
-        <FamilyGlyph />
-      )}
-    </div>
-  );
-}
-
-// Family sidebar thumbnail — a small mosaic of up to MAX_GRID_IMAGES
-// different species' own photos from the family, so the family card reads
-// as representative of the family rather than just its single top species.
-// Falls back to one glyph-only cell when the family has no species with a
-// resolved taxon key at all.
-function FamilyThumbGrid({ taxonKeys, onOpenImage }: { taxonKeys: number[]; onOpenImage: (url: string) => void }) {
-  const slots: Array<number | null> = taxonKeys.length > 0 ? taxonKeys.slice(0, MAX_GRID_IMAGES) : [null];
-
-  return (
-    <div
-      className="relative flex-shrink-0 rounded-lg overflow-hidden bg-[#efece1]"
-      style={{ width: THUMB_SIZE, height: THUMB_SIZE }}
-    >
-      {slots.length === 1 ? (
-        <FamilyThumbCell taxonKey={slots[0]} onOpen={onOpenImage} />
-      ) : (
-        <div
-          className={`grid w-full h-full ${slots.length === 2 ? "grid-cols-2 grid-rows-1" : "grid-cols-2 grid-rows-2"}`}
-          style={{ gap: THUMB_GRID_GAP }}
-        >
-          {slots.map((key, i) => (
-            <FamilyThumbCell key={key ?? `empty-${i}`} taxonKey={key} onOpen={onOpenImage} />
-          ))}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <FamilyGlyph />
         </div>
+      )}
+      {showNav && (
+        <>
+          <button
+            type="button"
+            aria-label="Previous photo"
+            onClick={(e) => {
+              e.stopPropagation();
+              step(-1);
+            }}
+            className="absolute left-0 top-0 bottom-0 w-5 flex items-center justify-center bg-gradient-to-r from-black/40 to-transparent text-white opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <span className="material-symbols-outlined text-[14px]">chevron_left</span>
+          </button>
+          <button
+            type="button"
+            aria-label="Next photo"
+            onClick={(e) => {
+              e.stopPropagation();
+              step(1);
+            }}
+            className="absolute right-0 top-0 bottom-0 w-5 flex items-center justify-center bg-gradient-to-l from-black/40 to-transparent text-white opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+          </button>
+        </>
       )}
     </div>
   );
@@ -245,34 +273,34 @@ interface LabelFit {
 }
 
 export default function FamilyListView({
-  families,
+  checklistId,
   boundary,
   bbox,
+  gadmId = null,
   isBoundaryApproximate = false,
   isBoundaryLoading = false,
   regionName = null,
   onOpenMap,
 }: FamilyListViewProps) {
-  const display = useMemo<FamilyStat[]>(() => {
-    const sorted = [...families].sort((a, b) => b.species - a.species);
-    if (sorted.length <= MAX_WEDGES) return sorted;
-    const top = sorted.slice(0, MAX_WEDGES - 1);
-    const rest = sorted.slice(MAX_WEDGES - 1);
-    const other = rest.reduce(
-      (acc, f) => ({ name: "Other families", species: acc.species + f.species, occurrences: acc.occurrences + f.occurrences, sampleTaxonKeys: [] }),
-      { name: "Other families", species: 0, occurrences: 0, sampleTaxonKeys: [] as number[] },
-    );
-    return [...top, other];
-  }, [families]);
+  // Navigation stack — [] at the root (families), [familyName] once drilled
+  // one rank down into that family's genera. Kept as a stack (rather than a
+  // single "drilled family" flag) so the breadcrumb trail and back button
+  // fall naturally out of the same state.
+  const [path, setPath] = useState<string[]>([]);
+  const rank: TaxonGroupRank = path.length === 0 ? "family" : "genus";
+  const parent: TaxonGroupParent | null = path.length === 0 ? null : { rank: "family", name: path[0] };
+  const { groups } = useTaxonGroupStats(checklistId, rank, parent);
+
+  const display = groups;
 
   // Render order != display order — biggest bars go to the roomiest
   // (diagonal-facing) slots, regardless of where they fall in `display`.
-  const arrangement = useMemo(() => orderFamiliesToFitSlots(display), [display]);
+  const arrangement = useMemo(() => orderGroupsToFitSlots(display), [display]);
   const n = arrangement.length || 1;
   const slot = 360 / n;
 
-  const totalSpecies = families.reduce((s, f) => s + f.species, 0);
-  const totalOcc = families.reduce((s, f) => s + f.occurrences, 0);
+  const totalSpecies = display.reduce((s, f) => s + f.species, 0);
+  const totalOcc = display.reduce((s, f) => s + f.occurrences, 0);
   const speciesMax = Math.max(...display.map((f) => f.species), 1);
   const scaleMax = niceCeil(speciesMax * 1.05);
 
@@ -286,11 +314,11 @@ export default function FamilyListView({
 
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; f: FamilyStat } | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; f: TaxonGroupStat } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
 
-  // Family thumbnail lightbox — any resolved photo in the sidebar mosaic
+  // Family thumbnail lightbox — any resolved photo in the sidebar carousel
   // opens full-size here; closes on backdrop click, the X, or Escape.
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -301,6 +329,12 @@ export default function FamilyListView({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [lightboxUrl]);
+
+  // Occurrence points for whichever group is currently selected — plotted on
+  // the center hub badge so clicking a family/genus shows "where" as well as
+  // "how many". Nothing selected -> no lookup, badge renders as before.
+  const selectedGroup = display.find((f) => f.name === selected) ?? null;
+  const pointsQuery = useGroupOccurrences(selectedGroup?.sampleTaxonKeys ?? [], gadmId);
 
   // Text-fit safety net — mirrors the prototype's binary-search wrap/break:
   // measure each name's actual rendered width against its slot's available
@@ -350,23 +384,72 @@ export default function FamilyListView({
     setLabelFits(next);
   }, [arrangement, slot]);
 
-  function moveTooltip(e: React.MouseEvent, f: FamilyStat) {
+  function moveTooltip(e: React.MouseEvent, f: TaxonGroupStat) {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return;
     setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, f });
   }
 
-  function selectFamily(name: string) {
+  function selectGroup(name: string) {
     setSelected((prev) => (prev === name ? null : name));
     const card = stripRef.current?.querySelector(`[data-fam="${CSS.escape(name)}"]`);
     card?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
   }
 
+  // Drilling one rank down (family -> genus) is the only level this
+  // supports today — genus is already the last rank above the individual
+  // species rows themselves, so there's nowhere further down to go.
+  function drillInto(name: string) {
+    if (rank !== "family") return;
+    setPath([name]);
+    setSelected(null);
+    setHovered(null);
+    setTooltip(null);
+  }
+
+  function goBack() {
+    setPath([]);
+    setSelected(null);
+    setHovered(null);
+    setTooltip(null);
+  }
+
   const activeName = selected ?? hovered;
+  const rankLabel = rank === "family" ? "Families" : "Genera";
+  const unitLabel = (count: number) => (rank === "family" ? (count === 1 ? "family" : "families") : count === 1 ? "genus" : "genera");
 
   return (
     <div className="flex h-full w-full" style={{ background: "#ffffff" }}>
-      <div className="flex-1 min-w-0 flex items-center justify-center p-5">
+      <div className="flex-1 min-w-0 relative flex items-center justify-center p-5">
+        {/* Back button + breadcrumb — only shown once drilled below the
+            family root, top-left of the wheel pane. */}
+        {path.length > 0 && (
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={goBack}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider mono-text hover:bg-black/5 transition-colors"
+              style={{ background: "#ffffff", border: "1px solid #dcd9d0", color: "#1c1c1a" }}
+            >
+              <span className="material-symbols-outlined text-[14px]">arrow_back</span>
+              Back
+            </button>
+            <div className="text-[11px] mono-text flex items-center" style={{ color: "#6b6a63" }}>
+              <button type="button" onClick={goBack} className="hover:underline" style={{ color: "#6b6a63" }}>
+                Families
+              </button>
+              {path.map((name) => (
+                <span key={name} className="flex items-center">
+                  <span className="mx-1">›</span>
+                  <span className="font-bold" style={{ color: "#1c1c1a" }}>
+                    {name}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div ref={wrapRef} className="relative h-full flex items-center justify-center">
           <svg viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} className="block h-full w-auto max-w-full overflow-visible">
             <foreignObject x={CX - CENTER_R} y={CY - CENTER_R} width={CENTER_R * 2} height={CENTER_R * 2}>
@@ -379,12 +462,13 @@ export default function FamilyListView({
                   regionName={regionName}
                   onOpenMap={onOpenMap}
                   size={200}
+                  points={pointsQuery.data}
                 />
               </div>
             </foreignObject>
             <circle cx={CX} cy={CY} r={CENTER_R} fill="none" stroke="#dcd9d0" strokeWidth={1} />
 
-            {/* Spokes stop at each family's own bar tip, sitting fully
+            {/* Spokes stop at each group's own bar tip, sitting fully
                 underneath the wedge — kept only so a dimmed (opacity-reduced)
                 wedge never shows a gap through to the hub behind it. */}
             <g>
@@ -405,14 +489,13 @@ export default function FamilyListView({
                 const barR = radiusForSpecies(f.species);
                 const color = listRampColor(valueT(f.species));
                 const dim = activeName != null && activeName !== f.name;
-                const isSelected = selected === f.name;
                 return (
                   <path
                     key={f.name}
                     d={sectorPath(BAR_INNER_R, barR, start, end)}
                     fill={color}
-                    stroke={isSelected ? "#1c1c1a" : "#ffffff"}
-                    strokeWidth={isSelected ? 2.5 : 1.5}
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
                     opacity={dim ? 0.35 : 1}
                     className="cursor-pointer transition-[filter,opacity] hover:brightness-[1.08] hover:saturate-[1.08]"
                     tabIndex={0}
@@ -427,11 +510,12 @@ export default function FamilyListView({
                       setHovered(null);
                       setTooltip(null);
                     }}
-                    onClick={() => selectFamily(f.name)}
+                    onClick={() => selectGroup(f.name)}
+                    onDoubleClick={() => drillInto(f.name)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        selectFamily(f.name);
+                        selectGroup(f.name);
                       }
                     }}
                   />
@@ -475,7 +559,8 @@ export default function FamilyListView({
                         setHovered(null);
                         setTooltip(null);
                       }}
-                      onClick={() => selectFamily(f.name)}
+                      onClick={() => selectGroup(f.name)}
+                      onDoubleClick={() => drillInto(f.name)}
                     >
                       <tspan
                         x={labelX}
@@ -525,11 +610,11 @@ export default function FamilyListView({
       <div className="w-[340px] flex-shrink-0 flex flex-col min-h-0" style={{ borderLeft: "1px solid #dcd9d0" }}>
         <div className="flex-shrink-0 px-4 pt-3.5 pb-2.5">
           <h3 className="mono-text text-[12px] font-bold uppercase tracking-wider" style={{ color: "#1c1c1a" }}>
-            Families
+            {rankLabel}
           </h3>
           <p className="text-[10px] mt-0.5 leading-snug" style={{ color: "#6b6a63" }}>
             {totalSpecies.toLocaleString()} species &middot; {totalOcc.toLocaleString()} occurrences across{" "}
-            {families.length.toLocaleString()} {families.length === 1 ? "family" : "families"}
+            {display.length.toLocaleString()} {unitLabel(display.length)}
           </p>
         </div>
         <div ref={stripRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3.5 pb-2">
@@ -540,7 +625,8 @@ export default function FamilyListView({
                 key={f.name}
                 type="button"
                 data-fam={f.name}
-                onClick={() => selectFamily(f.name)}
+                onClick={() => selectGroup(f.name)}
+                onDoubleClick={() => drillInto(f.name)}
                 className="w-full flex items-center gap-3.5 py-3 px-0.5 text-left transition-colors last:border-b-0"
                 style={{
                   borderBottom: "1px solid #dcd9d0",
@@ -553,7 +639,7 @@ export default function FamilyListView({
                   if (!isSelected) e.currentTarget.style.background = "transparent";
                 }}
               >
-                <FamilyThumbGrid taxonKeys={f.sampleTaxonKeys} onOpenImage={setLightboxUrl} />
+                <FamilyThumbCarousel taxonKeys={f.sampleTaxonKeys} onOpenImage={setLightboxUrl} />
                 <div className="min-w-0 flex flex-col gap-0.5">
                   <div className="text-[13.5px] font-bold leading-tight truncate" style={{ color: "#1c1c1a" }} title={f.name}>
                     {f.name}
