@@ -9,25 +9,19 @@ import type { Bbox } from "./overpassApi";
 
 const PROTO = { bg: "#efece1", border: "#dcd9d0", ink: "#1c1c1a", inkDim: "#6b6a63", brand: "#1f6f43" };
 
-// Occurrence point marker — a small map-pin glyph (not a plain dot) drawn in
-// its own 24x24 box with the tip at (12, 22), the pin's usual anchor point.
-// Colored violet: red was ruled out (reads as an error/warning accent
-// elsewhere in the app) and the brand green got lost against this badge's
-// own dark-green forest-cover pixels; violet isn't part of the WorldCover
-// legend at all (tree/shrub/cropland/built-up/water/wetland/bare all land on
-// green, tan, yellow, pink, blue or grey), so it stays visible over every
-// land-cover class the badge can show.
-const PIN_PATH = "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z";
+// Occurrence point marker — the app's brand location-pin asset
+// (public/checklisthub_location_pin.svg, natural size 24x28 with the tip at
+// the bottom-center), same icon used for the Evidence tab's occurrence map
+// (EvidenceRegionMap) so every marker across the app reads as the same mark.
+const PIN_SRC = "/checklisthub_location_pin.svg";
+const PIN_NATURAL_WIDTH = 24;
+const PIN_NATURAL_HEIGHT = 28;
 const PIN_TIP_X = 12;
-const PIN_TIP_Y = 22;
+const PIN_TIP_Y = 28;
 // Rendered height in hub-badge SVG units — small enough not to blanket the
 // badge when there are many points, still tall enough to read as a pin
 // rather than a blob.
 const PIN_RENDER_SIZE = 7;
-// Highlight ellipse (the glossy "3D" touch) — same coordinate space as
-// PIN_PATH, sitting in the head's upper-left where a light source would hit
-// a rounded, glassy surface.
-const PIN_HIGHLIGHT = { cx: 9, cy: 7, rx: 2.1, ry: 1.3, rotate: -35 };
 
 interface RegionHubBadgeProps {
   boundary: BoundaryGeometry | null;
@@ -127,7 +121,6 @@ export default function RegionHubBadge({
   }, [bbox, imageBox]);
 
   const clipId = `hub-clip-${useId()}`;
-  const pinGradientId = `hub-pin-grad-${useId()}`;
   const showLoading = isBoundaryLoading || !projector;
 
   if (showLoading) {
@@ -157,13 +150,6 @@ export default function RegionHubBadge({
           <clipPath id={clipId}>
             <path d={pathD} fillRule="evenodd" />
           </clipPath>
-          {/* Gives the pin body a glossy, rounded-3D shading instead of a
-              flat fill — lighter upper-left, deeper lower-right. */}
-          <radialGradient id={pinGradientId} cx="35%" cy="28%" r="75%">
-            <stop offset="0%" stopColor="#a682e8" />
-            <stop offset="55%" stopColor="#6d3fc0" />
-            <stop offset="100%" stopColor="#472a83" />
-          </radialGradient>
         </defs>
         <g clipPath={`url(#${clipId})`}>
           <rect x={0} y={0} width={size} height={size} fill={PROTO.bg} />
@@ -189,22 +175,8 @@ export default function RegionHubBadge({
                     SVG filter: with up to ~300 points on screen at once, a
                     real per-element blur filter would be far more expensive
                     to rasterize than one extra flat shape. */}
-                <ellipse cx={PIN_TIP_X} cy={PIN_TIP_Y - 0.5} rx={4} ry={1.5} fill="#000000" opacity={0.28} />
-                {/* Drop-shadow silhouette — the same pin shape, offset
-                    slightly down-right and rendered in flat dark, sitting
-                    behind the real (gradient-filled) pin — the "lifted off
-                    the map" look, again without a filter. */}
-                <path d={PIN_PATH} transform="translate(0.6, 0.6)" fill="#000000" opacity={0.22} />
-                <path d={PIN_PATH} fill={`url(#${pinGradientId})`} stroke="#ffffff" strokeWidth={1.2 / scale} />
-                <ellipse
-                  cx={PIN_HIGHLIGHT.cx}
-                  cy={PIN_HIGHLIGHT.cy}
-                  rx={PIN_HIGHLIGHT.rx}
-                  ry={PIN_HIGHLIGHT.ry}
-                  transform={`rotate(${PIN_HIGHLIGHT.rotate} ${PIN_HIGHLIGHT.cx} ${PIN_HIGHLIGHT.cy})`}
-                  fill="#ffffff"
-                  opacity={0.6}
-                />
+                <ellipse cx={PIN_TIP_X} cy={PIN_TIP_Y - 1.5} rx={4} ry={1.5} fill="#000000" opacity={0.28} />
+                <image href={PIN_SRC} x={0} y={0} width={PIN_NATURAL_WIDTH} height={PIN_NATURAL_HEIGHT} />
               </g>
             );
           })}

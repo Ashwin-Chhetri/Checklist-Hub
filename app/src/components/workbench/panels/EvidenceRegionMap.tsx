@@ -5,19 +5,22 @@ import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import { boundaryBbox, type BoundaryGeometry } from "@/modules/checklist/services/regionApi";
 import { applyMapTheme } from "./region-explorer/mapTheme";
 import { buildMaskGeometry, maskExcludesPoint } from "./region-explorer/regionMask";
-import type { OccurrencePoint, OccurrenceSource } from "./RegionOccurrenceMap";
+import type { OccurrencePoint } from "./RegionOccurrenceMap";
 
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 const FALLBACK_CENTER: [number, number] = [0, 20];
 const BRAND = "#c63939";
 
-const SOURCE_DOT_COLOR: Record<OccurrenceSource, { dot: string; focused: string }> = {
-  gbif: { dot: "#ef4444cc", focused: "#dc2626" },
-  ebird: { dot: "#3b82f6cc", focused: "#2563eb" },
-  inaturalist: { dot: "#22c55ecc", focused: "#16a34a" },
-};
-const OUTSIDE_REGION_DOT = "#94a3b899";
-const OUTSIDE_REGION_FOCUSED = "#64748b";
+// Brand location-pin asset (public/checklisthub_location_pin.svg) — same
+// icon used for the List tab's region badge (RegionHubBadge), so every
+// occurrence marker across the app reads as the same mark. Natural size
+// 24x28 with the tip at the bottom-center; PIN_WIDTH/HEIGHT below is that
+// asset scaled down for this map's small thumbnail size.
+const PIN_SRC = "/checklisthub_location_pin.svg";
+const PIN_WIDTH = 14;
+const PIN_HEIGHT = (PIN_WIDTH * 28) / 24;
+const PIN_WIDTH_FOCUSED = 20;
+const PIN_HEIGHT_FOCUSED = (PIN_WIDTH_FOCUSED * 28) / 24;
 
 function isPointInRings(lng: number, lat: number, rings: number[][][]): boolean {
   let inside = false;
@@ -247,27 +250,22 @@ export default function EvidenceRegionMap({
             if (!pos) return null;
             const focused = focusedKey === p.key;
             const inside = rings.length === 0 || isPointInRings(p.lng, p.lat, rings);
-            const color = inside
-              ? focused
-                ? SOURCE_DOT_COLOR[p.source].focused
-                : SOURCE_DOT_COLOR[p.source].dot
-              : focused
-                ? OUTSIDE_REGION_FOCUSED
-                : OUTSIDE_REGION_DOT;
+            const w = focused ? PIN_WIDTH_FOCUSED : PIN_WIDTH;
+            const h = focused ? PIN_HEIGHT_FOCUSED : PIN_HEIGHT;
             return (
-              <circle
+              <image
                 key={p.key}
-                cx={pos.x}
-                cy={pos.y}
-                r={focused ? 4 : 2.5}
-                fill={color}
-                stroke={focused ? "#ffffff" : undefined}
-                strokeWidth={focused ? 1 : 0}
+                href={PIN_SRC}
+                x={pos.x - w / 2}
+                y={pos.y - h}
+                width={w}
+                height={h}
+                opacity={inside ? 1 : 0.45}
+                style={{ filter: inside ? undefined : "grayscale(1)", cursor: onClickPoint ? "pointer" : undefined }}
                 className="pointer-events-auto"
                 onPointerEnter={() => onHoverPoint?.(p.key)}
                 onPointerLeave={() => onHoverPoint?.(null)}
                 onClick={() => onClickPoint?.(p)}
-                style={onClickPoint ? { cursor: "pointer" } : undefined}
               />
             );
           })}

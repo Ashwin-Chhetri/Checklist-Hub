@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 28" width="24" height="28">
+  <defs>
+    <linearGradient id="pin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ef233c"/>
+      <stop offset="1" stop-color="#b70924"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Map pin -->
+  <path d="M12 1.5C6.2 1.5 2 5.7 2 10.9c0 7 7.5 12.5 10 15.1 2.5-2.6 10-8.1 10-15.1C22 5.7 17.8 1.5 12 1.5Z"
+        fill="url(#pin)" stroke="#7f1020" stroke-width="1.1"/>
+
+  <!-- Simplified mushroom -->
+  <path d="M6.1 11.2c.2-3.2 2.6-5.2 5.9-5.2s5.7 2 5.9 5.2c-1.2 1-3.1 1.4-5.9 1.4s-4.7-.4-5.9-1.4Z"
+        fill="#fff" stroke="#7f1020" stroke-width=".85" stroke-linejoin="round"/>
+  <path d="M9.9 12.2h4.2v3.4c0 1.3-.9 2.1-2.1 2.1s-2.1-.8-2.1-2.1v-3.4Z"
+        fill="#fff" stroke="#7f1020" stroke-width=".75"/>
+  <circle cx="9.3" cy="9.4" r=".7" fill="#d71936"/>
+  <circle cx="12.8" cy="8.1" r=".75" fill="#d71936"/>
+  <circle cx="15.1" cy="10" r=".6" fill="#d71936"/>
+</svg>

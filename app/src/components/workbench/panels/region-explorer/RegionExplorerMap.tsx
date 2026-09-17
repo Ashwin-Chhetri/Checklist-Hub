@@ -118,10 +118,7 @@ export default function RegionExplorerMap({
   const [showProtected, setShowProtected] = useState(false);
   const [showWater, setShowWater] = useState(false);
   const [showNdvi, setShowNdvi] = useState(false);
-  // Defaults on so the Map tab opens showing the same ESA WorldCover
-  // land-cover view as the List tab's static RegionHubBadge preview,
-  // instead of a plain, visually-disconnected basemap.
-  const [showVegetation, setShowVegetation] = useState(true);
+  const [showVegetation, setShowVegetation] = useState(false);
   const [legendOn, setLegendOn] = useState(true);
   const [mapDetailsOpen, setMapDetailsOpen] = useState(false);
 
