@@ -2,6 +2,7 @@ import type maplibregl from "maplibre-gl";
 import type { Bbox } from "./overpassApi";
 import { PROTECTED_AREA_CLASSES } from "./overpassApi";
 import { MAP_THEME } from "./mapTheme";
+import { WORLDCOVER_WMS_BASE, WORLDCOVER_LAYER, WORLDCOVER_TIME, ndviDateString } from "./regionStats";
 
 export type BaseMapType = "default" | "satellite";
 
@@ -151,6 +152,75 @@ export function addWaterBodiesLayer(map: maplibregl.Map, geojson: GeoJSON.Featur
   } else {
     for (const id of ["water-fill", "water-fill-outline", "water-line"]) map.setLayoutProperty(id, "visibility", vis);
   }
+}
+
+/**
+ * ESA WorldCover land-cover raster, tiled via its WMS using MapLibre's
+ * `{bbox-epsg-3857}` placeholder (CRS=EPSG:3857 — the tile scheme MapLibre
+ * itself requests in). Paint values soften WorldCover's scientific palette
+ * (bright pink cropland, red built-up, etc. — pre-rendered PNGs, so it can't
+ * be recolored pixel-by-pixel) toward this app's theme. Ported from the
+ * design prototype.
+ */
+export function addVegetationLayer(map: maplibregl.Map, bbox: Bbox) {
+  if (map.getSource("worldcover")) return;
+  const beforeId = firstSymbolLayerId(map);
+  map.addSource("worldcover", {
+    type: "raster",
+    tiles: [
+      `${WORLDCOVER_WMS_BASE}?service=WMS&version=1.3.0&request=GetMap&layers=${WORLDCOVER_LAYER}` +
+        `&styles=&format=image/png&transparent=true&crs=EPSG:3857&time=${WORLDCOVER_TIME}&width=256&height=256&bbox={bbox-epsg-3857}`,
+    ],
+    tileSize: 256,
+    bounds: boundsArray(bbox),
+    attribution: "ESA WorldCover",
+  });
+  map.addLayer(
+    {
+      id: "worldcover-layer",
+      type: "raster",
+      source: "worldcover",
+      paint: { "raster-opacity": 0.75, "raster-saturation": -0.35, "raster-contrast": -0.1, "raster-brightness-max": 0.92 },
+      layout: { visibility: "none" },
+    },
+    beforeId,
+  );
+}
+
+/**
+ * NASA GIBS NDVI (MODIS Terra, 8-day composite), served pre-tiled via WMTS —
+ * far cheaper than re-requesting a WMS GetMap per tile. GIBS' native
+ * resolution tops out at zoom 9 (`maxzoom` below); past that MapLibre would
+ * otherwise keep stretching the same z9 tile to fill the screen, reading as
+ * a blurry, muddy patch, so opacity is faded out over zooms 9-12 instead of
+ * showing that artifact. Ported from the design prototype.
+ */
+export function addNdviLayer(map: maplibregl.Map, bbox: Bbox) {
+  if (map.getSource("ndvi")) return;
+  const beforeId = firstSymbolLayerId(map);
+  map.addSource("ndvi", {
+    type: "raster",
+    tiles: [`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_8Day/default/${ndviDateString()}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png`],
+    tileSize: 256,
+    maxzoom: 9,
+    bounds: boundsArray(bbox),
+    attribution: "NASA GIBS",
+  });
+  map.addLayer(
+    {
+      id: "ndvi-layer",
+      type: "raster",
+      source: "ndvi",
+      paint: {
+        "raster-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.7, 10.5, 0.25, 12, 0],
+        "raster-brightness-max": 0.8,
+        "raster-contrast": 0.15,
+        "raster-saturation": 0.1,
+      },
+      layout: { visibility: "none" },
+    },
+    beforeId,
+  );
 }
 
 export function setLayerVisibility(map: maplibregl.Map, ids: string[], visible: boolean) {

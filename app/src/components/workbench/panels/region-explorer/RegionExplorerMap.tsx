@@ -2,12 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
-import { boundaryBbox, type BoundaryGeometry } from "@/modules/checklist/services/regionApi";
+import { boundaryBbox, type BoundaryGeometry, type RegionBoundaryRequest } from "@/modules/checklist/services/regionApi";
 import { applyMapTheme } from "./mapTheme";
 import { buildMaskGeometry } from "./regionMask";
-import { addBaseRasterLayers, addProtectedAreasLayer, addWaterBodiesLayer, setBaseMapType, setTerrainEnabled, type BaseMapType } from "./mapLayers";
-import { fetchProtectedAreas, fetchWaterBodies, type Bbox } from "./overpassApi";
+import {
+  addBaseRasterLayers,
+  addProtectedAreasLayer,
+  addWaterBodiesLayer,
+  addNdviLayer,
+  addVegetationLayer,
+  setBaseMapType,
+  setTerrainEnabled,
+  type BaseMapType,
+} from "./mapLayers";
+import type { Bbox } from "./overpassApi";
+import { useProtectedAreas, useWaterBodies, useRegionStats } from "./regionQueries";
 import LayersPanel from "./LayersPanel";
+import MapDetailsDialog from "./MapDetailsDialog";
 
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 const FALLBACK_CENTER: [number, number] = [0, 20];
@@ -29,6 +40,8 @@ interface RegionExplorerMapProps {
   isBoundaryApproximate?: boolean;
   isBoundaryLoading?: boolean;
   regionName?: string | null;
+  /** Same identity used for useRegionBoundary — keys every overlay/stats query (regionQueries.ts) so a region's data shares one cache entry across dialog reopens and page refreshes. */
+  boundaryRequest?: RegionBoundaryRequest | null;
   heightClassName?: string;
 }
 
@@ -38,12 +51,20 @@ interface RegionExplorerMapProps {
  * elsewhere for the cheap per-species Evidence-tab thumbnail). Boundary
  * geometry is passed in (already resolved by useRegionBoundary) rather than
  * geocoded here, so the Map and List tabs never disagree.
+ *
+ * Protected areas / water bodies / region stats are fetched via shared
+ * react-query hooks (regionQueries.ts) rather than local state — MapListDialog
+ * prefetches these same queries as soon as the dialog opens (any tab), so by
+ * the time this component mounts (user switches to the Map tab) the data is
+ * usually already cached, and reopening the dialog or refreshing the page
+ * (sessionStorage-persisted, see QueryProvider) skips the network entirely.
  */
 export default function RegionExplorerMap({
   boundary,
   isBoundaryApproximate = false,
   isBoundaryLoading = false,
   regionName,
+  boundaryRequest = null,
   heightClassName = "h-[440px]",
 }: RegionExplorerMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,10 +77,29 @@ export default function RegionExplorerMap({
   const [terrainEnabled, setTerrainEnabledState] = useState(false);
   const [showProtected, setShowProtected] = useState(true);
   const [showWater, setShowWater] = useState(true);
-  const [protectedAreasCount, setProtectedAreasCount] = useState<number | null>(null);
-  const [waterBodiesCount, setWaterBodiesCount] = useState<number | null>(null);
+  const [showNdvi, setShowNdvi] = useState(false);
+  const [showVegetation, setShowVegetation] = useState(false);
   const [legendOn, setLegendOn] = useState(true);
-  const overlaysLoading = protectedAreasCount === null && waterBodiesCount === null;
+  const [mapDetailsOpen, setMapDetailsOpen] = useState(false);
+
+  const bbox: Bbox | null = boundary ? boundaryBbox(boundary) : null;
+  const bboxRef = useRef<Bbox | null>(null);
+  bboxRef.current = bbox;
+
+  const protectedAreasQuery = useProtectedAreas(bbox, boundaryRequest);
+  const waterBodiesQuery = useWaterBodies(bbox, boundaryRequest);
+  const regionStatsQuery = useRegionStats(boundary, bbox, boundaryRequest);
+
+  const protectedAreasCount = protectedAreasQuery.data ? protectedAreasQuery.data.features.length : protectedAreasQuery.isError ? 0 : null;
+  const protectedAreaNames = protectedAreasQuery.data
+    ? protectedAreasQuery.data.features.map((f) => (f.properties?.name as string | undefined) || "Protected area")
+    : protectedAreasQuery.isError
+      ? []
+      : null;
+  const waterBodiesCount = waterBodiesQuery.data ? waterBodiesQuery.data.features.length : waterBodiesQuery.isError ? 0 : null;
+  const overlaysLoading = protectedAreasQuery.isLoading || waterBodiesQuery.isLoading;
+  const regionStats = regionStatsQuery.data ?? null;
+  const regionStatsLoading = regionStatsQuery.isLoading;
 
   // ---- Map creation (once) ----
   useEffect(() => {
@@ -133,10 +173,6 @@ export default function RegionExplorerMap({
     return () => observer.disconnect();
   }, []);
 
-  // ---- Boundary outline + mask + fit bounds ----
-  const [bbox, setBbox] = useState<Bbox | null>(null);
-  const bboxRef = useRef<Bbox | null>(null);
-
   function fitToRegion() {
     const map = mapRef.current;
     const box = bboxRef.current;
@@ -150,9 +186,10 @@ export default function RegionExplorerMap({
     );
   }
 
+  // ---- Boundary outline + mask + base/NDVI/vegetation raster layers + fit bounds ----
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapLoaded || !boundary) return;
+    if (!map || !mapLoaded || !boundary || !bbox) return;
 
     const maskGeometry = buildMaskGeometry(boundary);
     const maskSource = map.getSource("region-mask") as maplibregl.GeoJSONSource | undefined;
@@ -179,16 +216,15 @@ export default function RegionExplorerMap({
       map.setPaintProperty("boundary-line", "line-dasharray", isBoundaryApproximate ? [3, 2] : [1, 0]);
     }
 
-    const box = boundaryBbox(boundary);
-    setBbox(box);
-    bboxRef.current = box;
-    addBaseRasterLayers(map, box);
+    addBaseRasterLayers(map, bbox);
+    addNdviLayer(map, bbox);
+    addVegetationLayer(map, bbox);
     setBaseMapType(map, baseMapType);
 
     map.fitBounds(
       [
-        [box.minLng, box.minLat],
-        [box.maxLng, box.maxLat],
+        [bbox.minLng, bbox.minLat],
+        [bbox.maxLng, bbox.maxLat],
       ],
       { padding: 24, duration: 0 },
     );
@@ -196,7 +232,7 @@ export default function RegionExplorerMap({
     // baseMapType intentionally omitted — handled by its own effect below so
     // switching Default/Satellite doesn't re-fit the camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapLoaded, boundary, isBoundaryApproximate]);
+  }, [mapLoaded, boundary, bbox, isBoundaryApproximate]);
 
   // ---- Base map type / terrain toggles ----
   useEffect(() => {
@@ -207,35 +243,20 @@ export default function RegionExplorerMap({
     if (mapRef.current && mapLoaded) setTerrainEnabled(mapRef.current, terrainEnabled);
   }, [terrainEnabled, mapLoaded]);
 
-  // ---- Fetch Protected Areas / Water Bodies once the bbox is known ----
+  // ---- Push protected areas / water bodies onto the map once fetched ----
   useEffect(() => {
-    if (!bbox) return;
-    let cancelled = false;
-    Promise.allSettled([fetchProtectedAreas(bbox), fetchWaterBodies(bbox)]).then(([protectedResult, waterResult]) => {
-      if (cancelled) return;
-      const map = mapRef.current;
-      if (protectedResult.status === "fulfilled") {
-        setProtectedAreasCount(protectedResult.value.features.length);
-        if (map) addProtectedAreasLayer(map, protectedResult.value, showProtected);
-      } else {
-        console.warn("[RegionExplorerMap] protected areas fetch failed", protectedResult.reason);
-        setProtectedAreasCount(0);
-      }
-      if (waterResult.status === "fulfilled") {
-        setWaterBodiesCount(waterResult.value.features.length);
-        if (map) addWaterBodiesLayer(map, waterResult.value, showWater);
-      } else {
-        console.warn("[RegionExplorerMap] water bodies fetch failed", waterResult.reason);
-        setWaterBodiesCount(0);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-    // showProtected/showWater intentionally omitted — initial visibility only;
-    // later toggles are applied directly by the effects below.
+    const map = mapRef.current;
+    if (map && mapLoaded && protectedAreasQuery.data) addProtectedAreasLayer(map, protectedAreasQuery.data, showProtected);
+    // showProtected intentionally omitted — initial visibility only; later
+    // toggles are applied directly by the effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bbox]);
+  }, [mapLoaded, protectedAreasQuery.data]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && mapLoaded && waterBodiesQuery.data) addWaterBodiesLayer(map, waterBodiesQuery.data, showWater);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapLoaded, waterBodiesQuery.data]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -252,6 +273,16 @@ export default function RegionExplorerMap({
       for (const id of ["water-fill", "water-fill-outline", "water-line"]) map.setLayoutProperty(id, "visibility", vis);
     }
   }, [showWater]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map?.getLayer("ndvi-layer")) map.setLayoutProperty("ndvi-layer", "visibility", showNdvi ? "visible" : "none");
+  }, [showNdvi]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map?.getLayer("worldcover-layer")) map.setLayoutProperty("worldcover-layer", "visibility", showVegetation ? "visible" : "none");
+  }, [showVegetation]);
 
   // "Map Legend (on-map icons)" toggle — hides all on-map chrome at once
   // (the built-in zoom/compass group + the scale control), matching the
@@ -332,12 +363,17 @@ export default function RegionExplorerMap({
           showWater={showWater}
           onShowWaterChange={setShowWater}
           protectedAreasCount={protectedAreasCount}
+          protectedAreaNames={protectedAreaNames}
           waterBodiesCount={waterBodiesCount}
           overlaysLoading={overlaysLoading}
           legendOn={legendOn}
           onLegendOnChange={setLegendOn}
+          regionStats={regionStats}
+          regionStatsLoading={regionStatsLoading}
+          onOpenMapDetails={() => setMapDetailsOpen(true)}
         />
       )}
+      <MapDetailsDialog open={mapDetailsOpen} onClose={() => setMapDetailsOpen(false)} sampleCount={regionStats?.gridSampleCount ?? null} />
     </div>
   );
 }

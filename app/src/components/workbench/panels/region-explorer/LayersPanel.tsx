@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import type { BaseMapType } from "./mapLayers";
-import { PROTECTED_AREA_CLASSES } from "./overpassApi";
+import { PROTECTED_AREA_CLASSES, type Bbox } from "./overpassApi";
 import { MAP_THEME } from "./mapTheme";
+import { WORLDCOVER_PALETTE, ndviDateString, type RegionStats } from "./regionStats";
+import { downloadWaterBodiesForQgis, downloadRasterForQgis, ndviWmsUrl, worldcoverWmsUrl, slugify } from "./regionExport";
 
 // Matches the design prototype's own palette
 // (prototypes/map-view-phase0-darjeeling.html), not the app's global red
@@ -24,11 +26,23 @@ interface LayersPanelProps {
   onShowProtectedChange: (visible: boolean) => void;
   showWater: boolean;
   onShowWaterChange: (visible: boolean) => void;
+  showNdvi: boolean;
+  onShowNdviChange: (visible: boolean) => void;
+  showVegetation: boolean;
+  onShowVegetationChange: (visible: boolean) => void;
   protectedAreasCount: number | null;
+  protectedAreaNames: string[] | null;
   waterBodiesCount: number | null;
+  waterBodiesGeoJSON: GeoJSON.FeatureCollection | null;
   overlaysLoading: boolean;
   legendOn: boolean;
   onLegendOnChange: (on: boolean) => void;
+  regionStats: RegionStats | null;
+  regionStatsLoading: boolean;
+  onOpenMapDetails: () => void;
+  /** Region bbox + display name — needed for the NDVI/Vegetation raster downloads (fresh WMS fetch, not the tiled map layer) and for naming the water-bodies export. */
+  bbox: Bbox;
+  regionName: string | null;
 }
 
 // The three "Map Type" thumbnail illustrations — ported verbatim from the
@@ -120,23 +134,33 @@ function DownloadIcon() {
   );
 }
 
-function DownloadButton({ disabled = true }: { disabled?: boolean }) {
+function DownloadButton({ onClick, loading, title }: { onClick?: () => void; loading?: boolean; title: string }) {
+  const disabled = !onClick || loading;
   return (
     <button
       type="button"
       disabled={disabled}
-      title={disabled ? "Download (coming soon)" : "Download layer"}
+      onClick={onClick}
+      title={title}
       className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-sm"
-      style={{ border: `1px solid ${PROTO.border}`, color: PROTO.inkDim, opacity: disabled ? 0.4 : 1, cursor: disabled ? "default" : "pointer" }}
+      style={{ border: `1px solid ${PROTO.border}`, color: PROTO.inkDim, opacity: disabled && !loading ? 0.4 : 1, cursor: disabled ? (loading ? "wait" : "default") : "pointer" }}
     >
-      <DownloadIcon />
+      {loading ? (
+        <span className="block w-2.5 h-2.5 rounded-full animate-spin" style={{ border: "1.5px solid currentColor", borderTopColor: "transparent" }} />
+      ) : (
+        <DownloadIcon />
+      )}
     </button>
   );
 }
 
+// Fixed-size icon picker, NOT flex-1 — matching the prototype's own
+// `.view-mode-btn { width:25%; max-width:39px }`. A flexed/stretched thumb
+// here was the "icons are too big" bug: at this sidebar's width, flex-1
+// blew each thumbnail up to ~90px instead of the prototype's compact ~39px.
 function MapTypeThumb({ active, onClick, label, children }: { active: boolean; onClick: () => void; label: string; children: React.ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className="flex flex-col items-center gap-1 flex-1 min-w-0">
+    <button type="button" onClick={onClick} className="flex flex-col items-center gap-1 flex-none w-1/4 max-w-[39px]">
       <span
         className="relative w-full aspect-square rounded-sm overflow-hidden"
         style={{ boxShadow: `0 0 0 ${active ? "1.5px" : "1px"} ${active ? PROTO.brand : PROTO.border}` }}
@@ -192,14 +216,12 @@ function ToggleRow({
   );
 }
 
-function LayerRow(props: Parameters<typeof ToggleRow>[0] & { withDownload?: boolean }) {
-  const { withDownload, ...toggleProps } = props;
+function LayerRow(props: Parameters<typeof ToggleRow>[0] & { download?: { onClick?: () => void; loading?: boolean; title: string } }) {
+  const { download, ...toggleProps } = props;
   return (
     <div className="flex items-center gap-1.5">
       <ToggleRow {...toggleProps} />
-      {/* Export pipeline isn't wired up yet — always disabled ("coming soon"),
-          regardless of the layer's own toggle state. */}
-      {withDownload && <DownloadButton disabled />}
+      {download && <DownloadButton onClick={download.onClick} loading={download.loading} title={download.title} />}
     </div>
   );
 }
@@ -212,11 +234,56 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
+function StatRow({
+  label,
+  value,
+  sub,
+  loading,
+  last,
+}: {
+  label: string;
+  value: string | null;
+  sub?: string;
+  loading?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-2 py-1.5" style={{ borderBottom: last ? "none" : `1px dashed ${PROTO.border}` }}>
+      <span className="text-[10px] uppercase tracking-wider" style={{ color: PROTO.inkDim }}>
+        {label}
+      </span>
+      <span className="text-[12px] font-bold text-right" style={{ color: value ? PROTO.ink : PROTO.inkDim }}>
+        {value ?? (loading ? "loading…" : "unavailable")}
+      </span>
+      {sub && (
+        <span className="w-full text-[9px] mono-text" style={{ color: PROTO.inkDim }}>
+          {sub}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function LegendSwatch({ color, label }: { color: string; label: string }) {
   return (
     <div className="flex items-center gap-2 text-[10px]" style={{ color: PROTO.ink }}>
       <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: color }} />
       {label}
+    </div>
+  );
+}
+
+// 5-stop brown -> yellow -> green ramp, matching the design prototype's
+// .legend-gradient — GIBS' own NDVI palette runs the same direction (bare/
+// water at the low end, dense vegetation at the high end).
+function NdviLegend() {
+  return (
+    <div>
+      <div className="h-2 rounded-sm mt-1.5" style={{ background: "linear-gradient(90deg, #a06a3a, #d9c25c, #8fc93a, #2f7d32, #0b4a17)" }} />
+      <div className="flex justify-between text-[8.5px] mono-text mt-1" style={{ color: PROTO.inkDim }}>
+        <span>Bare / water</span>
+        <span>Dense vegetation</span>
+      </div>
     </div>
   );
 }
@@ -242,6 +309,8 @@ const SOURCE_LINKS: { label: string; href: string }[] = [
   { label: "Overpass", href: "https://overpass-api.de/" },
 ];
 
+type DownloadKey = "water" | "ndvi" | "vegetation";
+
 export default function LayersPanel({
   baseMapType,
   onBaseMapTypeChange,
@@ -251,16 +320,45 @@ export default function LayersPanel({
   onShowProtectedChange,
   showWater,
   onShowWaterChange,
+  showNdvi,
+  onShowNdviChange,
+  showVegetation,
+  onShowVegetationChange,
   protectedAreasCount,
+  protectedAreaNames,
   waterBodiesCount,
+  waterBodiesGeoJSON,
   overlaysLoading,
   legendOn,
   onLegendOnChange,
+  regionStats,
+  regionStatsLoading,
+  onOpenMapDetails,
+  bbox,
+  regionName,
 }: LayersPanelProps) {
   const [tab, setTab] = useState<"layers" | "stats">("layers");
+  const [downloading, setDownloading] = useState<Partial<Record<DownloadKey, boolean>>>({});
+  const [downloadError, setDownloadError] = useState<Partial<Record<DownloadKey, string>>>({});
+  const regionSlug = slugify(regionName ?? "region");
+
+  function runDownload(key: DownloadKey, task: () => Promise<void>) {
+    setDownloading((d) => ({ ...d, [key]: true }));
+    setDownloadError((d) => ({ ...d, [key]: undefined }));
+    task()
+      .catch((err) => {
+        console.error(`[LayersPanel] ${key} download failed`, err);
+        const message = err instanceof Error ? err.message : "Download failed";
+        setDownloadError((d) => ({ ...d, [key]: message }));
+        setTimeout(() => setDownloadError((d) => ({ ...d, [key]: undefined })), 3000);
+      })
+      .finally(() => setDownloading((d) => ({ ...d, [key]: false })));
+  }
+
+  const waterReady = !overlaysLoading && waterBodiesGeoJSON != null && (waterBodiesCount ?? 0) > 0;
 
   return (
-    <div className="w-[300px] flex-shrink-0 flex flex-col" style={{ borderLeft: `1px solid ${PROTO.border}` }}>
+    <div className="w-[340px] flex-shrink-0 flex flex-col" style={{ borderLeft: `1px solid ${PROTO.border}` }}>
       <div className="flex" style={{ borderBottom: `1px solid ${PROTO.border}` }}>
         {(["layers", "stats"] as const).map((t) => (
           <button
@@ -284,7 +382,7 @@ export default function LayersPanel({
           <>
             <div>
               <SectionHeading>Map Type</SectionHeading>
-              <div className="flex gap-2">
+              <div className="flex gap-4">
                 <MapTypeThumb active={baseMapType === "default"} onClick={() => onBaseMapTypeChange("default")} label="Default">
                   <DefaultThumbArt />
                 </MapTypeThumb>
@@ -304,9 +402,47 @@ export default function LayersPanel({
             <div>
               <SectionHeading>Layers</SectionHeading>
               <ToggleRow checked={showProtected} onChange={onShowProtectedChange} label="Protected Areas" swatch={PROTECTED_AREA_CLASSES["2"].color} count={protectedAreasCount} disabled={overlaysLoading} />
-              <LayerRow checked={showWater} onChange={onShowWaterChange} label="Water Bodies" swatch={MAP_THEME.water} count={waterBodiesCount} disabled={overlaysLoading} withDownload />
-              <LayerRow checked={false} onChange={() => {}} label="NDVI (vegetation index)" disabled withDownload />
-              <LayerRow checked={false} onChange={() => {}} label="Vegetation / Land Cover (satellite)" disabled withDownload />
+              <LayerRow
+                checked={showWater}
+                onChange={onShowWaterChange}
+                label="Water Bodies"
+                swatch={MAP_THEME.water}
+                count={waterBodiesCount}
+                disabled={overlaysLoading}
+                download={{
+                  onClick: waterReady
+                    ? () => runDownload("water", () => downloadWaterBodiesForQgis(waterBodiesGeoJSON!, regionName ?? "Region", regionSlug))
+                    : undefined,
+                  loading: downloading.water,
+                  title:
+                    downloadError.water ??
+                    (overlaysLoading
+                      ? "Resolving region — download will be ready shortly"
+                      : waterReady
+                        ? "Download water-body vector data (GeoJSON + KML) for QGIS"
+                        : "No water-body features found in this region"),
+                }}
+              />
+              <LayerRow
+                checked={showNdvi}
+                onChange={onShowNdviChange}
+                label="NDVI (vegetation index)"
+                download={{
+                  onClick: () => runDownload("ndvi", () => downloadRasterForQgis(bbox, `${regionSlug}-ndvi-${ndviDateString()}`, ndviWmsUrl)),
+                  loading: downloading.ndvi,
+                  title: downloadError.ndvi ?? "Download georeferenced NDVI raster (PNG + world file) for QGIS",
+                }}
+              />
+              <LayerRow
+                checked={showVegetation}
+                onChange={onShowVegetationChange}
+                label="Vegetation / Land Cover (satellite)"
+                download={{
+                  onClick: () => runDownload("vegetation", () => downloadRasterForQgis(bbox, `${regionSlug}-worldcover-landcover`, worldcoverWmsUrl)),
+                  loading: downloading.vegetation,
+                  title: downloadError.vegetation ?? "Download georeferenced land-cover raster (PNG + world file) for QGIS",
+                }}
+              />
               <div className="text-[9px] mt-1 uppercase tracking-widest mono-text" style={{ color: PROTO.inkDim }}>
                 {overlaysLoading ? "Fetching from OpenStreetMap…" : "Source: OpenStreetMap (Overpass)"}
               </div>
@@ -335,16 +471,89 @@ export default function LayersPanel({
                 </div>
               </div>
             )}
+
+            {showNdvi && (
+              <div>
+                <SectionHeading>NDVI Legend</SectionHeading>
+                <NdviLegend />
+              </div>
+            )}
+
+            {showVegetation && (
+              <div>
+                <SectionHeading>Land Cover Legend</SectionHeading>
+                <div className="flex flex-col gap-1.5">
+                  {WORLDCOVER_PALETTE.map((c) => (
+                    <LegendSwatch key={c.code} color={c.color} label={c.label} />
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         ) : (
-          <div className="text-[11px] leading-relaxed" style={{ color: PROTO.inkDim }}>
-            <SectionHeading>Terrain &amp; Elevation</SectionHeading>
-            <p className="mb-4">Coming soon — sampled elevation min/max/mean across the region.</p>
-            <SectionHeading>Climate</SectionHeading>
-            <p className="mb-4">Coming soon — regional temperature summary via Open-Meteo.</p>
-            <SectionHeading>Land Cover &amp; Habitat</SectionHeading>
-            <p>Coming soon — dominant land-cover breakdown from ESA WorldCover.</p>
-          </div>
+          <>
+            <div>
+              <SectionHeading>Terrain &amp; Elevation</SectionHeading>
+              <StatRow label="Highest elevation" value={regionStats?.elevation ? `${Math.round(regionStats.elevation.maxM).toLocaleString()} m` : null} loading={regionStatsLoading} />
+              <StatRow label="Lowest elevation" value={regionStats?.elevation ? `${Math.round(regionStats.elevation.minM).toLocaleString()} m` : null} loading={regionStatsLoading} />
+              <StatRow label="Mean elevation" value={regionStats?.elevation ? `${Math.round(regionStats.elevation.meanM).toLocaleString()} m` : null} loading={regionStatsLoading} last />
+            </div>
+
+            <div>
+              <SectionHeading>Climate</SectionHeading>
+              <StatRow
+                label="Annual mean temp."
+                value={regionStats?.climate ? `${regionStats.climate.meanTempC.toFixed(1)} °C` : null}
+                sub={regionStats?.climate ? `${regionStats.climate.year} annual mean, ${regionStats.climate.sampleDays} days sampled at region centroid` : undefined}
+                loading={regionStatsLoading}
+                last
+              />
+            </div>
+
+            <div>
+              <SectionHeading>Land Cover &amp; Habitat</SectionHeading>
+              <StatRow
+                label="Dominant vegetation"
+                value={regionStats?.dominantVegetation ? `${regionStats.dominantVegetation.label} (~${regionStats.dominantVegetation.pct}%)` : null}
+                loading={regionStatsLoading}
+              />
+              <StatRow
+                label="Water bodies found"
+                value={waterBodiesCount != null ? `${waterBodiesCount.toLocaleString()} feature${waterBodiesCount === 1 ? "" : "s"}` : null}
+                sub={waterBodiesCount != null ? "via OpenStreetMap (Overpass)" : undefined}
+                loading={overlaysLoading}
+              />
+              <StatRow
+                label="Protected areas"
+                value={protectedAreasCount != null ? `${protectedAreasCount.toLocaleString()} area${protectedAreasCount === 1 ? "" : "s"}` : null}
+                sub={protectedAreaNames ? (protectedAreaNames.length ? protectedAreaNames.join(", ") : "none found in this region") : undefined}
+                loading={overlaysLoading}
+                last
+              />
+            </div>
+
+            <div>
+              <SectionHeading>Methodology</SectionHeading>
+              <p className="text-[9px] mono-text leading-relaxed" style={{ color: PROTO.inkDim }}>
+                {regionStats
+                  ? `${regionStats.gridSampleCount} sample points clipped to the region boundary (Open-Meteo batch limit: 100/request) — used for mean elevation, vegetation and climate sampling only, not the highest/lowest figures above.`
+                  : "Sampling elevation, climate and land cover across the region…"}
+              </p>
+              <button
+                type="button"
+                onClick={onOpenMapDetails}
+                className="flex items-center gap-1.5 mt-2 mono-text text-[9.5px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-sm"
+                style={{ border: `1px solid ${PROTO.border}`, color: PROTO.ink, background: "#fff" }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 11v5" />
+                  <circle cx="12" cy="8" r="0.5" fill="currentColor" />
+                </svg>
+                View Map Details
+              </button>
+            </div>
+          </>
         )}
       </div>
 
