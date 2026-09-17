@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useFamilyStats } from "@/modules/species/hooks/useFamilyStats";
 import { useRegionBoundary } from "@/modules/checklist/hooks/useRegionBoundary";
+import { boundaryBbox, type RegionBoundaryRequest } from "@/modules/checklist/services/regionApi";
+import { prefetchRegionData } from "./panels/region-explorer/regionQueries";
+import { slugify } from "./panels/region-explorer/regionExport";
 import RegionOccurrenceMap from "./panels/RegionOccurrenceMap";
 import FamilyListView from "./FamilyListView";
+import CaptureCropOverlay from "./CaptureCropOverlay";
 import type { ChecklistRegion } from "./SpeciesPanel";
 
 // MapLibre GL needs a real browser/WebGL context — load it client-only, same
@@ -40,23 +45,41 @@ const PROTO = {
 
 export default function MapListDialog({ checklistId, checklistTitle, region, onClose }: MapListDialogProps) {
   const [view, setView] = useState<"list" | "map">("list");
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const { families, isLoading: speciesLoading } = useFamilyStats(checklistId);
-  const boundaryQuery = useRegionBoundary(
-    region.gadmId || (region.osmType && region.osmId)
-      ? { gadmId: region.gadmId, osmType: region.osmType, osmId: region.osmId }
-      : null,
+  const queryClient = useQueryClient();
+
+  const boundaryRequest: RegionBoundaryRequest | null = useMemo(
+    () => (region.gadmId || (region.osmType && region.osmId) ? { gadmId: region.gadmId, osmType: region.osmType, osmId: region.osmId } : null),
+    [region.gadmId, region.osmType, region.osmId],
   );
+  const boundaryQuery = useRegionBoundary(boundaryRequest);
+  const boundary = boundaryQuery.data?.geometry ?? null;
+  const bbox = useMemo(() => (boundary ? boundaryBbox(boundary) : null), [boundary]);
+
+  // Kick off protected areas / water bodies / region stats fetches the
+  // moment the dialog opens and the boundary resolves — regardless of
+  // whether the List or Map tab is showing — so the Map tab (and a later
+  // reopen of this same region, even after a page refresh thanks to the
+  // sessionStorage-persisted query cache in QueryProvider) is instant
+  // instead of waiting for the user to switch tabs.
+  useEffect(() => {
+    if (bbox) prefetchRegionData(queryClient, boundary, bbox, boundaryRequest);
+  }, [queryClient, boundary, bbox, boundaryRequest]);
 
   // No visible close button — matches the design prototype (a standalone
   // page with no dialog chrome at all). Backdrop click already closes it;
   // Escape is added here purely for keyboard/screen-reader users.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !captureOpen) onClose();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, captureOpen]);
+
+  const regionSlug = slugify(boundaryQuery.data?.name || region.name || "region");
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-5" onClick={onClose}>
@@ -95,21 +118,19 @@ export default function MapListDialog({ checklistId, checklistTitle, region, onC
           </button>
         </div>
 
-        {/* Capture button — visual parity with the design prototype's
-            snipping-tool icon; the export pipeline itself isn't wired up
-            yet, so it's disabled rather than missing. */}
+        {/* Capture button — opens a snipping-tool overlay (CaptureCropOverlay)
+            over the dialog card; drag to select a region or confirm with
+            nothing selected to capture the whole card. */}
         <button
           type="button"
-          disabled
-          title="Capture a snapshot (coming soon)"
-          className="absolute right-[18px] bottom-full w-8 h-[27px] flex items-center justify-center rounded-t-md"
+          onClick={() => setCaptureOpen(true)}
+          title="Capture a snapshot of this view"
+          className="absolute right-[18px] bottom-full w-8 h-[27px] flex items-center justify-center rounded-t-md hover:opacity-80"
           style={{
             border: `1px solid ${PROTO.border}`,
             borderBottom: "none",
             background: PROTO.panel,
-            color: PROTO.inkDim,
-            opacity: 0.6,
-            cursor: "default",
+            color: PROTO.ink,
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round">
@@ -119,15 +140,17 @@ export default function MapListDialog({ checklistId, checklistTitle, region, onC
         </button>
 
         <div
+          ref={cardRef}
           className="w-full h-full rounded-sm shadow-hard overflow-hidden flex flex-col"
           style={{ background: PROTO.panel, border: `1px solid ${PROTO.border}` }}
         >
           {view === "map" ? (
             <RegionExplorerMap
-              boundary={boundaryQuery.data?.geometry ?? null}
+              boundary={boundary}
               isBoundaryApproximate={boundaryQuery.data?.source === "bbox"}
               isBoundaryLoading={boundaryQuery.isLoading}
               regionName={boundaryQuery.data?.name ?? region.name}
+              boundaryRequest={boundaryRequest}
               heightClassName="h-full"
             />
           ) : speciesLoading ? (
@@ -144,13 +167,14 @@ export default function MapListDialog({ checklistId, checklistTitle, region, onC
           ) : (
             <FamilyListView
               families={families}
-              boundary={boundaryQuery.data?.geometry ?? null}
+              boundary={boundary}
               isBoundaryApproximate={boundaryQuery.data?.source === "bbox"}
               isBoundaryLoading={boundaryQuery.isLoading}
             />
           )}
         </div>
       </div>
+      {captureOpen && <CaptureCropOverlay targetRef={cardRef} regionSlug={regionSlug} onClose={() => setCaptureOpen(false)} />}
     </div>
   );
 }

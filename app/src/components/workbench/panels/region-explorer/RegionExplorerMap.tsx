@@ -83,8 +83,6 @@ export default function RegionExplorerMap({
   const [mapDetailsOpen, setMapDetailsOpen] = useState(false);
 
   const bbox: Bbox | null = boundary ? boundaryBbox(boundary) : null;
-  const bboxRef = useRef<Bbox | null>(null);
-  bboxRef.current = bbox;
 
   const protectedAreasQuery = useProtectedAreas(bbox, boundaryRequest);
   const waterBodiesQuery = useWaterBodies(bbox, boundaryRequest);
@@ -175,12 +173,11 @@ export default function RegionExplorerMap({
 
   function fitToRegion() {
     const map = mapRef.current;
-    const box = bboxRef.current;
-    if (!map || !box) return;
+    if (!map || !bbox) return;
     map.fitBounds(
       [
-        [box.minLng, box.minLat],
-        [box.maxLng, box.maxLat],
+        [bbox.minLng, bbox.minLat],
+        [bbox.maxLng, bbox.maxLat],
       ],
       { padding: 24, duration: 400 },
     );
@@ -352,7 +349,7 @@ export default function RegionExplorerMap({
           </div>
         )}
       </div>
-      {mapLoaded && boundary && (
+      {mapLoaded && boundary && bbox && (
         <LayersPanel
           baseMapType={baseMapType}
           onBaseMapTypeChange={setBaseMapTypeState}
@@ -362,15 +359,22 @@ export default function RegionExplorerMap({
           onShowProtectedChange={setShowProtected}
           showWater={showWater}
           onShowWaterChange={setShowWater}
+          showNdvi={showNdvi}
+          onShowNdviChange={setShowNdvi}
+          showVegetation={showVegetation}
+          onShowVegetationChange={setShowVegetation}
           protectedAreasCount={protectedAreasCount}
           protectedAreaNames={protectedAreaNames}
           waterBodiesCount={waterBodiesCount}
+          waterBodiesGeoJSON={waterBodiesQuery.data ?? null}
           overlaysLoading={overlaysLoading}
           legendOn={legendOn}
           onLegendOnChange={setLegendOn}
           regionStats={regionStats}
           regionStatsLoading={regionStatsLoading}
           onOpenMapDetails={() => setMapDetailsOpen(true)}
+          bbox={bbox}
+          regionName={regionName ?? null}
         />
       )}
       <MapDetailsDialog open={mapDetailsOpen} onClose={() => setMapDetailsOpen(false)} sampleCount={regionStats?.gridSampleCount ?? null} />

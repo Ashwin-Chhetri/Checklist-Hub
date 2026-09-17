@@ -67,6 +67,14 @@ export default function MapDetailsDialog({ open, onClose, sampleCount }: MapDeta
         <p className="mt-2.5">
           <b style={{ color: PROTO.ink }}>Protected areas:</b> boundaries stored as OSM relations (e.g. national parks split across many member ways) are assembled into polygons client-side.
         </p>
+        <p className="mt-2.5">
+          <b style={{ color: PROTO.ink }}>NDVI:</b> NASA GIBS' 8-day MODIS composite, dated a safety margin behind today to avoid an unpublished compositing period; its tiles top out at zoom 9, so the layer's
+          opacity fades out above that zoom instead of showing an oversampled, blurry tile stretched past its real resolution.
+        </p>
+        <p className="mt-2.5">
+          <b style={{ color: PROTO.ink }}>Terrain:</b> the Terrain map type, 3D pitch, and hillshade relief all use real elevation data — AWS's public DEM tiles send no CORS headers, so this app proxies them
+          same-origin via <code>/api/regions/terrain-tile</code> rather than fetching them directly in the browser.
+        </p>
       </div>
     </dialog>
   );
