@@ -107,14 +107,16 @@ export async function listChecklists(): Promise<ChecklistSummary[]> {
   const { data, error } = await supabase
     .from("checklists")
     .select(
-      // `accepted_species` is filtered (below) to review_status=accepted &
-      // is_active=true — the same set the metadata wizard and DwC-A export
-      // count — via PostgREST's embedded-resource filter syntax, which
-      // still left-joins (a checklist with zero accepted species keeps its
-      // row, just with count 0) rather than excluding it like `!inner` would.
+      // `accepted_species` is filtered (below) to is_active=true &
+      // review_status != rejected via PostgREST's embedded-resource filter
+      // syntax, which still left-joins (a checklist with zero matching
+      // species keeps its row, just with count 0) rather than excluding it
+      // like `!inner` would. Not restricted to review_status=accepted: new
+      // species start as `not_reviewed`, so a freshly created checklist
+      // would otherwise list as 0 species until reviewers accept them.
       "*, owner:profiles!checklists_owner_id_fkey(id, full_name, avatar_url), accepted_species:species(count), checklist_collaborators(profile:profiles!checklist_collaborators_user_id_fkey(id, full_name, avatar_url)), checklist_invites(email, status), checklist_publication_drafts(checklist_id, stage, package_storage_path, package_generated_at, updated_at), checklist_metadata(checklist_id, ipt_submitted_at), watchers(is_active, frequency)",
     )
-    .eq("accepted_species.review_status", "accepted")
+    .neq("accepted_species.review_status", "rejected")
     .eq("accepted_species.is_active", true)
     .order("updated_at", { ascending: false });
 
